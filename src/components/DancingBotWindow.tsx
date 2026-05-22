@@ -37,6 +37,13 @@ export interface BotStep {
   holdUntilTimeSeconds: number | null;
 }
 
+interface BotPanelPulse {
+  startTimeSeconds: number;
+  endTimeSeconds: number;
+}
+
+type BotPanelTimeline = Record<Panel, BotPanelPulse[]>;
+
 interface BotFootPose {
   foot: FootName;
   panel: Panel;
@@ -166,6 +173,7 @@ const botMinMoveLeadSeconds = 0.045;
 const botAdaptiveLeadRatio = 0.72;
 const botFastMoveDurationScale = 0.72;
 const botPressWindowSeconds = 0.08;
+const botRepeatedPanelPulseRatio = 0.65;
 const botHoldScale = 1.06;
 const botPressScale = 1.12;
 const botTravelLiftScale = 0.08;
@@ -174,6 +182,12 @@ const botPadArrowColors: Record<Panel, string> = {
   right: '#51a8ff',
   up: '#ff5d73',
   down: '#ff5d73',
+};
+const botPanelPositions: Record<Panel, { x: number; y: number }> = {
+  left: { x: -1, y: 0 },
+  down: { x: 0, y: 1 },
+  up: { x: 0, y: -1 },
+  right: { x: 1, y: 0 },
 };
 const botStaticPadTiles = [
   'corner-top-left',
@@ -198,6 +212,88 @@ const getBotFootTargets = (formStyle: BotFormStyleId): BotFootTargetMap =>
 const getBotFootAngles = (formStyle: BotFormStyleId): BotFootAngleMap =>
   botFootAnglesByForm[formStyle] ?? botFootAnglesByForm['straight-wide'];
 
+const buildBotPanelTimeline = (stepsByFoot: Record<FootName, BotStep[]>): BotPanelTimeline => {
+  const stepsByPanel: Record<Panel, BotStep[]> = {
+    left: [],
+    down: [],
+    up: [],
+    right: [],
+  };
+
+  for (const footName of footNames) {
+    for (const step of stepsByFoot[footName]) {
+      stepsByPanel[step.toPanel].push(step);
+    }
+  }
+
+  for (const panel of panelOrder) {
+    stepsByPanel[panel].sort((left, right) => left.hitTimeSeconds - right.hitTimeSeconds);
+  }
+
+  return {
+    left: stepsByPanel.left.map((step, index, steps) => {
+      const nextStep = steps[index + 1] ?? null;
+      const nextHitDelta = nextStep ? nextStep.hitTimeSeconds - step.hitTimeSeconds : Number.POSITIVE_INFINITY;
+      const pulseEndTimeSeconds =
+        step.holdUntilTimeSeconds ??
+        Math.min(
+          step.hitTimeSeconds + botPressWindowSeconds,
+          step.hitTimeSeconds + nextHitDelta * botRepeatedPanelPulseRatio,
+        );
+
+      return {
+        startTimeSeconds: step.hitTimeSeconds,
+        endTimeSeconds: Math.max(step.hitTimeSeconds, pulseEndTimeSeconds),
+      };
+    }),
+    down: stepsByPanel.down.map((step, index, steps) => {
+      const nextStep = steps[index + 1] ?? null;
+      const nextHitDelta = nextStep ? nextStep.hitTimeSeconds - step.hitTimeSeconds : Number.POSITIVE_INFINITY;
+      const pulseEndTimeSeconds =
+        step.holdUntilTimeSeconds ??
+        Math.min(
+          step.hitTimeSeconds + botPressWindowSeconds,
+          step.hitTimeSeconds + nextHitDelta * botRepeatedPanelPulseRatio,
+        );
+
+      return {
+        startTimeSeconds: step.hitTimeSeconds,
+        endTimeSeconds: Math.max(step.hitTimeSeconds, pulseEndTimeSeconds),
+      };
+    }),
+    up: stepsByPanel.up.map((step, index, steps) => {
+      const nextStep = steps[index + 1] ?? null;
+      const nextHitDelta = nextStep ? nextStep.hitTimeSeconds - step.hitTimeSeconds : Number.POSITIVE_INFINITY;
+      const pulseEndTimeSeconds =
+        step.holdUntilTimeSeconds ??
+        Math.min(
+          step.hitTimeSeconds + botPressWindowSeconds,
+          step.hitTimeSeconds + nextHitDelta * botRepeatedPanelPulseRatio,
+        );
+
+      return {
+        startTimeSeconds: step.hitTimeSeconds,
+        endTimeSeconds: Math.max(step.hitTimeSeconds, pulseEndTimeSeconds),
+      };
+    }),
+    right: stepsByPanel.right.map((step, index, steps) => {
+      const nextStep = steps[index + 1] ?? null;
+      const nextHitDelta = nextStep ? nextStep.hitTimeSeconds - step.hitTimeSeconds : Number.POSITIVE_INFINITY;
+      const pulseEndTimeSeconds =
+        step.holdUntilTimeSeconds ??
+        Math.min(
+          step.hitTimeSeconds + botPressWindowSeconds,
+          step.hitTimeSeconds + nextHitDelta * botRepeatedPanelPulseRatio,
+        );
+
+      return {
+        startTimeSeconds: step.hitTimeSeconds,
+        endTimeSeconds: Math.max(step.hitTimeSeconds, pulseEndTimeSeconds),
+      };
+    }),
+  };
+};
+
 const isFootLocked = (foot: BotFootState, beat: number, targetPanel: Panel): boolean =>
   foot.holdUntilBeat !== null && foot.holdUntilBeat > beat && foot.panel !== targetPanel;
 
@@ -208,6 +304,102 @@ const canUseFoot = (
   targetPanel: Panel,
   reservedFeet: Set<FootName>,
 ): boolean => !reservedFeet.has(footName) && !isFootLocked(feet[footName], beat, targetPanel);
+
+const getPanelTravelCost = (fromPanel: Panel, toPanel: Panel): number => {
+  const fromPosition = botPanelPositions[fromPanel];
+  const toPosition = botPanelPositions[toPanel];
+
+  return Math.abs(fromPosition.x - toPosition.x) + Math.abs(fromPosition.y - toPosition.y);
+};
+
+const scoreStepAssignments = (
+  assignments: Array<{ event: TimedNoteEvent; foot: FootName }>,
+  feet: Record<FootName, BotFootState>,
+): number => {
+  const leftAssignment = assignments.find((assignment) => assignment.foot === 'left') ?? null;
+  const rightAssignment = assignments.find((assignment) => assignment.foot === 'right') ?? null;
+
+  if (leftAssignment && rightAssignment) {
+    const leftX = botPanelPositions[leftAssignment.event.panel].x;
+    const rightX = botPanelPositions[rightAssignment.event.panel].x;
+
+    if (leftX > rightX) {
+      return Number.POSITIVE_INFINITY;
+    }
+  }
+
+  return assignments.reduce((total, assignment) => {
+    const currentFoot = feet[assignment.foot];
+    let score = total + getPanelTravelCost(currentFoot.panel, assignment.event.panel);
+
+    if (currentFoot.panel === assignment.event.panel) {
+      score -= 0.35;
+    }
+
+    if (assignment.event.panel === 'left' && assignment.foot === 'left') {
+      score -= 0.15;
+    }
+
+    if (assignment.event.panel === 'right' && assignment.foot === 'right') {
+      score -= 0.15;
+    }
+
+    return score;
+  }, 0);
+};
+
+const resolveFeetForStepEvents = (
+  stepEvents: TimedNoteEvent[],
+  feet: Record<FootName, BotFootState>,
+  reservedFeet: Set<FootName>,
+): Map<TimedNoteEvent, FootName> | null => {
+  if (stepEvents.length <= 1 || stepEvents.length > footNames.length) {
+    return null;
+  }
+
+  let bestAssignments: Array<{ event: TimedNoteEvent; foot: FootName }> | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  const currentAssignments: Array<{ event: TimedNoteEvent; foot: FootName }> = [];
+
+  const search = (index: number, usedFeet: Set<FootName>) => {
+    if (index >= stepEvents.length) {
+      const score = scoreStepAssignments(currentAssignments, feet);
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestAssignments = [...currentAssignments];
+      }
+
+      return;
+    }
+
+    const event = stepEvents[index];
+
+    for (const footName of footNames) {
+      if (usedFeet.has(footName) || !canUseFoot(footName, feet, event.beat, event.panel, reservedFeet)) {
+        continue;
+      }
+
+      usedFeet.add(footName);
+      currentAssignments.push({ event, foot: footName });
+      search(index + 1, usedFeet);
+      currentAssignments.pop();
+      usedFeet.delete(footName);
+    }
+  };
+
+  search(0, new Set<FootName>());
+
+  if (!bestAssignments || !Number.isFinite(bestScore)) {
+    return null;
+  }
+
+  const finalizedAssignments: Array<{ event: TimedNoteEvent; foot: FootName }> = bestAssignments;
+
+  return new Map<TimedNoteEvent, FootName>(
+    finalizedAssignments.map((assignment) => [assignment.event, assignment.foot]),
+  );
+};
 
 const chooseFootForEvent = (
   event: TimedNoteEvent,
@@ -259,6 +451,7 @@ const chooseFootForEvent = (
 
 const sampleBotState = (
   stepsByFoot: Record<FootName, BotStep[]>,
+  panelTimeline: BotPanelTimeline,
   footTargets: BotFootTargetMap,
   footAngles: BotFootAngleMap,
   currentTimeSeconds: number,
@@ -348,12 +541,10 @@ const sampleBotState = (
     right: false,
   };
 
-  for (const footName of footNames) {
-    const foot = feet[footName];
-
-    if (foot.isHolding || foot.isPressing) {
-      activePanels[foot.panel] = true;
-    }
+  for (const panel of panelOrder) {
+    activePanels[panel] = panelTimeline[panel].some(
+      (pulse) => currentTimeSeconds >= pulse.startTimeSeconds && currentTimeSeconds <= pulse.endTimeSeconds,
+    );
   }
 
   return { feet, activePanels };
@@ -494,9 +685,10 @@ export const buildBotTimeline = (
 
     stepEvents.sort((left, right) => panelOrder.indexOf(left.panel) - panelOrder.indexOf(right.panel));
     const reservedFeet = new Set<FootName>();
+    const resolvedFeet = resolveFeetForStepEvents(stepEvents, feet, reservedFeet);
 
     for (const event of stepEvents) {
-      const footName = chooseFootForEvent(event, feet, previousStep, reservedFeet);
+      const footName: FootName = resolvedFeet?.get(event) ?? chooseFootForEvent(event, feet, previousStep, reservedFeet);
       const foot = feet[footName];
       const hitTimeSeconds = beatToSeconds(beat, simfile.bpms, simfile.stops, simfile.metadata.offset);
       const holdUntilBeat =
@@ -630,9 +822,10 @@ export function DancingBotWindow({
 
   const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
   const botFootAngles = useMemo(() => getBotFootAngles(selectedFormStyle), [selectedFormStyle]);
+  const botPanelTimeline = useMemo(() => buildBotPanelTimeline(botTimeline), [botTimeline]);
   const botState = useMemo(
-    () => sampleBotState(botTimeline, botFootTargets, botFootAngles, playbackSnapshot.timeSeconds),
-    [botFootAngles, botFootTargets, botTimeline, playbackSnapshot.timeSeconds],
+    () => sampleBotState(botTimeline, botPanelTimeline, botFootTargets, botFootAngles, playbackSnapshot.timeSeconds),
+    [botFootAngles, botFootTargets, botPanelTimeline, botTimeline, playbackSnapshot.timeSeconds],
   );
 
   return (
