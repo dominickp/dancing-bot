@@ -99,18 +99,9 @@ const getQuantizationColor = (beat: number): string => {
   return '#d08cff';
 };
 
-const getSpriteBackgroundStyle = (
-  sprite: ResolvedSpriteAsset | null,
-  rotation: number,
-  baseStyle: CSSProperties = {},
-): CSSProperties => {
-  const style: CSSProperties = {
-    ...baseStyle,
-    transform: baseStyle.transform ?? `rotate(${rotation}deg)`,
-  };
-
+const getSpriteFillStyle = (sprite: ResolvedSpriteAsset | null): CSSProperties => {
   if (!sprite) {
-    return style;
+    return {};
   }
 
   const x = sprite.columns > 1 ? `${(sprite.frameX / Math.max(sprite.columns - 1, 1)) * 100}%` : '0%';
@@ -119,14 +110,12 @@ const getSpriteBackgroundStyle = (
   if (sprite.renderMode === 'mask') {
     if (sprite.maskStrategy === 'clip') {
       return {
-        ...style,
         clipPath: genericArrowClipPath,
         overflow: 'hidden',
       } as CSSProperties;
     }
 
     return {
-      ...style,
       WebkitMaskImage: `url("${sprite.url}")`,
       maskImage: `url("${sprite.url}")`,
       WebkitMaskRepeat: 'no-repeat',
@@ -139,9 +128,59 @@ const getSpriteBackgroundStyle = (
   }
 
   return {
-    ...style,
     backgroundImage: `url("${sprite.url}")`,
     backgroundSize: `${sprite.columns * 100}% ${sprite.rows * 100}%`,
+    backgroundPosition: `${x} ${y}`,
+  };
+};
+
+const getSpriteBackgroundStyle = (
+  sprite: ResolvedSpriteAsset | null,
+  rotation: number,
+  baseStyle: CSSProperties = {},
+): CSSProperties => ({
+  ...baseStyle,
+  ...getSpriteFillStyle(sprite),
+  transform: baseStyle.transform ?? `rotate(${rotation}deg)`,
+});
+
+const getTintedSpriteMaskStyle = (sprite: ResolvedSpriteAsset | null, color: string): CSSProperties => {
+  if (!sprite) {
+    return {};
+  }
+
+  const x = sprite.columns > 1 ? `${(sprite.frameX / Math.max(sprite.columns - 1, 1)) * 100}%` : '0%';
+  const y = sprite.rows > 1 ? `${(sprite.frameY / Math.max(sprite.rows - 1, 1)) * 100}%` : '0%';
+
+  return {
+    backgroundColor: color,
+    WebkitMaskImage: `url("${sprite.url}")`,
+    maskImage: `url("${sprite.url}")`,
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+    WebkitMaskSize: `${sprite.columns * 100}% ${sprite.rows * 100}%`,
+    maskSize: `${sprite.columns * 100}% ${sprite.rows * 100}%`,
+    WebkitMaskPosition: `${x} ${y}`,
+    maskPosition: `${x} ${y}`,
+  };
+};
+
+const getSpriteDetailFillStyle = (sprite: ResolvedSpriteAsset | null): CSSProperties | null => {
+  if (!sprite?.detailUrl) {
+    return null;
+  }
+
+  const columns = sprite.detailColumns ?? 1;
+  const rows = sprite.detailRows ?? 1;
+  const frameX = Math.min(Math.max(sprite.detailFrameX ?? 0, 0), Math.max(columns - 1, 0));
+  const frameY = Math.min(Math.max(sprite.detailFrameY ?? 0, 0), Math.max(rows - 1, 0));
+  const x = columns > 1 ? `${(frameX / Math.max(columns - 1, 1)) * 100}%` : '0%';
+  const y = rows > 1 ? `${(frameY / Math.max(rows - 1, 1)) * 100}%` : '0%';
+
+  return {
+    ...getSpriteFillStyle(sprite),
+    backgroundImage: `url("${sprite.detailUrl}")`,
+    backgroundSize: `${columns * 100}% ${rows * 100}%`,
     backgroundPosition: `${x} ${y}`,
   };
 };
@@ -556,18 +595,38 @@ function App() {
   const getEventStyle = (event: TimedNoteEvent): CSSProperties => {
     const noteSprite = getNoteSprite(resolvedNoteskin?.panelAssets[event.panel], event);
 
+    if (noteSprite?.renderMode === 'mask') {
+      return (
+        getSpriteDetailFillStyle(noteSprite) ??
+        getSpriteFillStyle(resolvedNoteskin?.panelAssets[event.panel].receptor ?? null)
+      );
+    }
+
     return {
-      ...getSpriteBackgroundStyle(
-        noteSprite,
-        getPanelRotation(resolvedNoteskin, event.panel),
-        {
-          top: event.beat * pixelsPerBeat,
-          left: '50%',
-          transform: `translate(-50%, -50%) rotate(${getPanelRotation(resolvedNoteskin, event.panel)}deg)`,
-        },
-      ),
+      ...getSpriteFillStyle(noteSprite),
       backgroundColor: getNoteColor(noteSprite, event.beat),
     } as CSSProperties;
+  };
+
+  const getEventFrameStyle = (event: TimedNoteEvent): CSSProperties => ({
+    top: event.beat * pixelsPerBeat,
+    left: '50%',
+    width: receptorHeight,
+    height: receptorHeight,
+    transform: `translate(-50%, -50%) rotate(${getPanelRotation(resolvedNoteskin, event.panel)}deg)`,
+  });
+
+  const getEventUnderlayStyle = (event: TimedNoteEvent): CSSProperties | null => {
+    const noteSprite = getNoteSprite(resolvedNoteskin?.panelAssets[event.panel], event);
+
+    if (!noteSprite || noteSprite.renderMode !== 'mask') {
+      return null;
+    }
+
+    return getTintedSpriteMaskStyle(
+      resolvedNoteskin?.panelAssets[event.panel].receptor ?? null,
+      getQuantizationColor(event.beat),
+    );
   };
 
   return (
@@ -658,7 +717,9 @@ function App() {
         displayBeat={displayBeat}
         explosionRefs={explosionRefs}
         getHoldStyle={getHoldStyle}
+        getNoteFrameStyle={getEventFrameStyle}
         getNoteStyle={getEventStyle}
+        getNoteUnderlayStyle={getEventUnderlayStyle}
         getReceptorStyle={getReceptorStyle}
         handleMinimapPointerDown={handleMinimapPointerDown}
         handleMinimapPointerMove={handleMinimapPointerMove}

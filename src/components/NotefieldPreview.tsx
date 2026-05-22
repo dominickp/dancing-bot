@@ -26,7 +26,9 @@ interface NotefieldPreviewProps {
   displayBeat: number;
   explosionRefs: MutableRefObject<Record<Panel, HTMLDivElement | null>>;
   getHoldStyle: (segment: HoldSegmentView) => CSSProperties;
+  getNoteFrameStyle: (event: TimedNoteEvent) => CSSProperties;
   getNoteStyle: (event: TimedNoteEvent) => CSSProperties;
+  getNoteUnderlayStyle: (event: TimedNoteEvent) => CSSProperties | null;
   getReceptorStyle: (panel: Panel) => CSSProperties;
   handleMinimapPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleMinimapPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -56,7 +58,9 @@ export function NotefieldPreview({
   displayBeat,
   explosionRefs,
   getHoldStyle,
+  getNoteFrameStyle,
   getNoteStyle,
+  getNoteUnderlayStyle,
   getReceptorStyle,
   handleMinimapPointerDown,
   handleMinimapPointerMove,
@@ -139,14 +143,24 @@ export function NotefieldPreview({
 
                     {visibleEvents
                       .filter((event) => event.panel === panel)
-                      .map((event) => (
-                        <div
-                          key={`${event.panel}-${event.measureIndex}-${event.rowIndex}-${event.kind}`}
-                          className={`lane-note ${event.kind}`}
-                          style={getNoteStyle(event)}
-                          title={`${event.panel} ${event.kind} @ beat ${event.beat.toFixed(3)}`}
-                        />
-                      ))}
+                      .map((event) => {
+                        const underlayStyle = getNoteUnderlayStyle(event);
+
+                        return (
+                          <div
+                            key={`${event.panel}-${event.measureIndex}-${event.rowIndex}-${event.kind}`}
+                            className={`lane-note ${event.kind}`}
+                            style={getNoteFrameStyle(event)}
+                            title={`${event.panel} ${event.kind} @ beat ${event.beat.toFixed(3)}`}
+                          >
+                            {underlayStyle ? <div className="lane-note-underlay" style={underlayStyle} /> : null}
+                            <div
+                              className={`lane-note-overlay${underlayStyle ? ' lane-note-overlay-blended' : ''}`}
+                              style={getNoteStyle(event)}
+                            />
+                          </div>
+                        );
+                      })}
                   </div>
                 ))}
               </div>

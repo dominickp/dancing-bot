@@ -790,24 +790,26 @@ body {
 .lane-note {
   position: absolute;
   left: 50%;
-  width: var(--note-width);
-  height: var(--note-height);
+  width: var(--receptor-height);
+  height: var(--receptor-height);
   transform: translateX(-50%);
   backface-visibility: hidden;
-  background-color: transparent;
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  background-position: center;
+  isolation: isolate;
+  pointer-events: none;
+  overflow: hidden;
   box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
 }
 
-.lane-note-detail {
+.lane-note-underlay,
+.lane-note-overlay {
   position: absolute;
   inset: 0;
-  pointer-events: none;
   background-repeat: no-repeat;
   background-size: 100% 100%;
   background-position: center;
+}
+
+.lane-note-overlay-blended {
   mix-blend-mode: multiply;
 }
 
@@ -825,8 +827,10 @@ body {
 }
 
 .lane-note.mine {
-  background: transparent;
   box-shadow: none;
+}
+
+.lane-note.mine .lane-note-overlay {
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
@@ -834,8 +838,8 @@ body {
 
 .lane-note.hold-head,
 .lane-note.roll-head {
-  width: calc(var(--note-width) + 4px);
-  height: calc(var(--note-height) + 4px);
+  width: calc(var(--receptor-height) + 4px);
+  height: calc(var(--receptor-height) + 4px);
   filter: saturate(1.08);
 }
 
