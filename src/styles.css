@@ -330,10 +330,9 @@ body {
 
 .bot-pad-static-tile {
   position: absolute;
-  width: 28%;
+  width: 30.5%;
   aspect-ratio: 1;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  clip-path: polygon(22% 0%, 78% 0%, 100% 22%, 100% 78%, 78% 100%, 22% 100%, 0% 78%, 0% 22%);
   background: linear-gradient(
     180deg,
     rgba(137, 143, 151, 0.18),
@@ -343,44 +342,45 @@ body {
 }
 
 .bot-pad-static-tile-corner-top-left {
-  left: 4%;
-  top: 4%;
+  left: 2.25%;
+  top: 2.25%;
 }
 
 .bot-pad-static-tile-corner-top-right {
-  right: 4%;
-  top: 4%;
+  right: 2.25%;
+  top: 2.25%;
 }
 
 .bot-pad-static-tile-corner-bottom-left {
-  left: 4%;
-  bottom: 4%;
+  left: 2.25%;
+  bottom: 2.25%;
 }
 
 .bot-pad-static-tile-corner-bottom-right {
-  right: 4%;
-  bottom: 4%;
+  right: 2.25%;
+  bottom: 2.25%;
 }
 
 .bot-pad-static-tile-center {
-  left: 36%;
-  top: 36%;
+  left: 34.75%;
+  top: 34.75%;
 }
 
 .bot-pad-panel {
   position: absolute;
-  width: 28%;
+  width: 30.5%;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
-  clip-path: polygon(22% 0%, 78% 0%, 100% 22%, 100% 78%, 78% 100%, 22% 100%, 0% 78%, 0% 22%);
   isolation: isolate;
+  overflow: visible;
   background: transparent;
   color: rgba(248, 244, 233, 0.68);
   text-transform: uppercase;
   font-size: 0.78rem;
   letter-spacing: 0.08em;
   transition:
+    filter 120ms ease,
     box-shadow 120ms ease,
     transform 120ms ease;
 }
@@ -389,16 +389,18 @@ body {
 .bot-pad-panel::after {
   content: "";
   position: absolute;
-  clip-path: polygon(22% 0%, 78% 0%, 100% 22%, 100% 78%, 78% 100%, 22% 100%, 0% 78%, 0% 22%);
+  clip-path: polygon(16% 0%, 84% 0%, 100% 16%, 100% 84%, 84% 100%, 16% 100%, 0% 84%, 0% 16%);
   transition:
     background-color 120ms ease,
-    box-shadow 120ms ease;
+    box-shadow 120ms ease,
+    opacity 120ms ease;
 }
 
 .bot-pad-panel::before {
   inset: 0;
   z-index: 0;
   background: rgba(255, 255, 255, 0.12);
+  opacity: 0.92;
 }
 
 .bot-pad-panel::after {
@@ -457,23 +459,23 @@ body {
 }
 
 .bot-pad-panel-left {
-  left: 4%;
-  top: 36%;
+  left: 2.25%;
+  top: 34.75%;
 }
 
 .bot-pad-panel-down {
-  left: 36%;
-  bottom: 4%;
+  left: 34.75%;
+  bottom: 2.25%;
 }
 
 .bot-pad-panel-up {
-  left: 36%;
-  top: 4%;
+  left: 34.75%;
+  top: 2.25%;
 }
 
 .bot-pad-panel-right {
-  right: 4%;
-  top: 36%;
+  right: 2.25%;
+  top: 34.75%;
 }
 
 .bot-pad-panel.is-active {
@@ -482,14 +484,19 @@ body {
 
 .bot-pad-panel-left.is-active,
 .bot-pad-panel-right.is-active {
-  box-shadow:
-    0 0 26px rgba(81, 168, 255, 0.3),
-    inset 0 0 20px rgba(81, 168, 255, 0.12);
+  filter:
+    drop-shadow(0 0 12px rgba(81, 168, 255, 0.55))
+    drop-shadow(0 0 24px rgba(81, 168, 255, 0.38))
+    drop-shadow(0 0 40px rgba(81, 168, 255, 0.24));
 }
 
 .bot-pad-panel-left.is-active::before,
 .bot-pad-panel-right.is-active::before {
   background: rgba(81, 168, 255, 0.54);
+  opacity: 1;
+  box-shadow:
+    0 0 14px rgba(81, 168, 255, 0.55),
+    0 0 28px rgba(81, 168, 255, 0.32);
 }
 
 .bot-pad-panel-left.is-active::after,
@@ -500,14 +507,19 @@ body {
 
 .bot-pad-panel-up.is-active,
 .bot-pad-panel-down.is-active {
-  box-shadow:
-    0 0 26px rgba(255, 93, 115, 0.3),
-    inset 0 0 20px rgba(255, 93, 115, 0.12);
+  filter:
+    drop-shadow(0 0 12px rgba(255, 93, 115, 0.55))
+    drop-shadow(0 0 24px rgba(255, 93, 115, 0.38))
+    drop-shadow(0 0 40px rgba(255, 93, 115, 0.24));
 }
 
 .bot-pad-panel-up.is-active::before,
 .bot-pad-panel-down.is-active::before {
   background: rgba(255, 93, 115, 0.54);
+  opacity: 1;
+  box-shadow:
+    0 0 14px rgba(255, 93, 115, 0.55),
+    0 0 28px rgba(255, 93, 115, 0.32);
 }
 
 .bot-pad-panel-up.is-active::after,
