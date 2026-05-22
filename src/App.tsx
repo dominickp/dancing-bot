@@ -35,6 +35,14 @@ const maxVisualScale = 1.24;
 
 type PanelName = (typeof panelOrder)[number];
 type FootName = 'left' | 'right';
+type BotFormStyleId = 'straight-wide' | 'straight-minimal' | 'heels-out' | 'toes-out';
+
+interface BotPanelTarget {
+  x: number;
+  y: number;
+}
+
+type BotFootTargetMap = Record<FootName, Record<PanelName, BotPanelTarget>>;
 
 interface HoldSegment {
   panel: PanelName;
@@ -113,11 +121,39 @@ const displayTitle = [sampleChart.metadata.title, sampleChart.metadata.subtitle]
 const bundledNoteskinOptions = getBundledNoteskinOptions();
 const genericArrowClipPath = 'polygon(50% 100%, 100% 50%, 72% 50%, 72% 0%, 28% 0%, 28% 50%, 0% 50%)';
 const footNames = ['left', 'right'] as const;
-const botPanelPositions: Record<PanelName, { x: number; y: number }> = {
-  left: { x: 18, y: 50 },
-  down: { x: 50, y: 82 },
-  up: { x: 50, y: 18 },
-  right: { x: 82, y: 50 },
+const botWideFootTargets: BotFootTargetMap = {
+  left: {
+    left: { x: 18, y: 50 },
+    down: { x: 50, y: 82 },
+    up: { x: 50, y: 18 },
+    right: { x: 82, y: 50 },
+  },
+  right: {
+    left: { x: 18, y: 50 },
+    down: { x: 50, y: 82 },
+    up: { x: 50, y: 18 },
+    right: { x: 82, y: 50 },
+  },
+};
+const botMinimalFootTargets: BotFootTargetMap = {
+  left: {
+    left: { x: 31, y: 50 },
+    down: { x: 42, y: 64 },
+    up: { x: 42, y: 38 },
+    right: { x: 69, y: 50 },
+  },
+  right: {
+    left: { x: 31, y: 50 },
+    down: { x: 58, y: 64 },
+    up: { x: 58, y: 38 },
+    right: { x: 69, y: 50 },
+  },
+};
+const botFootTargetsByForm: Record<BotFormStyleId, BotFootTargetMap> = {
+  'straight-wide': botWideFootTargets,
+  'straight-minimal': botMinimalFootTargets,
+  'heels-out': botWideFootTargets,
+  'toes-out': botWideFootTargets,
 };
 const botFootAngles: Record<FootName, number> = {
   left: -16,
@@ -148,7 +184,8 @@ const botStaticPadTiles = [
   'center',
 ] as const;
 const botFormStyleOptions = [
-  { id: 'straight', label: 'Straight Form' },
+  { id: 'straight-wide', label: 'Straight Form (Wide)' },
+  { id: 'straight-minimal', label: 'Straight Form (Minimal)' },
   { id: 'heels-out', label: 'Heels Out' },
   { id: 'toes-out', label: 'Toes Out' },
 ] as const;
@@ -158,6 +195,8 @@ const lerp = (start: number, end: number, amount: number): number => start + (en
 const getOtherFoot = (foot: FootName): FootName => (foot === 'left' ? 'right' : 'left');
 const getHoldSegmentKey = (panel: PanelName, startBeat: number): string => `${panel}:${startBeat.toFixed(6)}`;
 const getBotPadArrowColor = (panel: PanelName): string => botPadArrowColors[panel];
+const getBotFootTargets = (formStyle: string): BotFootTargetMap =>
+  botFootTargetsByForm[(formStyle as BotFormStyleId)] ?? botWideFootTargets;
 
 const isFootLocked = (foot: BotFootState, beat: number, targetPanel: PanelName): boolean =>
   foot.holdUntilBeat !== null && foot.holdUntilBeat > beat && foot.panel !== targetPanel;
@@ -343,10 +382,13 @@ const buildBotTimeline = (
   return stepsByFoot;
 };
 
-const sampleBotState = (stepsByFoot: Record<FootName, BotStep[]>, currentTimeSeconds: number): BotViewState => {
+const sampleBotState = (
+  stepsByFoot: Record<FootName, BotStep[]>,
+  footTargets: BotFootTargetMap,
+  currentTimeSeconds: number,
+): BotViewState => {
   const sampleFootPose = (footName: FootName): BotFootPose => {
     const initialPanel: PanelName = footName === 'left' ? 'left' : 'right';
-    const initialPosition = botPanelPositions[initialPanel];
     const steps = stepsByFoot[footName];
     let completedStep: BotStep | null = null;
     let upcomingStep: BotStep | null = null;
@@ -362,7 +404,7 @@ const sampleBotState = (stepsByFoot: Record<FootName, BotStep[]>, currentTimeSec
     }
 
     const restingPanel = completedStep?.toPanel ?? initialPanel;
-    const restingPosition = botPanelPositions[restingPanel];
+  const restingPosition = footTargets[footName][restingPanel];
     let x = restingPosition.x;
     let y = restingPosition.y;
     let panel = restingPanel;
@@ -380,8 +422,8 @@ const sampleBotState = (stepsByFoot: Record<FootName, BotStep[]>, currentTimeSec
       currentTimeSeconds <= pressEndTimeSeconds;
 
     if (upcomingStep && currentTimeSeconds >= upcomingStep.moveStartTimeSeconds) {
-      const fromPosition = botPanelPositions[upcomingStep.fromPanel];
-      const toPosition = botPanelPositions[upcomingStep.toPanel];
+      const fromPosition = footTargets[footName][upcomingStep.fromPanel];
+      const toPosition = footTargets[footName][upcomingStep.toPanel];
       const moveDurationSeconds = Math.max(upcomingStep.hitTimeSeconds - upcomingStep.moveStartTimeSeconds, 0.001);
       const moveProgress = clamp(
         (currentTimeSeconds - upcomingStep.moveStartTimeSeconds) / moveDurationSeconds,
@@ -611,8 +653,8 @@ interface DancingBotWindowProps {
   isPlaying: boolean;
   resolvedNoteskin: ResolvedDanceNoteskin | null;
   playbackClockRef: { current: PlaybackClock | null };
-  selectedFormStyle: string;
-  onFormStyleChange: (nextStyle: string) => void;
+  selectedFormStyle: BotFormStyleId;
+  onFormStyleChange: (nextStyle: BotFormStyleId) => void;
   beginBotWindowInteraction: (
     event: React.PointerEvent<HTMLElement>,
     mode: BotWindowInteraction['mode'],
@@ -673,9 +715,11 @@ function DancingBotWindow({
     };
   }, [isPlaying, playbackClockRef]);
 
+  const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
+
   const botState = useMemo(
-    () => sampleBotState(botTimeline, playbackSnapshot.timeSeconds),
-    [botTimeline, playbackSnapshot.timeSeconds],
+    () => sampleBotState(botTimeline, botFootTargets, playbackSnapshot.timeSeconds),
+    [botFootTargets, botTimeline, playbackSnapshot.timeSeconds],
   );
 
   return (
@@ -700,7 +744,7 @@ function DancingBotWindow({
       <div className="bot-window-body">
         <label className="bot-form-picker">
           <span>Form Style</span>
-          <select value={selectedFormStyle} onChange={(event) => onFormStyleChange(event.target.value)}>
+          <select value={selectedFormStyle} onChange={(event) => onFormStyleChange(event.target.value as BotFormStyleId)}>
             {botFormStyleOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.label}
@@ -796,7 +840,7 @@ function DancingBotWindow({
 function App() {
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
   const [selectedNoteskinId, setSelectedNoteskinId] = useState(bundledNoteskinOptions[0]?.id ?? 'metal');
-  const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<string>(botFormStyleOptions[0].id);
+  const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(botFormStyleOptions[0].id);
   const [localNoteskinOption, setLocalNoteskinOption] = useState<NoteskinOption | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
   const [noteskinLoading, setNoteskinLoading] = useState(false);
