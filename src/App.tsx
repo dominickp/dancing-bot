@@ -77,23 +77,39 @@ const buildHoldEndBeatMap = (segments: HoldSegment[]): Map<string, number> => {
 };
 
 const getQuantizationColor = (beat: number): string => {
-  const rounded = Math.round(beat * 48) / 48;
-  const fraction = ((rounded % 1) + 1) % 1;
+  const ticksPerBeat = 192;
+  const tick = ((Math.round(beat * ticksPerBeat) % ticksPerBeat) + ticksPerBeat) % ticksPerBeat;
 
-  if (fraction === 0) {
+  if (tick === 0) {
     return '#ff5d73';
   }
 
-  if (fraction % 0.5 === 0) {
-    return '#47d7ac';
-  }
-
-  if (fraction % 0.25 === 0) {
+  if (tick % 96 === 0) {
     return '#51a8ff';
   }
 
-  if (fraction % (1 / 3) === 0) {
-    return '#ffd84f';
+  if (tick % 64 === 0) {
+    return '#d08cff';
+  }
+
+  if (tick % 48 === 0) {
+    return '#47d7ac';
+  }
+
+  if (tick % 32 === 0) {
+    return '#efd166';
+  }
+
+  if (tick % 24 === 0) {
+    return '#d08cff';
+  }
+
+  if (tick % 16 === 0) {
+    return '#63e6d8';
+  }
+
+  if (tick % 12 === 0) {
+    return '#d08cff';
   }
 
   return '#d08cff';

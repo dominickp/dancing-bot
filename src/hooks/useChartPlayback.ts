@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { sampleChart, sampleAudioSource } from "../data/sampleChart";
 import { beatToSeconds, secondsToBeat } from "../lib/simfile";
@@ -68,60 +68,72 @@ export function useChartPlayback({
   const isPlayingRef = useRef(isPlaying);
   const panelFeedbackRef = useRef(onTriggerPanelFeedback);
 
-  const applyScrollPosition = (beat: number) => {
-    const nextBeat = clamp(beat, 0, lastBeat);
-    currentBeatRef.current = nextBeat;
+  const applyScrollPosition = useCallback(
+    (beat: number) => {
+      const nextBeat = clamp(beat, 0, lastBeat);
+      currentBeatRef.current = nextBeat;
 
-    if (scrollLayerRef.current) {
-      const translateY = receptorOffset - nextBeat * pixelsPerBeat;
-      scrollLayerRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
-    }
-  };
+      if (scrollLayerRef.current) {
+        const translateY = receptorOffset - nextBeat * pixelsPerBeat;
+        scrollLayerRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
+      }
+    },
+    [lastBeat, pixelsPerBeat, receptorOffset],
+  );
 
-  const syncAudioToBeat = (beat: number) => {
-    const audio = audioRef.current;
+  const syncAudioToBeat = useCallback(
+    (beat: number) => {
+      const audio = audioRef.current;
 
-    if (!audio) {
-      return;
-    }
+      if (!audio) {
+        return;
+      }
 
-    const nextTime = Math.max(
-      0,
-      beatToSeconds(
-        beat,
-        sampleChart.bpms,
-        sampleChart.stops,
-        sampleChart.metadata.offset,
-      ),
-    );
+      const nextTime = Math.max(
+        0,
+        beatToSeconds(
+          beat,
+          sampleChart.bpms,
+          sampleChart.stops,
+          sampleChart.metadata.offset,
+        ),
+      );
 
-    if (Number.isFinite(audio.duration)) {
-      audio.currentTime = clamp(nextTime, 0, audio.duration);
-    } else {
-      audio.currentTime = nextTime;
-    }
+      if (Number.isFinite(audio.duration)) {
+        audio.currentTime = clamp(nextTime, 0, audio.duration);
+      } else {
+        audio.currentTime = nextTime;
+      }
 
-    playbackClockRef.current = {
-      audioTime: audio.currentTime,
-      perfTime: performance.now(),
-    };
-  };
+      playbackClockRef.current = {
+        audioTime: audio.currentTime,
+        perfTime: performance.now(),
+      };
+    },
+    [lastBeat],
+  );
 
-  const refreshRenderWindow = (beat: number) => {
-    const nextBeat = clamp(beat, 0, lastBeat);
-    renderBeatAnchorRef.current = nextBeat;
-    setRenderBeatAnchor(nextBeat);
-    setDisplayBeat(nextBeat);
-    applyScrollPosition(nextBeat);
-  };
+  const refreshRenderWindow = useCallback(
+    (beat: number) => {
+      const nextBeat = clamp(beat, 0, lastBeat);
+      renderBeatAnchorRef.current = nextBeat;
+      setRenderBeatAnchor(nextBeat);
+      setDisplayBeat(nextBeat);
+      applyScrollPosition(nextBeat);
+    },
+    [applyScrollPosition, lastBeat],
+  );
 
-  const seekToBeat = (beat: number) => {
-    const nextBeat = clamp(beat, 0, lastBeat);
-    lastAnimatedBeatRef.current = nextBeat;
-    triggeredHitKeysRef.current.clear();
-    refreshRenderWindow(nextBeat);
-    syncAudioToBeat(nextBeat);
-  };
+  const seekToBeat = useCallback(
+    (beat: number) => {
+      const nextBeat = clamp(beat, 0, lastBeat);
+      lastAnimatedBeatRef.current = nextBeat;
+      triggeredHitKeysRef.current.clear();
+      refreshRenderWindow(nextBeat);
+      syncAudioToBeat(nextBeat);
+    },
+    [lastBeat, refreshRenderWindow, syncAudioToBeat],
+  );
 
   const updateHitFeedback = (previousBeat: number, nextBeat: number) => {
     const minBeat = Math.min(previousBeat, nextBeat) - hitWindowBeats * 0.35;
@@ -191,7 +203,7 @@ export function useChartPlayback({
 
   useEffect(() => {
     applyScrollPosition(currentBeatRef.current);
-  }, [pixelsPerBeat]);
+  }, [applyScrollPosition]);
 
   useEffect(() => {
     setIsPlaying(false);
@@ -204,7 +216,7 @@ export function useChartPlayback({
     if (!isPlayingRef.current) {
       refreshRenderWindow(currentBeatRef.current);
     }
-  }, [visibleBeats]);
+  }, [refreshRenderWindow, visibleBeats]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -289,7 +301,14 @@ export function useChartPlayback({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [events, isPlaying, lastBeat, pixelsPerBeat, receptorOffset]);
+  }, [
+    applyScrollPosition,
+    events,
+    isPlaying,
+    lastBeat,
+    pixelsPerBeat,
+    receptorOffset,
+  ]);
 
   useEffect(() => {
     const handleWheel = (event: WheelEvent) => {
@@ -336,7 +355,15 @@ export function useChartPlayback({
     return () => {
       window.removeEventListener("wheel", handleWheel);
     };
-  }, [lastBeat, maxVisibleBeats, minVisibleBeats, setVisibleBeats]);
+  }, [
+    lastBeat,
+    maxVisibleBeats,
+    minVisibleBeats,
+    refreshRenderWindow,
+    seekToBeat,
+    setVisibleBeats,
+    syncAudioToBeat,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
