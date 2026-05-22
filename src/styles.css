@@ -216,11 +216,6 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   cursor: grab;
   touch-action: none;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 177, 74, 0.14),
-    rgba(255, 177, 74, 0)
-  );
 }
 
 .bot-window-header:active {
