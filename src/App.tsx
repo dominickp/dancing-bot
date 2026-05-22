@@ -43,6 +43,7 @@ interface BotPanelTarget {
 }
 
 type BotFootTargetMap = Record<FootName, Record<PanelName, BotPanelTarget>>;
+type BotFootAngleMap = Record<FootName, Record<PanelName, number>>;
 
 interface HoldSegment {
   panel: PanelName;
@@ -74,6 +75,7 @@ interface BotFootPose {
   panel: PanelName;
   x: number;
   y: number;
+  angle: number;
   scale: number;
   isHolding: boolean;
   isPressing: boolean;
@@ -150,28 +152,96 @@ const botMinimalFootTargets: BotFootTargetMap = {
     right: { x: 69, y: 50 },
   },
 };
+const botHeelsOutFootTargets: BotFootTargetMap = {
+  left: {
+    left: { x: 32, y: 46 },
+    down: { x: 43, y: 66 },
+    up: { x: 37, y: 34 },
+    right: { x: 68, y: 50 },
+  },
+  right: {
+    left: { x: 32, y: 50 },
+    down: { x: 57, y: 66 },
+    up: { x: 63, y: 34 },
+    right: { x: 68, y: 46 },
+  },
+};
+const botToesOutFootTargets: BotFootTargetMap = {
+  left: {
+    left: { x: 34, y: 48 },
+    down: { x: 43, y: 72 },
+    up: { x: 46, y: 41 },
+    right: { x: 67, y: 50 },
+  },
+  right: {
+    left: { x: 33, y: 50 },
+    down: { x: 57, y: 72 },
+    up: { x: 54, y: 41 },
+    right: { x: 66, y: 48 },
+  },
+};
 const botFootTargetsByForm: Record<BotFormStyleId, BotFootTargetMap> = {
   'straight-wide': botWideFootTargets,
   'straight-minimal': botMinimalFootTargets,
-  'heels-out': botWideFootTargets,
-  'toes-out': botWideFootTargets,
+  'heels-out': botHeelsOutFootTargets,
+  'toes-out': botToesOutFootTargets,
 };
-const botFootAnglesByForm: Record<BotFormStyleId, Record<FootName, number>> = {
+const botFootAnglesByForm: Record<BotFormStyleId, BotFootAngleMap> = {
   'straight-wide': {
-    left: -16,
-    right: 16,
+    left: {
+      left: -16,
+      down: -16,
+      up: -16,
+      right: -16,
+    },
+    right: {
+      left: 16,
+      down: 16,
+      up: 16,
+      right: 16,
+    },
   },
   'straight-minimal': {
-    left: -9,
-    right: 9,
+    left: {
+      left: -9,
+      down: -9,
+      up: -9,
+      right: -9,
+    },
+    right: {
+      left: 9,
+      down: 9,
+      up: 9,
+      right: 9,
+    },
   },
   'heels-out': {
-    left: -16,
-    right: 16,
+    left: {
+      left: 38,
+      down: 14,
+      up: 8,
+      right: 24,
+    },
+    right: {
+      left: -24,
+      down: -14,
+      up: -8,
+      right: -38,
+    },
   },
   'toes-out': {
-    left: -16,
-    right: 16,
+    left: {
+      left: -32,
+      down: -6,
+      up: -21,
+      right: -18,
+    },
+    right: {
+      left: 18,
+      down: 6,
+      up: 21,
+      right: 32,
+    },
   },
 };
 const botWindowMinWidth = 248;
@@ -213,6 +283,8 @@ const getHoldSegmentKey = (panel: PanelName, startBeat: number): string => `${pa
 const getBotPadArrowColor = (panel: PanelName): string => botPadArrowColors[panel];
 const getBotFootTargets = (formStyle: string): BotFootTargetMap =>
   botFootTargetsByForm[(formStyle as BotFormStyleId)] ?? botWideFootTargets;
+const getBotFootAngles = (formStyle: BotFormStyleId): BotFootAngleMap =>
+  botFootAnglesByForm[formStyle] ?? botFootAnglesByForm['straight-wide'];
 
 const isFootLocked = (foot: BotFootState, beat: number, targetPanel: PanelName): boolean =>
   foot.holdUntilBeat !== null && foot.holdUntilBeat > beat && foot.panel !== targetPanel;
@@ -412,6 +484,7 @@ const buildBotTimeline = (
 const sampleBotState = (
   stepsByFoot: Record<FootName, BotStep[]>,
   footTargets: BotFootTargetMap,
+  footAngles: BotFootAngleMap,
   currentTimeSeconds: number,
 ): BotViewState => {
   const sampleFootPose = (footName: FootName): BotFootPose => {
@@ -431,9 +504,10 @@ const sampleBotState = (
     }
 
     const restingPanel = completedStep?.toPanel ?? initialPanel;
-  const restingPosition = footTargets[footName][restingPanel];
+    const restingPosition = footTargets[footName][restingPanel];
     let x = restingPosition.x;
     let y = restingPosition.y;
+    let angle = footAngles[footName][restingPanel];
     let panel = restingPanel;
     let scale = 1;
     let isHolding =
@@ -451,6 +525,8 @@ const sampleBotState = (
     if (upcomingStep && currentTimeSeconds >= upcomingStep.moveStartTimeSeconds) {
       const fromPosition = footTargets[footName][upcomingStep.fromPanel];
       const toPosition = footTargets[footName][upcomingStep.toPanel];
+      const fromAngle = footAngles[footName][upcomingStep.fromPanel];
+      const toAngle = footAngles[footName][upcomingStep.toPanel];
       const moveDurationSeconds = Math.max(upcomingStep.moveEndTimeSeconds - upcomingStep.moveStartTimeSeconds, 0.001);
       const moveProgress = clamp(
         (currentTimeSeconds - upcomingStep.moveStartTimeSeconds) / moveDurationSeconds,
@@ -461,6 +537,7 @@ const sampleBotState = (
 
       x = lerp(fromPosition.x, toPosition.x, moveProgress);
       y = lerp(fromPosition.y, toPosition.y, moveProgress);
+      angle = lerp(fromAngle, toAngle, moveProgress);
       panel = upcomingStep.toPanel;
       scale = Math.max(scale, 1 + Math.sin(moveProgress * Math.PI) * botTravelLiftScale * liftStrength);
     }
@@ -476,6 +553,7 @@ const sampleBotState = (
       panel,
       x,
       y,
+      angle,
       scale,
       isHolding,
       isPressing,
@@ -505,11 +583,8 @@ const sampleBotState = (
   return { feet, activePanels };
 };
 
-const getBotFootTransform = (foot: BotFootPose, formStyle: BotFormStyleId): string => {
-  const footAngles = botFootAnglesByForm[formStyle] ?? botFootAnglesByForm['straight-wide'];
-
-  return `translate(-50%, -50%) rotate(${footAngles[foot.foot]}deg) scale(${foot.scale})`;
-};
+const getBotFootTransform = (foot: BotFootPose): string =>
+  `translate(-50%, -50%) rotate(${foot.angle}deg) scale(${foot.scale})`;
 
 const getQuantizationColor = (beat: number): string => {
   const rounded = Math.round(beat * 48) / 48;
@@ -746,10 +821,11 @@ function DancingBotWindow({
   }, [isPlaying, playbackClockRef]);
 
   const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
+  const botFootAngles = useMemo(() => getBotFootAngles(selectedFormStyle), [selectedFormStyle]);
 
   const botState = useMemo(
-    () => sampleBotState(botTimeline, botFootTargets, playbackSnapshot.timeSeconds),
-    [botFootTargets, botTimeline, playbackSnapshot.timeSeconds],
+    () => sampleBotState(botTimeline, botFootTargets, botFootAngles, playbackSnapshot.timeSeconds),
+    [botFootAngles, botFootTargets, botTimeline, playbackSnapshot.timeSeconds],
   );
 
   return (
@@ -832,7 +908,7 @@ function DancingBotWindow({
                   style={{
                     left: `${foot.x}%`,
                     top: `${foot.y}%`,
-                    transform: getBotFootTransform(foot, selectedFormStyle),
+                    transform: getBotFootTransform(foot),
                   }}
                   title={`${footName} foot on ${foot.panel}`}
                 >
