@@ -138,6 +138,18 @@ const botPadArrowColors: Record<PanelName, string> = {
   up: '#ff5d73',
   down: '#ff5d73',
 };
+const botStaticPadTiles = [
+  'corner-top-left',
+  'corner-top-right',
+  'corner-bottom-left',
+  'corner-bottom-right',
+  'center',
+] as const;
+const botFormStyleOptions = [
+  { id: 'straight', label: 'Straight Form' },
+  { id: 'heels-out', label: 'Heels Out' },
+  { id: 'toes-out', label: 'Toes Out' },
+] as const;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const lerp = (start: number, end: number, amount: number): number => start + (end - start) * amount;
@@ -587,6 +599,8 @@ interface DancingBotWindowProps {
   isPlaying: boolean;
   resolvedNoteskin: ResolvedDanceNoteskin | null;
   playbackClockRef: { current: PlaybackClock | null };
+  selectedFormStyle: string;
+  onFormStyleChange: (nextStyle: string) => void;
   beginBotWindowInteraction: (
     event: React.PointerEvent<HTMLElement>,
     mode: BotWindowInteraction['mode'],
@@ -600,6 +614,8 @@ function DancingBotWindow({
   isPlaying,
   resolvedNoteskin,
   playbackClockRef,
+  selectedFormStyle,
+  onFormStyleChange,
   beginBotWindowInteraction,
 }: DancingBotWindowProps) {
   const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
@@ -670,14 +686,27 @@ function DancingBotWindow({
       </header>
 
       <div className="bot-window-body">
-        <div className="bot-window-status" aria-label="Bot status">
-          <span>Straight form</span>
-          <span>Live-synced landing</span>
-          <span>Resize from corner</span>
-        </div>
+        <label className="bot-form-picker">
+          <span>Form Style</span>
+          <select value={selectedFormStyle} onChange={(event) => onFormStyleChange(event.target.value)}>
+            {botFormStyleOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <div className="bot-pad-stage">
           <div className="bot-pad-surface">
+            {botStaticPadTiles.map((tile) => (
+              <div
+                key={tile}
+                className={`bot-pad-static-tile bot-pad-static-tile-${tile}`}
+                aria-hidden="true"
+              />
+            ))}
+
             {panelOrder.map((panel) => (
               <div
                 key={panel}
@@ -755,6 +784,7 @@ function DancingBotWindow({
 function App() {
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
   const [selectedNoteskinId, setSelectedNoteskinId] = useState(bundledNoteskinOptions[0]?.id ?? 'metal');
+  const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<string>(botFormStyleOptions[0].id);
   const [localNoteskinOption, setLocalNoteskinOption] = useState<NoteskinOption | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
   const [noteskinLoading, setNoteskinLoading] = useState(false);
@@ -766,8 +796,8 @@ function App() {
   const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>({
     x: 26,
     y: 24,
-    width: 320,
-    height: 320,
+    width: 460,
+    height: 700,
   });
   const animationFrameRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -1538,6 +1568,8 @@ function App() {
               isPlaying={isPlaying}
               resolvedNoteskin={resolvedNoteskin}
               playbackClockRef={playbackClockRef}
+              selectedFormStyle={selectedBotFormStyle}
+              onFormStyleChange={setSelectedBotFormStyle}
               beginBotWindowInteraction={beginBotWindowInteraction}
             />
           </div>
