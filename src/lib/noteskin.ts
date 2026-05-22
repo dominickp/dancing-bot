@@ -1,4 +1,4 @@
-export type PanelName = 'left' | 'down' | 'up' | 'right';
+export type PanelName = "left" | "down" | "up" | "right";
 
 export interface NoteskinOption {
   id: string;
@@ -12,7 +12,12 @@ export interface ResolvedSpriteAsset {
   rows: number;
   frameX: number;
   frameY: number;
-  renderMode: 'image' | 'mask';
+  renderMode: "image" | "mask";
+  detailUrl?: string;
+  detailColumns?: number;
+  detailRows?: number;
+  detailFrameX?: number;
+  detailFrameY?: number;
 }
 
 export interface ResolvedPanelAssets {
@@ -32,19 +37,19 @@ export interface ResolvedDanceNoteskin {
 }
 
 interface NoteskinSourceBase {
-  kind: 'bundled' | 'local';
+  kind: "bundled" | "local";
   id: string;
   label: string;
 }
 
 interface BundledNoteskinSource extends NoteskinSourceBase {
-  kind: 'bundled';
+  kind: "bundled";
   rootUrl: string;
   files: string[];
 }
 
 interface LocalNoteskinSource extends NoteskinSourceBase {
-  kind: 'local';
+  kind: "local";
   files: Map<string, File>;
   objectUrls: Map<string, string>;
 }
@@ -62,85 +67,85 @@ interface LoadedNoteskinDefinition {
 
 const bundledNoteskinFiles: Record<string, string[]> = {
   metal: [
-    '_Down Receptor Go 4x1 (doubleres).png',
-    '_Down Roll Body active 4x1.png',
-    '_Down Roll BottomCap active 4x1.png',
-    '_down tap lift model.txt',
-    '_down tap note model.txt',
-    '_mine ani tex.ini',
-    '_mine model.txt',
-    '_mine tex.png',
-    'beta2.txt',
-    'Down Hold Body Active.png',
-    'Down Hold Body Inactive.png',
-    'Down Hold BottomCap active.png',
-    'Down Hold BottomCap inactive.png',
-    'down hold explosion.png',
-    'Down Receptor.lua',
-    'Down Roll Body active.lua',
-    'Down Roll Body Inactive.png',
-    'Down Roll BottomCap active.lua',
-    'Down Roll BottomCap Inactive.png',
-    'Down Tap Explosion Bright W1.png',
-    'Down Tap Explosion Dim W1.png',
-    'Down Tap Explosion Dim W2.png',
-    'Down Tap Explosion Dim W3.png',
-    'Down Tap Explosion Dim W4.png',
-    'Down Tap Explosion Dim W5.png',
-    'Down Tap Lift.lua',
-    'Down Tap Mine.lua',
-    'Down Tap Note.lua',
-    'Fallback Explosion.lua',
-    'metrics.ini',
-    'NoteSkin.lua',
-    'textures/Note.png',
-    'textures/Tap Lift parts (mipmaps).png',
-    'textures/Tap Note ani texture.ini',
-    'textures/Tap Note parts (mipmaps).png',
+    "_Down Receptor Go 4x1 (doubleres).png",
+    "_Down Roll Body active 4x1.png",
+    "_Down Roll BottomCap active 4x1.png",
+    "_down tap lift model.txt",
+    "_down tap note model.txt",
+    "_mine ani tex.ini",
+    "_mine model.txt",
+    "_mine tex.png",
+    "beta2.txt",
+    "Down Hold Body Active.png",
+    "Down Hold Body Inactive.png",
+    "Down Hold BottomCap active.png",
+    "Down Hold BottomCap inactive.png",
+    "down hold explosion.png",
+    "Down Receptor.lua",
+    "Down Roll Body active.lua",
+    "Down Roll Body Inactive.png",
+    "Down Roll BottomCap active.lua",
+    "Down Roll BottomCap Inactive.png",
+    "Down Tap Explosion Bright W1.png",
+    "Down Tap Explosion Dim W1.png",
+    "Down Tap Explosion Dim W2.png",
+    "Down Tap Explosion Dim W3.png",
+    "Down Tap Explosion Dim W4.png",
+    "Down Tap Explosion Dim W5.png",
+    "Down Tap Lift.lua",
+    "Down Tap Mine.lua",
+    "Down Tap Note.lua",
+    "Fallback Explosion.lua",
+    "metrics.ini",
+    "NoteSkin.lua",
+    "textures/Note.png",
+    "textures/Tap Lift parts (mipmaps).png",
+    "textures/Tap Note ani texture.ini",
+    "textures/Tap Note parts (mipmaps).png",
   ],
   cel: [
-    '_Down Receptor Go 4x1 (doubleres).png',
-    '_Down Roll Body active 4x1.png',
-    '_Down Roll BottomCap active 4x1.png',
-    '_down tap lift model.txt',
-    '_down tap note model.txt',
-    '_mine ani tex.ini',
-    '_mine model.txt',
-    '_mine tex.png',
-    'Down Hold Body Active.png',
-    'Down Hold Body Inactive.png',
-    'Down Hold BottomCap active.png',
-    'Down Hold BottomCap inactive.png',
-    'down hold explosion.png',
-    'Down Receptor.lua',
-    'Down Roll Body active.lua',
-    'Down Roll Body Inactive.png',
-    'Down Roll BottomCap active.lua',
-    'Down Roll BottomCap Inactive.png',
-    'Down Tap Explosion Bright W1.png',
-    'Down Tap Explosion Dim W1.png',
-    'Down Tap Explosion Dim W2.png',
-    'Down Tap Explosion Dim W3.png',
-    'Down Tap Explosion Dim W4.png',
-    'Down Tap Explosion Dim W5.png',
-    'Down Tap Lift.lua',
-    'Down Tap Mine.lua',
-    'Down Tap Note.lua',
-    'Fallback Explosion.lua',
-    'metrics.ini',
-    'model.txt',
-    'NoteSkin.lua',
-    'textures/Tap Lift parts (mipmaps).png',
-    'textures/Tap Note ani texture.ini',
-    'textures/Tap Note parts (mipmaps).png',
+    "_Down Receptor Go 4x1 (doubleres).png",
+    "_Down Roll Body active 4x1.png",
+    "_Down Roll BottomCap active 4x1.png",
+    "_down tap lift model.txt",
+    "_down tap note model.txt",
+    "_mine ani tex.ini",
+    "_mine model.txt",
+    "_mine tex.png",
+    "Down Hold Body Active.png",
+    "Down Hold Body Inactive.png",
+    "Down Hold BottomCap active.png",
+    "Down Hold BottomCap inactive.png",
+    "down hold explosion.png",
+    "Down Receptor.lua",
+    "Down Roll Body active.lua",
+    "Down Roll Body Inactive.png",
+    "Down Roll BottomCap active.lua",
+    "Down Roll BottomCap Inactive.png",
+    "Down Tap Explosion Bright W1.png",
+    "Down Tap Explosion Dim W1.png",
+    "Down Tap Explosion Dim W2.png",
+    "Down Tap Explosion Dim W3.png",
+    "Down Tap Explosion Dim W4.png",
+    "Down Tap Explosion Dim W5.png",
+    "Down Tap Lift.lua",
+    "Down Tap Mine.lua",
+    "Down Tap Note.lua",
+    "Fallback Explosion.lua",
+    "metrics.ini",
+    "model.txt",
+    "NoteSkin.lua",
+    "textures/Tap Lift parts (mipmaps).png",
+    "textures/Tap Note ani texture.ini",
+    "textures/Tap Note parts (mipmaps).png",
   ],
 };
 
 const panelToButton: Record<PanelName, string> = {
-  left: 'Left',
-  down: 'Down',
-  up: 'Up',
-  right: 'Right',
+  left: "Left",
+  down: "Down",
+  up: "Up",
+  right: "Right",
 };
 
 const defaultRotations: Record<string, number> = {
@@ -150,13 +155,15 @@ const defaultRotations: Record<string, number> = {
   Right: -90,
 };
 
-const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+const imageExtensions = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
 
-export const bundledNoteskinOptions: NoteskinOption[] = Object.entries(bundledNoteskinFiles).map(([id, files]) => ({
+export const bundledNoteskinOptions: NoteskinOption[] = Object.entries(
+  bundledNoteskinFiles,
+).map(([id, files]) => ({
   id,
   label: id.charAt(0).toUpperCase() + id.slice(1),
   source: {
-    kind: 'bundled',
+    kind: "bundled",
     id,
     label: id.charAt(0).toUpperCase() + id.slice(1),
     rootUrl: `/noteskins/dance/${id}`,
@@ -164,14 +171,22 @@ export const bundledNoteskinOptions: NoteskinOption[] = Object.entries(bundledNo
   },
 }));
 
-const normalizePath = (value: string): string => value.replace(/\\/g, '/').replace(/^\/+/, '').trim();
+const normalizePath = (value: string): string =>
+  value.replace(/\\/g, "/").replace(/^\/+/, "").trim();
 
-const encodePath = (value: string): string => normalizePath(value).split('/').map(encodeURIComponent).join('/');
+const encodePath = (value: string): string =>
+  normalizePath(value).split("/").map(encodeURIComponent).join("/");
 
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const parseLuaStringTable = (luaText: string, tableName: string): Record<string, string> => {
-  const tableMatch = luaText.match(new RegExp(`${escapeRegExp(tableName)}\\s*=\\s*\\{([\\s\\S]*?)\\}`, 'i'));
+const parseLuaStringTable = (
+  luaText: string,
+  tableName: string,
+): Record<string, string> => {
+  const tableMatch = luaText.match(
+    new RegExp(`${escapeRegExp(tableName)}\\s*=\\s*\\{([\\s\\S]*?)\\}`, "i"),
+  );
 
   if (!tableMatch) {
     return {};
@@ -179,7 +194,9 @@ const parseLuaStringTable = (luaText: string, tableName: string): Record<string,
 
   const result: Record<string, string> = {};
 
-  for (const entry of tableMatch[1].matchAll(/[\[\s,]*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_]+))\s*=\s*(?:"([^"]+)"|'([^']+)')/g)) {
+  for (const entry of tableMatch[1].matchAll(
+    /[\[\s,]*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_]+))\s*=\s*(?:"([^"]+)"|'([^']+)')/g,
+  )) {
     const key = entry[1] ?? entry[2] ?? entry[3];
     const value = entry[4] ?? entry[5];
 
@@ -191,8 +208,13 @@ const parseLuaStringTable = (luaText: string, tableName: string): Record<string,
   return result;
 };
 
-const parseLuaNumberTable = (luaText: string, tableName: string): Record<string, number> => {
-  const tableMatch = luaText.match(new RegExp(`${escapeRegExp(tableName)}\\s*=\\s*\\{([\\s\\S]*?)\\}`, 'i'));
+const parseLuaNumberTable = (
+  luaText: string,
+  tableName: string,
+): Record<string, number> => {
+  const tableMatch = luaText.match(
+    new RegExp(`${escapeRegExp(tableName)}\\s*=\\s*\\{([\\s\\S]*?)\\}`, "i"),
+  );
 
   if (!tableMatch) {
     return {};
@@ -200,7 +222,9 @@ const parseLuaNumberTable = (luaText: string, tableName: string): Record<string,
 
   const result: Record<string, number> = {};
 
-  for (const entry of tableMatch[1].matchAll(/[\[\s,]*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_]+))\s*=\s*(-?\d+(?:\.\d+)?)/g)) {
+  for (const entry of tableMatch[1].matchAll(
+    /[\[\s,]*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_]+))\s*=\s*(-?\d+(?:\.\d+)?)/g,
+  )) {
     const key = entry[1] ?? entry[2] ?? entry[3];
     const value = Number.parseFloat(entry[4]);
 
@@ -218,12 +242,12 @@ const parseFallbackName = (metricsText: string): string | null => {
   for (const rawLine of metricsText.split(/\r?\n/)) {
     const line = rawLine.trim();
 
-    if (!line || line.startsWith('#') || line.startsWith(';')) {
+    if (!line || line.startsWith("#") || line.startsWith(";")) {
       continue;
     }
 
-    if (line.startsWith('[') && line.endsWith(']')) {
-      inGlobalSection = line.slice(1, -1).toLowerCase() === 'global';
+    if (line.startsWith("[") && line.endsWith("]")) {
+      inGlobalSection = line.slice(1, -1).toLowerCase() === "global";
       continue;
     }
 
@@ -242,14 +266,17 @@ const parseFallbackName = (metricsText: string): string | null => {
 };
 
 const getSourceFiles = (source: NoteskinSource): string[] => {
-  if (source.kind === 'bundled') {
+  if (source.kind === "bundled") {
     return source.files.slice();
   }
 
   return Array.from(source.files.keys());
 };
 
-const findExactFile = (source: NoteskinSource, relativePath: string): string | null => {
+const findExactFile = (
+  source: NoteskinSource,
+  relativePath: string,
+): string | null => {
   const normalized = normalizePath(relativePath).toLowerCase();
 
   for (const filePath of getSourceFiles(source)) {
@@ -261,7 +288,10 @@ const findExactFile = (source: NoteskinSource, relativePath: string): string | n
   return null;
 };
 
-const findFile = (source: NoteskinSource, predicate: (normalizedLower: string) => boolean): string | null => {
+const findFile = (
+  source: NoteskinSource,
+  predicate: (normalizedLower: string) => boolean,
+): string | null => {
   for (const filePath of getSourceFiles(source)) {
     const normalized = normalizePath(filePath);
 
@@ -273,14 +303,17 @@ const findFile = (source: NoteskinSource, predicate: (normalizedLower: string) =
   return null;
 };
 
-const getFileUrl = (source: NoteskinSource, relativePath: string): string | null => {
+const getFileUrl = (
+  source: NoteskinSource,
+  relativePath: string,
+): string | null => {
   const filePath = findExactFile(source, relativePath);
 
   if (!filePath) {
     return null;
   }
 
-  if (source.kind === 'bundled') {
+  if (source.kind === "bundled") {
     return `${source.rootUrl}/${encodePath(filePath)}`;
   }
 
@@ -301,14 +334,17 @@ const getFileUrl = (source: NoteskinSource, relativePath: string): string | null
   return nextUrl;
 };
 
-const readTextFile = async (source: NoteskinSource, relativePath: string): Promise<string | null> => {
+const readTextFile = async (
+  source: NoteskinSource,
+  relativePath: string,
+): Promise<string | null> => {
   const filePath = findExactFile(source, relativePath);
 
   if (!filePath) {
     return null;
   }
 
-  if (source.kind === 'bundled') {
+  if (source.kind === "bundled") {
     const response = await fetch(`${source.rootUrl}/${encodePath(filePath)}`);
 
     if (!response.ok) {
@@ -322,15 +358,21 @@ const readTextFile = async (source: NoteskinSource, relativePath: string): Promi
   return file ? file.text() : null;
 };
 
-const loadImageDimensions = async (url: string): Promise<{ width: number; height: number }> =>
+const loadImageDimensions = async (
+  url: string,
+): Promise<{ width: number; height: number }> =>
   new Promise((resolve, reject) => {
     const image = new Image();
-    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onload = () =>
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
     image.onerror = () => reject(new Error(`Failed to load image: ${url}`));
     image.src = url;
   });
 
-const inferGridFromDimensions = (width: number, height: number): { columns: number; rows: number } => {
+const inferGridFromDimensions = (
+  width: number,
+  height: number,
+): { columns: number; rows: number } => {
   if (height > 0 && width % height === 0) {
     const columns = width / height;
 
@@ -350,8 +392,10 @@ const inferGridFromDimensions = (width: number, height: number): { columns: numb
   return { columns: 1, rows: 1 };
 };
 
-const inferGridFromPath = (relativePath: string): { columns: number; rows: number } | null => {
-  const fileName = normalizePath(relativePath).split('/').pop() ?? '';
+const inferGridFromPath = (
+  relativePath: string,
+): { columns: number; rows: number } | null => {
+  const fileName = normalizePath(relativePath).split("/").pop() ?? "";
   const match = fileName.match(/(\d+)x(\d+)/i);
 
   if (!match) {
@@ -371,7 +415,7 @@ const inferGridFromPath = (relativePath: string): { columns: number; rows: numbe
 const buildSpriteAsset = async (
   source: NoteskinSource,
   relativePath: string,
-  renderMode: 'image' | 'mask' = 'image',
+  renderMode: "image" | "mask" = "image",
 ): Promise<ResolvedSpriteAsset | null> => {
   const url = getFileUrl(source, relativePath);
 
@@ -386,7 +430,10 @@ const buildSpriteAsset = async (
   if (!hintedGrid) {
     try {
       const dimensions = await loadImageDimensions(url);
-      const inferredGrid = inferGridFromDimensions(dimensions.width, dimensions.height);
+      const inferredGrid = inferGridFromDimensions(
+        dimensions.width,
+        dimensions.height,
+      );
       columns = inferredGrid.columns;
       rows = inferredGrid.rows;
     } catch {
@@ -405,8 +452,34 @@ const buildSpriteAsset = async (
   };
 };
 
-const extractNoteskinGetPath = (actorText: string): { prefix: string; name: string } | null => {
-  const match = actorText.match(/NOTESKIN:GetPath\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/i);
+const buildMaskedDetailSpriteAsset = async (
+  source: NoteskinSource,
+  maskPath: string,
+  detailPath: string,
+): Promise<ResolvedSpriteAsset | null> => {
+  const maskAsset = await buildSpriteAsset(source, maskPath, "mask");
+  const detailAsset = await buildSpriteAsset(source, detailPath, "image");
+
+  if (!maskAsset || !detailAsset) {
+    return maskAsset;
+  }
+
+  return {
+    ...maskAsset,
+    detailUrl: detailAsset.url,
+    detailColumns: detailAsset.columns,
+    detailRows: detailAsset.rows,
+    detailFrameX: detailAsset.frameX,
+    detailFrameY: detailAsset.frameY,
+  };
+};
+
+const extractNoteskinGetPath = (
+  actorText: string,
+): { prefix: string; name: string } | null => {
+  const match = actorText.match(
+    /NOTESKIN:GetPath\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/i,
+  );
 
   if (!match) {
     return null;
@@ -418,7 +491,11 @@ const extractNoteskinGetPath = (actorText: string): { prefix: string; name: stri
   };
 };
 
-const findTextureByGetPath = (source: NoteskinSource, prefix: string, name: string): string | null => {
+const findTextureByGetPath = (
+  source: NoteskinSource,
+  prefix: string,
+  name: string,
+): string | null => {
   const prefixLower = prefix.toLowerCase();
   const nameLower = name.toLowerCase();
 
@@ -427,14 +504,19 @@ const findTextureByGetPath = (source: NoteskinSource, prefix: string, name: stri
       return false;
     }
 
-    const fileName = filePath.split('/').pop() ?? '';
+    const fileName = filePath.split("/").pop() ?? "";
     return fileName.startsWith(`${prefixLower} ${nameLower}`);
   });
 };
 
-const findDirectImage = (source: NoteskinSource, candidates: string[]): string | null => {
+const findDirectImage = (
+  source: NoteskinSource,
+  candidates: string[],
+): string | null => {
   for (const candidate of candidates) {
-    const filePath = findFile(source, (normalized) => normalized.endsWith(candidate.toLowerCase()));
+    const filePath = findFile(source, (normalized) =>
+      normalized.endsWith(candidate.toLowerCase()),
+    );
 
     if (filePath) {
       return filePath;
@@ -444,14 +526,34 @@ const findDirectImage = (source: NoteskinSource, candidates: string[]): string |
   return null;
 };
 
-const resolveModelTextureFallback = (source: NoteskinSource, elementName: string): string | null => {
+const resolveModelTextureFallback = (
+  source: NoteskinSource,
+  elementName: string,
+): string | null => {
   switch (elementName) {
-    case 'Tap Note':
-      return findDirectImage(source, ['_down receptor go 4x1 (doubleres).png']);
-    case 'Tap Lift':
-      return findDirectImage(source, ['_down receptor go 4x1 (doubleres).png']);
-    case 'Tap Mine':
-      return findDirectImage(source, ['_mine tex.png']);
+    case "Tap Note":
+      return findDirectImage(source, ["_down receptor go 4x1 (doubleres).png"]);
+    case "Tap Lift":
+      return findDirectImage(source, ["_down receptor go 4x1 (doubleres).png"]);
+    case "Tap Mine":
+      return findDirectImage(source, ["_mine tex.png"]);
+    default:
+      return null;
+  }
+};
+
+const resolveModelTextureDetail = (
+  source: NoteskinSource,
+  elementName: string,
+): string | null => {
+  switch (elementName) {
+    case "Tap Note":
+      return findDirectImage(source, [
+        "textures/note.png",
+        "textures/tap note parts (mipmaps).png",
+      ]);
+    case "Tap Lift":
+      return findDirectImage(source, ["textures/tap lift parts (mipmaps).png"]);
     default:
       return null;
   }
@@ -477,22 +579,39 @@ const resolveActorTexture = async (
   const getPathReference = extractNoteskinGetPath(actorText);
 
   if (getPathReference) {
-    const texturePath = findTextureByGetPath(source, getPathReference.prefix, getPathReference.name);
+    const texturePath = findTextureByGetPath(
+      source,
+      getPathReference.prefix,
+      getPathReference.name,
+    );
 
     if (texturePath) {
       return buildSpriteAsset(source, texturePath);
     }
   }
 
-  if (actorText.includes('Def.Model')) {
+  if (actorText.includes("Def.Model")) {
     const fallbackTexture = resolveModelTextureFallback(source, elementName);
 
     if (!fallbackTexture) {
       return null;
     }
 
-    const renderMode = elementName === 'Tap Note' || elementName === 'Tap Lift' ? 'mask' : 'image';
-    return buildSpriteAsset(source, fallbackTexture, renderMode);
+    if (elementName === "Tap Note" || elementName === "Tap Lift") {
+      const detailTexture = resolveModelTextureDetail(source, elementName);
+
+      if (detailTexture) {
+        return buildMaskedDetailSpriteAsset(
+          source,
+          fallbackTexture,
+          detailTexture,
+        );
+      }
+
+      return buildSpriteAsset(source, fallbackTexture, "mask");
+    }
+
+    return buildSpriteAsset(source, fallbackTexture, "image");
   }
 
   return null;
@@ -511,16 +630,18 @@ const resolveDirectTexture = async (
   return preferredPath ? buildSpriteAsset(source, preferredPath) : null;
 };
 
-const loadNoteskinDefinition = async (option: NoteskinOption): Promise<LoadedNoteskinDefinition> => {
-  const noteskinLua = (await readTextFile(option.source, 'NoteSkin.lua')) ?? '';
-  const metricsIni = (await readTextFile(option.source, 'metrics.ini')) ?? '';
+const loadNoteskinDefinition = async (
+  option: NoteskinOption,
+): Promise<LoadedNoteskinDefinition> => {
+  const noteskinLua = (await readTextFile(option.source, "NoteSkin.lua")) ?? "";
+  const metricsIni = (await readTextFile(option.source, "metrics.ini")) ?? "";
 
   return {
     id: option.id,
     label: option.label,
     fallbackId: parseFallbackName(metricsIni),
-    redir: parseLuaStringTable(noteskinLua, 'ret.RedirTable'),
-    rotate: parseLuaNumberTable(noteskinLua, 'ret.Rotate'),
+    redir: parseLuaStringTable(noteskinLua, "ret.RedirTable"),
+    rotate: parseLuaNumberTable(noteskinLua, "ret.Rotate"),
     source: option.source,
   };
 };
@@ -547,31 +668,52 @@ const resolvePanelAsset = async (
   visited.add(visitKey);
 
   const redirectedButton = skin.redir[originalButton] ?? originalButton;
-  const actorAsset = await resolveActorTexture(skin.source, redirectedButton, elementName);
+  const actorAsset = await resolveActorTexture(
+    skin.source,
+    redirectedButton,
+    elementName,
+  );
 
   if (actorAsset) {
     return actorAsset;
   }
 
-  const directAsset = await resolveDirectTexture(skin.source, redirectedButton, elementName);
+  const directAsset = await resolveDirectTexture(
+    skin.source,
+    redirectedButton,
+    elementName,
+  );
 
   if (directAsset) {
     return directAsset;
   }
 
   if (skin.fallbackId && skinMap.has(skin.fallbackId)) {
-    return resolvePanelAsset(skinMap, skin.fallbackId, originalButton, elementName, visited);
+    return resolvePanelAsset(
+      skinMap,
+      skin.fallbackId,
+      originalButton,
+      elementName,
+      visited,
+    );
   }
 
   return null;
 };
 
-export const getPanelRotation = (resolvedNoteskin: ResolvedDanceNoteskin | null, panel: PanelName): number =>
-  resolvedNoteskin?.panelAssets[panel].rotation ?? defaultRotations[panelToButton[panel]];
+export const getPanelRotation = (
+  resolvedNoteskin: ResolvedDanceNoteskin | null,
+  panel: PanelName,
+): number =>
+  resolvedNoteskin?.panelAssets[panel].rotation ??
+  defaultRotations[panelToButton[panel]];
 
-export const getBundledNoteskinOptions = (): NoteskinOption[] => bundledNoteskinOptions.slice();
+export const getBundledNoteskinOptions = (): NoteskinOption[] =>
+  bundledNoteskinOptions.slice();
 
-export const buildImportedNoteskinOption = (files: FileList | File[]): NoteskinOption | null => {
+export const buildImportedNoteskinOption = (
+  files: FileList | File[],
+): NoteskinOption | null => {
   const entries = Array.from(files);
 
   if (entries.length === 0) {
@@ -579,34 +721,37 @@ export const buildImportedNoteskinOption = (files: FileList | File[]): NoteskinO
   }
 
   const normalizedFiles = new Map<string, File>();
-  let rootName = '';
+  let rootName = "";
 
   for (const file of entries) {
-    const relativePath = normalizePath((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name);
-    const parts = relativePath.split('/');
+    const relativePath = normalizePath(
+      (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+        file.name,
+    );
+    const parts = relativePath.split("/");
 
     if (!rootName) {
-      rootName = parts[0] ?? 'custom';
+      rootName = parts[0] ?? "custom";
     }
 
-    const trimmedPath = parts.slice(1).join('/');
+    const trimmedPath = parts.slice(1).join("/");
 
     if (trimmedPath) {
       normalizedFiles.set(trimmedPath, file);
     }
   }
 
-  if (!normalizedFiles.has('NoteSkin.lua')) {
+  if (!normalizedFiles.has("NoteSkin.lua")) {
     return null;
   }
 
-  const id = `local-${rootName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  const id = `local-${rootName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
   return {
     id,
     label: `${rootName} (local)`,
     source: {
-      kind: 'local',
+      kind: "local",
       id,
       label: `${rootName} (local)`,
       files: normalizedFiles,
@@ -616,7 +761,7 @@ export const buildImportedNoteskinOption = (files: FileList | File[]): NoteskinO
 };
 
 export const releaseNoteskinOption = (option: NoteskinOption | null): void => {
-  if (!option || option.source.kind !== 'local') {
+  if (!option || option.source.kind !== "local") {
     return;
   }
 
@@ -631,10 +776,14 @@ export const loadResolvedDanceNoteskin = async (
   selectedOption: NoteskinOption,
   availableOptions: NoteskinOption[],
 ): Promise<ResolvedDanceNoteskin> => {
-  const allOptions = new Map<string, NoteskinOption>(availableOptions.map((option) => [option.id, option]));
+  const allOptions = new Map<string, NoteskinOption>(
+    availableOptions.map((option) => [option.id, option]),
+  );
   const definitionCache = new Map<string, LoadedNoteskinDefinition>();
 
-  const ensureDefinition = async (skinId: string): Promise<LoadedNoteskinDefinition | null> => {
+  const ensureDefinition = async (
+    skinId: string,
+  ): Promise<LoadedNoteskinDefinition | null> => {
     const cached = definitionCache.get(skinId);
 
     if (cached) {
@@ -666,16 +815,53 @@ export const loadResolvedDanceNoteskin = async (
 
   for (const panel of Object.keys(panelToButton) as PanelName[]) {
     const buttonName = panelToButton[panel];
-    const rotation = rootDefinition.rotate[buttonName] ?? defaultRotations[buttonName] ?? 0;
+    const rotation =
+      rootDefinition.rotate[buttonName] ?? defaultRotations[buttonName] ?? 0;
 
     panelAssets[panel] = {
       rotation,
-      receptor: await resolvePanelAsset(definitionCache, rootDefinition.id, buttonName, 'Receptor', new Set<string>()),
-      tapNote: await resolvePanelAsset(definitionCache, rootDefinition.id, buttonName, 'Tap Note', new Set<string>()),
-      tapLift: await resolvePanelAsset(definitionCache, rootDefinition.id, buttonName, 'Tap Lift', new Set<string>()),
-      tapMine: await resolvePanelAsset(definitionCache, rootDefinition.id, buttonName, 'Tap Mine', new Set<string>()),
-      holdBodyActive: await resolvePanelAsset(definitionCache, rootDefinition.id, buttonName, 'Hold Body Active', new Set<string>()),
-      holdBodyInactive: await resolvePanelAsset(definitionCache, rootDefinition.id, buttonName, 'Hold Body Inactive', new Set<string>()),
+      receptor: await resolvePanelAsset(
+        definitionCache,
+        rootDefinition.id,
+        buttonName,
+        "Receptor",
+        new Set<string>(),
+      ),
+      tapNote: await resolvePanelAsset(
+        definitionCache,
+        rootDefinition.id,
+        buttonName,
+        "Tap Note",
+        new Set<string>(),
+      ),
+      tapLift: await resolvePanelAsset(
+        definitionCache,
+        rootDefinition.id,
+        buttonName,
+        "Tap Lift",
+        new Set<string>(),
+      ),
+      tapMine: await resolvePanelAsset(
+        definitionCache,
+        rootDefinition.id,
+        buttonName,
+        "Tap Mine",
+        new Set<string>(),
+      ),
+      holdBodyActive: await resolvePanelAsset(
+        definitionCache,
+        rootDefinition.id,
+        buttonName,
+        "Hold Body Active",
+        new Set<string>(),
+      ),
+      holdBodyInactive: await resolvePanelAsset(
+        definitionCache,
+        rootDefinition.id,
+        buttonName,
+        "Hold Body Inactive",
+        new Set<string>(),
+      ),
     };
   }
 
