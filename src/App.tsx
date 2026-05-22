@@ -65,6 +65,7 @@ interface BotStep {
   hitBeat: number;
   hitTimeSeconds: number;
   moveStartTimeSeconds: number;
+  moveEndTimeSeconds: number;
   holdUntilTimeSeconds: number | null;
 }
 
@@ -155,9 +156,23 @@ const botFootTargetsByForm: Record<BotFormStyleId, BotFootTargetMap> = {
   'heels-out': botWideFootTargets,
   'toes-out': botWideFootTargets,
 };
-const botFootAngles: Record<FootName, number> = {
-  left: -16,
-  right: 16,
+const botFootAnglesByForm: Record<BotFormStyleId, Record<FootName, number>> = {
+  'straight-wide': {
+    left: -16,
+    right: 16,
+  },
+  'straight-minimal': {
+    left: -9,
+    right: 9,
+  },
+  'heels-out': {
+    left: -16,
+    right: 16,
+  },
+  'toes-out': {
+    left: -16,
+    right: 16,
+  },
 };
 const botWindowMinWidth = 248;
 const botWindowMinHeight = 232;
@@ -166,6 +181,7 @@ const botMoveLeadSeconds = 0.16;
 const botSamePanelLeadSeconds = 0.1;
 const botMinMoveLeadSeconds = 0.045;
 const botAdaptiveLeadRatio = 0.72;
+const botFastMoveDurationScale = 0.72;
 const botPressWindowSeconds = 0.08;
 const botHoldScale = 1.06;
 const botPressScale = 1.12;
@@ -351,6 +367,16 @@ const buildBotTimeline = (
         ? clamp(secondsSinceLastStep * botAdaptiveLeadRatio, botMinMoveLeadSeconds, preferredLeadSeconds)
         : preferredLeadSeconds;
       const moveStartTimeSeconds = Math.max(hitTimeSeconds - adaptiveLeadSeconds, foot.availableTimeSeconds);
+      const availableMoveWindowSeconds = Math.max(hitTimeSeconds - moveStartTimeSeconds, 0.001);
+      const compressedMoveRatio =
+        foot.panel === event.panel || preferredLeadSeconds <= 0
+          ? 0
+          : clamp(1 - adaptiveLeadSeconds / preferredLeadSeconds, 0, 1);
+      const moveDurationScale = lerp(1, botFastMoveDurationScale, compressedMoveRatio);
+      const moveEndTimeSeconds = Math.min(
+        hitTimeSeconds,
+        moveStartTimeSeconds + availableMoveWindowSeconds * moveDurationScale,
+      );
 
       stepsByFoot[footName].push({
         foot: footName,
@@ -359,6 +385,7 @@ const buildBotTimeline = (
         hitBeat: event.beat,
         hitTimeSeconds,
         moveStartTimeSeconds,
+        moveEndTimeSeconds,
         holdUntilTimeSeconds,
       });
 
@@ -424,7 +451,7 @@ const sampleBotState = (
     if (upcomingStep && currentTimeSeconds >= upcomingStep.moveStartTimeSeconds) {
       const fromPosition = footTargets[footName][upcomingStep.fromPanel];
       const toPosition = footTargets[footName][upcomingStep.toPanel];
-      const moveDurationSeconds = Math.max(upcomingStep.hitTimeSeconds - upcomingStep.moveStartTimeSeconds, 0.001);
+      const moveDurationSeconds = Math.max(upcomingStep.moveEndTimeSeconds - upcomingStep.moveStartTimeSeconds, 0.001);
       const moveProgress = clamp(
         (currentTimeSeconds - upcomingStep.moveStartTimeSeconds) / moveDurationSeconds,
         0,
@@ -478,8 +505,11 @@ const sampleBotState = (
   return { feet, activePanels };
 };
 
-const getBotFootTransform = (foot: BotFootPose): string =>
-  `translate(-50%, -50%) rotate(${botFootAngles[foot.foot]}deg) scale(${foot.scale})`;
+const getBotFootTransform = (foot: BotFootPose, formStyle: BotFormStyleId): string => {
+  const footAngles = botFootAnglesByForm[formStyle] ?? botFootAnglesByForm['straight-wide'];
+
+  return `translate(-50%, -50%) rotate(${footAngles[foot.foot]}deg) scale(${foot.scale})`;
+};
 
 const getQuantizationColor = (beat: number): string => {
   const rounded = Math.round(beat * 48) / 48;
@@ -802,7 +832,7 @@ function DancingBotWindow({
                   style={{
                     left: `${foot.x}%`,
                     top: `${foot.y}%`,
-                    transform: getBotFootTransform(foot),
+                    transform: getBotFootTransform(foot, selectedFormStyle),
                   }}
                   title={`${footName} foot on ${foot.panel}`}
                 >
