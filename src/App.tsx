@@ -343,6 +343,7 @@ function App() {
   const {
     displayBeat,
     isPlaying,
+    measureGuideLayerRef,
     playbackClockRef,
     renderBeatAnchor,
     scrollLayerRef,
@@ -701,6 +702,7 @@ function App() {
         getReceptorStyle={getReceptorStyle}
         handleMinimapPointerDown={handleMinimapPointerDown}
         handleMinimapPointerMove={handleMinimapPointerMove}
+        measureGuideLayerRef={measureGuideLayerRef}
         minimapMeasures={minimapMeasures}
         minimapRef={minimapRef}
         notefieldFrameRef={notefieldFrameRef}

@@ -30,6 +30,7 @@ interface NotefieldPreviewProps {
   getReceptorStyle: (panel: Panel) => CSSProperties;
   handleMinimapPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleMinimapPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  measureGuideLayerRef: MutableRefObject<HTMLDivElement | null>;
   minimapMeasures: MinimapMeasureView[];
   minimapRef: MutableRefObject<HTMLDivElement | null>;
   notefieldFrameRef: MutableRefObject<HTMLDivElement | null>;
@@ -59,6 +60,7 @@ export function NotefieldPreview({
   getReceptorStyle,
   handleMinimapPointerDown,
   handleMinimapPointerMove,
+  measureGuideLayerRef,
   minimapMeasures,
   minimapRef,
   notefieldFrameRef,
@@ -101,7 +103,7 @@ export function NotefieldPreview({
             </div>
 
             <div className="lane-grid" style={{ height: receptorOffset + viewportHeight }}>
-              <div className="chart-scroll-layer" ref={scrollLayerRef} style={{ height: chartContentHeight }}>
+              <div className="measure-guide-layer" ref={measureGuideLayerRef} style={{ height: chartContentHeight }}>
                 {visibleBeatGuides.map(({ beat, isMeasure }) => (
                   <div
                     key={beat}
@@ -111,7 +113,9 @@ export function NotefieldPreview({
                     {isMeasure ? <span>Measure {beat / 4 + 1}</span> : null}
                   </div>
                 ))}
+              </div>
 
+              <div className="chart-scroll-layer" ref={scrollLayerRef} style={{ height: chartContentHeight }}>
                 {panelOrder.map((panel) => (
                   <div key={panel} className="lane-column" data-panel={panel} style={{ height: chartContentHeight }}>
                     {visibleHolds

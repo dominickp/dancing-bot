@@ -628,7 +628,7 @@ body {
   top: 20px;
   left: 0;
   right: 0;
-  z-index: 3;
+  z-index: 2;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--lane-gap);
@@ -712,17 +712,25 @@ body {
   padding: 0 var(--playfield-gutter) 20px;
 }
 
+.measure-guide-layer,
 .chart-scroll-layer {
   position: absolute;
   inset: 0 var(--playfield-gutter) 20px;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--lane-gap);
   transform: translate3d(0, 72px, 0);
   will-change: transform;
   contain: layout paint style;
   clip-path: inset(var(--receptor-offset) 0 0 0);
+}
+
+.measure-guide-layer {
+  z-index: 1;
+}
+
+.chart-scroll-layer {
+  z-index: 3;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--lane-gap);
 }
 
 .lane-column {

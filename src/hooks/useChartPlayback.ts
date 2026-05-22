@@ -30,6 +30,7 @@ interface UseChartPlaybackResult {
   audioReady: boolean;
   displayBeat: number;
   isPlaying: boolean;
+  measureGuideLayerRef: MutableRefObject<HTMLDivElement | null>;
   playbackClockRef: MutableRefObject<PlaybackClock | null>;
   renderBeatAnchor: number;
   scrollLayerRef: MutableRefObject<HTMLDivElement | null>;
@@ -58,6 +59,7 @@ export function useChartPlayback({
   const [isPlaying, setIsPlaying] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const measureGuideLayerRef = useRef<HTMLDivElement | null>(null);
   const scrollLayerRef = useRef<HTMLDivElement | null>(null);
   const currentBeatRef = useRef(0);
   const renderBeatAnchorRef = useRef(0);
@@ -73,8 +75,13 @@ export function useChartPlayback({
       const nextBeat = clamp(beat, 0, lastBeat);
       currentBeatRef.current = nextBeat;
 
+      const translateY = receptorOffset - nextBeat * pixelsPerBeat;
+
+      if (measureGuideLayerRef.current) {
+        measureGuideLayerRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
+      }
+
       if (scrollLayerRef.current) {
-        const translateY = receptorOffset - nextBeat * pixelsPerBeat;
         scrollLayerRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
       }
     },
@@ -399,6 +406,7 @@ export function useChartPlayback({
     audioReady,
     displayBeat,
     isPlaying,
+    measureGuideLayerRef,
     playbackClockRef,
     renderBeatAnchor,
     scrollLayerRef,
