@@ -2,7 +2,7 @@
   font-family: "Segoe UI", sans-serif;
   color: #f8f4e9;
   background:
-    radial-gradient(circle at top, rgba(255, 168, 76, 0.18), transparent 34%),
+    radial-gradient(circle at top, rgba(172, 172, 172, 0.18), transparent 34%),
     linear-gradient(180deg, #1b1f2a 0%, #10131a 100%);
   line-height: 1.5;
   font-weight: 400;
