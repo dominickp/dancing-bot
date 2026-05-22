@@ -42,6 +42,36 @@ interface UseChartPlaybackResult {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
+const getScrollStepBeats = (visibleBeats: number): number => {
+  if (visibleBeats <= 3) {
+    return 0.25;
+  }
+
+  if (visibleBeats <= 7) {
+    return 0.5;
+  }
+
+  if (visibleBeats <= 14) {
+    return 1;
+  }
+
+  return 2;
+};
+
+const getWheelStepCount = (event: WheelEvent): number => {
+  const deltaMagnitude = Math.abs(event.deltaY);
+
+  if (deltaMagnitude < 80) {
+    return 1;
+  }
+
+  if (deltaMagnitude < 200) {
+    return 2;
+  }
+
+  return Math.max(1, Math.round(deltaMagnitude / 120));
+};
+
 export function useChartPlayback({
   audioSource,
   chartIndex,
@@ -224,9 +254,23 @@ export function useChartPlayback({
   useEffect(() => {
     setIsPlaying(false);
     setAudioReady(false);
+    currentBeatRef.current = 0;
+    lastAnimatedBeatRef.current = 0;
     triggeredHitKeysRef.current.clear();
-    seekToBeat(0);
-  }, [audioSource, chartIndex, seekToBeat]);
+    renderBeatAnchorRef.current = 0;
+    setRenderBeatAnchor(0);
+    setDisplayBeat(0);
+
+    if (measureGuideLayerRef.current) {
+      measureGuideLayerRef.current.style.transform = `translate3d(0, ${receptorOffset}px, 0)`;
+    }
+
+    if (scrollLayerRef.current) {
+      scrollLayerRef.current.style.transform = `translate3d(0, ${receptorOffset}px, 0)`;
+    }
+
+    syncAudioToBeat(0);
+  }, [audioSource, chartIndex, receptorOffset, syncAudioToBeat]);
 
   useEffect(() => {
     if (!isPlayingRef.current) {
@@ -353,7 +397,16 @@ export function useChartPlayback({
         return;
       }
 
-      const nextBeat = currentBeatRef.current + event.deltaY * 0.01;
+      const scrollDirection = Math.sign(event.deltaY);
+
+      if (scrollDirection === 0) {
+        return;
+      }
+
+      const scrollStepBeats = getScrollStepBeats(visibleBeats);
+      const stepCount = getWheelStepCount(event);
+      const nextBeat =
+        currentBeatRef.current + scrollDirection * scrollStepBeats * stepCount;
 
       if (isPlayingRef.current) {
         seekToBeat(nextBeat);
@@ -380,6 +433,7 @@ export function useChartPlayback({
     seekToBeat,
     setVisibleBeats,
     syncAudioToBeat,
+    visibleBeats,
   ]);
 
   useEffect(() => {
