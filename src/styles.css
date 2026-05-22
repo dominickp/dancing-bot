@@ -804,7 +804,8 @@ body {
 }
 
 .lane-note-underlay,
-.lane-note-overlay {
+.lane-note-overlay,
+.lane-note-detail {
   position: absolute;
   inset: 0;
   background-repeat: no-repeat;
@@ -814,6 +815,10 @@ body {
 
 .lane-note-overlay-blended {
   mix-blend-mode: multiply;
+}
+
+.lane-note-detail {
+  opacity: 0.78;
 }
 
 .hold-body {

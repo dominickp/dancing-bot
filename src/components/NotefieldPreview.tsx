@@ -25,6 +25,7 @@ interface NotefieldPreviewProps {
   chartContentHeight: number;
   displayBeat: number;
   explosionRefs: MutableRefObject<Record<Panel, HTMLDivElement | null>>;
+  getNoteDetailStyle: (event: TimedNoteEvent) => CSSProperties | null;
   getHoldStyle: (segment: HoldSegmentView) => CSSProperties;
   getNoteFrameStyle: (event: TimedNoteEvent) => CSSProperties;
   getNoteStyle: (event: TimedNoteEvent) => CSSProperties;
@@ -57,6 +58,7 @@ export function NotefieldPreview({
   chartContentHeight,
   displayBeat,
   explosionRefs,
+  getNoteDetailStyle,
   getHoldStyle,
   getNoteFrameStyle,
   getNoteStyle,
@@ -144,6 +146,7 @@ export function NotefieldPreview({
                     {visibleEvents
                       .filter((event) => event.panel === panel)
                       .map((event) => {
+                        const detailStyle = getNoteDetailStyle(event);
                         const underlayStyle = getNoteUnderlayStyle(event);
 
                         return (
@@ -158,6 +161,7 @@ export function NotefieldPreview({
                               className={`lane-note-overlay${underlayStyle ? ' lane-note-overlay-blended' : ''}`}
                               style={getNoteStyle(event)}
                             />
+                            {detailStyle ? <div className="lane-note-detail" style={detailStyle} /> : null}
                           </div>
                         );
                       })}

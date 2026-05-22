@@ -629,16 +629,23 @@ function App() {
     const noteSprite = getNoteSprite(resolvedNoteskin?.panelAssets[event.panel], event);
 
     if (noteSprite?.renderMode === 'mask') {
-      return (
-        getSpriteDetailFillStyle(noteSprite) ??
-        getSpriteFillStyle(resolvedNoteskin?.panelAssets[event.panel].receptor ?? null)
-      );
+      return getSpriteFillStyle(resolvedNoteskin?.panelAssets[event.panel].receptor ?? null);
     }
 
     return {
       ...getSpriteFillStyle(noteSprite),
       backgroundColor: getNoteColor(noteSprite, event.beat),
     } as CSSProperties;
+  };
+
+  const getEventDetailStyle = (event: TimedNoteEvent): CSSProperties | null => {
+    const noteSprite = getNoteSprite(resolvedNoteskin?.panelAssets[event.panel], event);
+
+    if (!noteSprite || noteSprite.renderMode !== 'mask') {
+      return null;
+    }
+
+    return null;
   };
 
   const getEventFrameStyle = (event: TimedNoteEvent): CSSProperties => ({
@@ -749,6 +756,7 @@ function App() {
         chartOffsetSeconds={sampleChart.metadata.offset}
         displayBeat={displayBeat}
         explosionRefs={explosionRefs}
+        getNoteDetailStyle={getEventDetailStyle}
         getHoldStyle={getHoldStyle}
         getNoteFrameStyle={getEventFrameStyle}
         getNoteStyle={getEventStyle}
