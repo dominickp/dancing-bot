@@ -1,5 +1,6 @@
 :root {
   font-family: "Segoe UI", sans-serif;
+  color-scheme: dark;
   color: #f8f4e9;
   background:
     radial-gradient(circle at top, rgba(172, 172, 172, 0.18), transparent 34%),
@@ -92,16 +93,28 @@ body {
 
 .toolbar-field select {
   min-width: 280px;
-  padding: 10px 12px;
+  padding: 10px 42px 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
+  color-scheme: dark;
   color: #f8f4e9;
-  background: rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M3 5.25 7 9l4-3.75' fill='none' stroke='%23f8f4e9' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center / 14px 14px,
+    #11151d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  -moz-appearance: none;
+  appearance: none;
+  font: inherit;
 }
 
 .toolbar-field select option {
   color: #f8f4e9;
   background: #11151d;
+}
+
+.toolbar-field select:hover {
+  border-color: rgba(255, 177, 74, 0.3);
 }
 
 .toolbar-field select:focus {
@@ -245,17 +258,28 @@ body {
 
 .bot-form-picker select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 10px 42px 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
+  color-scheme: dark;
   color: #f8f4e9;
-  background: rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M3 5.25 7 9l4-3.75' fill='none' stroke='%23f8f4e9' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center / 14px 14px,
+    #11151d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  -moz-appearance: none;
+  appearance: none;
   font: inherit;
 }
 
 .bot-form-picker select option {
   color: #f8f4e9;
   background: #11151d;
+}
+
+.bot-form-picker select:hover {
+  border-color: rgba(255, 177, 74, 0.3);
 }
 
 .bot-form-picker select:focus {
