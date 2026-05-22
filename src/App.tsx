@@ -168,16 +168,16 @@ const botHeelsOutFootTargets: BotFootTargetMap = {
 };
 const botToesOutFootTargets: BotFootTargetMap = {
   left: {
-    left: { x: 34, y: 48 },
-    down: { x: 43, y: 72 },
-    up: { x: 46, y: 41 },
-    right: { x: 67, y: 50 },
+    left: { x: 40, y: 44 },
+    down: { x: 48, y: 64 },
+    up: { x: 44, y: 39 },
+    right: { x: 64, y: 47 },
   },
   right: {
-    left: { x: 33, y: 50 },
-    down: { x: 57, y: 72 },
-    up: { x: 54, y: 41 },
-    right: { x: 66, y: 48 },
+    left: { x: 36, y: 47 },
+    down: { x: 52, y: 64 },
+    up: { x: 56, y: 39 },
+    right: { x: 60, y: 44 },
   },
 };
 const botFootTargetsByForm: Record<BotFormStyleId, BotFootTargetMap> = {
@@ -231,16 +231,16 @@ const botFootAnglesByForm: Record<BotFormStyleId, BotFootAngleMap> = {
   },
   'toes-out': {
     left: {
-      left: -32,
+      left: -40,
       down: -6,
-      up: -21,
-      right: -18,
+      up: -10,
+      right: -26,
     },
     right: {
-      left: 18,
+      left: 26,
       down: 6,
-      up: 21,
-      right: 32,
+      up: 10,
+      right: 40,
     },
   },
 };
