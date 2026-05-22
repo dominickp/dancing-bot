@@ -156,13 +156,13 @@ const botHeelsOutFootTargets: BotFootTargetMap = {
   left: {
     left: { x: 32, y: 46 },
     down: { x: 43, y: 66 },
-    up: { x: 37, y: 34 },
+    up: { x: 39, y: 38 },
     right: { x: 68, y: 50 },
   },
   right: {
     left: { x: 32, y: 50 },
     down: { x: 57, y: 66 },
-    up: { x: 63, y: 34 },
+    up: { x: 61, y: 38 },
     right: { x: 68, y: 46 },
   },
 };
@@ -219,13 +219,13 @@ const botFootAnglesByForm: Record<BotFormStyleId, BotFootAngleMap> = {
     left: {
       left: 38,
       down: 14,
-      up: 8,
+      up: 16,
       right: 24,
     },
     right: {
       left: -24,
       down: -14,
-      up: -8,
+      up: -16,
       right: -38,
     },
   },
