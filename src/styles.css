@@ -343,6 +343,16 @@ body {
   box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
 }
 
+.lane-note-detail {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+  mix-blend-mode: multiply;
+}
+
 .hold-body {
   position: absolute;
   left: 50%;

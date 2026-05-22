@@ -100,13 +100,6 @@ const getSpriteBackgroundStyle = (
   const y = sprite.rows > 1 ? `${(sprite.frameY / Math.max(sprite.rows - 1, 1)) * 100}%` : '0%';
 
   if (sprite.renderMode === 'mask') {
-    const detailX = sprite.detailColumns && sprite.detailColumns > 1
-      ? `${((sprite.detailFrameX ?? 0) / Math.max(sprite.detailColumns - 1, 1)) * 100}%`
-      : '0%';
-    const detailY = sprite.detailRows && sprite.detailRows > 1
-      ? `${((sprite.detailFrameY ?? 0) / Math.max(sprite.detailRows - 1, 1)) * 100}%`
-      : '0%';
-
     return {
       ...style,
       WebkitMaskImage: `url("${sprite.url}")`,
@@ -117,12 +110,6 @@ const getSpriteBackgroundStyle = (
       maskSize: `${sprite.columns * 100}% ${sprite.rows * 100}%`,
       WebkitMaskPosition: `${x} ${y}`,
       maskPosition: `${x} ${y}`,
-      backgroundImage: sprite.detailUrl ? `url("${sprite.detailUrl}")` : 'none',
-      backgroundSize: sprite.detailUrl
-        ? `${(sprite.detailColumns ?? 1) * 100}% ${(sprite.detailRows ?? 1) * 100}%`
-        : undefined,
-      backgroundPosition: sprite.detailUrl ? `${detailX} ${detailY}` : undefined,
-      backgroundBlendMode: sprite.detailUrl ? 'multiply' : undefined,
     } as CSSProperties;
   }
 
@@ -130,6 +117,25 @@ const getSpriteBackgroundStyle = (
     ...style,
     backgroundImage: `url("${sprite.url}")`,
     backgroundSize: `${sprite.columns * 100}% ${sprite.rows * 100}%`,
+    backgroundPosition: `${x} ${y}`,
+  };
+};
+
+const getSpriteDetailStyle = (sprite: ResolvedSpriteAsset | null): CSSProperties => {
+  if (!sprite?.detailUrl) {
+    return {};
+  }
+
+  const x = sprite.detailColumns && sprite.detailColumns > 1
+    ? `${((sprite.detailFrameX ?? 0) / Math.max(sprite.detailColumns - 1, 1)) * 100}%`
+    : '0%';
+  const y = sprite.detailRows && sprite.detailRows > 1
+    ? `${((sprite.detailFrameY ?? 0) / Math.max(sprite.detailRows - 1, 1)) * 100}%`
+    : '0%';
+
+  return {
+    backgroundImage: `url("${sprite.detailUrl}")`,
+    backgroundSize: `${(sprite.detailColumns ?? 1) * 100}% ${(sprite.detailRows ?? 1) * 100}%`,
     backgroundPosition: `${x} ${y}`,
   };
 };
@@ -854,7 +860,11 @@ function App() {
                                 } as CSSProperties
                               }
                               title={`${event.panel} ${event.kind} @ beat ${event.beat.toFixed(3)}`}
-                            />
+                            >
+                              {noteSprite?.renderMode === 'mask' && noteSprite.detailUrl ? (
+                                <div className="lane-note-detail" style={getSpriteDetailStyle(noteSprite)} />
+                              ) : null}
+                            </div>
                           );
                         })}
                     </div>

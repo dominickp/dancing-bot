@@ -20,6 +20,11 @@ export interface ResolvedSpriteAsset {
   detailFrameY?: number;
 }
 
+interface SpriteFrameSelection {
+  frameX?: number;
+  frameY?: number;
+}
+
 export interface ResolvedPanelAssets {
   rotation: number;
   receptor: ResolvedSpriteAsset | null;
@@ -416,6 +421,7 @@ const buildSpriteAsset = async (
   source: NoteskinSource,
   relativePath: string,
   renderMode: "image" | "mask" = "image",
+  frameSelection: SpriteFrameSelection = {},
 ): Promise<ResolvedSpriteAsset | null> => {
   const url = getFileUrl(source, relativePath);
 
@@ -446,8 +452,14 @@ const buildSpriteAsset = async (
     url,
     columns,
     rows,
-    frameX: 0,
-    frameY: 0,
+    frameX: Math.min(
+      Math.max(frameSelection.frameX ?? 0, 0),
+      Math.max(columns - 1, 0),
+    ),
+    frameY: Math.min(
+      Math.max(frameSelection.frameY ?? 0, 0),
+      Math.max(rows - 1, 0),
+    ),
     renderMode,
   };
 };
@@ -456,9 +468,23 @@ const buildMaskedDetailSpriteAsset = async (
   source: NoteskinSource,
   maskPath: string,
   detailPath: string,
+  frameSelection: {
+    mask?: SpriteFrameSelection;
+    detail?: SpriteFrameSelection;
+  } = {},
 ): Promise<ResolvedSpriteAsset | null> => {
-  const maskAsset = await buildSpriteAsset(source, maskPath, "mask");
-  const detailAsset = await buildSpriteAsset(source, detailPath, "image");
+  const maskAsset = await buildSpriteAsset(
+    source,
+    maskPath,
+    "mask",
+    frameSelection.mask,
+  );
+  const detailAsset = await buildSpriteAsset(
+    source,
+    detailPath,
+    "image",
+    frameSelection.detail,
+  );
 
   if (!maskAsset || !detailAsset) {
     return maskAsset;
@@ -532,9 +558,16 @@ const resolveModelTextureFallback = (
 ): string | null => {
   switch (elementName) {
     case "Tap Note":
-      return findDirectImage(source, ["_down receptor go 4x1 (doubleres).png"]);
+      return findDirectImage(source, [
+        "textures/note.png",
+        "textures/tap note parts (mipmaps).png",
+        "_down receptor go 4x1 (doubleres).png",
+      ]);
     case "Tap Lift":
-      return findDirectImage(source, ["_down receptor go 4x1 (doubleres).png"]);
+      return findDirectImage(source, [
+        "textures/tap lift parts (mipmaps).png",
+        "_down receptor go 4x1 (doubleres).png",
+      ]);
     case "Tap Mine":
       return findDirectImage(source, ["_mine tex.png"]);
     default:
@@ -601,10 +634,21 @@ const resolveActorTexture = async (
       const detailTexture = resolveModelTextureDetail(source, elementName);
 
       if (detailTexture) {
+        const useArrowFramePair =
+          /(?:^|\/)(?:note|tap note parts \(mipmaps\)|tap lift parts \(mipmaps\))\.png$/i.test(
+            detailTexture,
+          );
+
         return buildMaskedDetailSpriteAsset(
           source,
           fallbackTexture,
           detailTexture,
+          useArrowFramePair
+            ? {
+                mask: { frameX: 1 },
+                detail: { frameX: 0 },
+              }
+            : {},
         );
       }
 
