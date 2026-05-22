@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { TimedNoteEvent } from './lib/simfile';
-import { beatToSeconds } from './lib/simfile';
-import { getSampleTimedChart, sampleChart } from './data/sampleChart';
+import type { SimfileDocument, TimedChart, TimedNoteEvent } from './lib/simfile';
 import {
   getBundledNoteskinOptions,
   getPanelRotation,
@@ -22,6 +20,8 @@ import type { BotStep } from './components/DancingBotWindow';
 import { NotefieldPreview } from './components/NotefieldPreview';
 import { useChartPlayback } from './hooks/useChartPlayback';
 import type { PlaybackClock } from './hooks/useChartPlayback';
+import { bundledSongSources, loadLocalSongSource, releaseLoadedSongSource } from './lib/songSource';
+import type { LoadedSongSource } from './lib/songSource';
 
 const panelOrder = ['left', 'down', 'up', 'right'] as const;
 const receptorOffset = 72;
@@ -55,11 +55,24 @@ interface MinimapMeasure {
   density: number;
 }
 
-const displayTitle = [sampleChart.metadata.title, sampleChart.metadata.subtitle]
-  .filter(Boolean)
-  .join(' ');
 const bundledNoteskinOptions = getBundledNoteskinOptions();
 const genericArrowClipPath = 'polygon(50% 100%, 100% 50%, 72% 50%, 72% 0%, 28% 0%, 28% 50%, 0% 50%)';
+const emptyTimedChart: TimedChart = { events: [], lastBeat: 0, lastTimeSeconds: 0 };
+const emptySimfileDocument: SimfileDocument = {
+  metadata: {
+    title: '',
+    subtitle: '',
+    artist: '',
+    credit: '',
+    banner: '',
+    background: '',
+    music: '',
+    offset: 0,
+  },
+  bpms: [],
+  stops: [],
+  charts: [],
+};
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const getHoldSegmentKey = (panel: PanelName, startBeat: number): string => `${panel}:${startBeat.toFixed(6)}`;
@@ -277,9 +290,12 @@ const buildHoldSegments = (events: TimedNoteEvent[]): HoldSegment[] => {
 }
 
 function App() {
+  const [selectedSongId, setSelectedSongId] = useState(bundledSongSources[0]?.id ?? '');
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
   const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(defaultBotFormStyle);
+  const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
+  const [songLoadError, setSongLoadError] = useState<string | null>(null);
   const [visibleBeats, setVisibleBeats] = useState(defaultVisibleBeats);
   const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>({
     x: 26,
@@ -287,6 +303,7 @@ function App() {
     width: 460,
     height: 700,
   });
+  const songImportRef = useRef<HTMLInputElement | null>(null);
   const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
   const botWindowInteractionRef = useRef<BotWindowInteraction | null>(null);
@@ -303,14 +320,22 @@ function App() {
     right: null,
   });
 
-  const selectedChart = sampleChart.charts[selectedChartIndex] ?? sampleChart.charts[0];
-  const selectedTimedChart = useMemo(() => getSampleTimedChart(selectedChartIndex), [selectedChartIndex]);
+  const availableSongSources = useMemo(
+    () => (localSongSource ? [...bundledSongSources, localSongSource] : bundledSongSources),
+    [localSongSource],
+  );
+  const selectedSong =
+    availableSongSources.find((songSource) => songSource.id === selectedSongId) ?? availableSongSources[0] ?? null;
+  const simfile = selectedSong?.document ?? emptySimfileDocument;
+  const displayTitle = [simfile.metadata.title, simfile.metadata.subtitle].filter(Boolean).join(' ') || 'Dancing Bot';
+  const selectedChart = simfile.charts[selectedChartIndex] ?? simfile.charts[0] ?? null;
+  const selectedTimedChart = selectedSong?.timedCharts[selectedChartIndex] ?? selectedSong?.timedCharts[0] ?? emptyTimedChart;
   const selectedNoteskinOption = bundledNoteskinOptions[0] ?? null;
   const holdSegments = useMemo(() => buildHoldSegments(selectedTimedChart.events), [selectedTimedChart.events]);
   const holdEndBeatMap = useMemo(() => buildHoldEndBeatMap(holdSegments), [holdSegments]);
   const botTimeline = useMemo(
-    () => buildBotTimeline(selectedTimedChart.events, holdEndBeatMap),
-    [holdEndBeatMap, selectedTimedChart.events],
+    () => buildBotTimeline(selectedTimedChart.events, holdEndBeatMap, simfile),
+    [holdEndBeatMap, selectedTimedChart.events, simfile],
   );
   const pixelsPerBeat = viewportHeight / visibleBeats;
   const visualScale = clamp(Math.sqrt(defaultVisibleBeats / visibleBeats), minVisualScale, maxVisualScale);
@@ -350,6 +375,7 @@ function App() {
     seekToBeat,
     setIsPlaying,
   } = useChartPlayback({
+    audioSource: selectedSong?.audioUrl ?? null,
     chartIndex: selectedChartIndex,
     events: selectedTimedChart.events,
     lastBeat: selectedTimedChart.lastBeat,
@@ -359,6 +385,7 @@ function App() {
     maxVisibleBeats,
     setVisibleBeats,
     receptorOffset,
+    simfile,
     onTriggerPanelFeedback: (event) => {
       const receptor = receptorRefs.current[event.panel];
       const explosion = explosionRefs.current[event.panel];
@@ -445,6 +472,26 @@ function App() {
 
     return beats;
   }, [measureEnd, measureStart]);
+
+  useEffect(() => {
+    return () => {
+      releaseLoadedSongSource(localSongSource);
+    };
+  }, [localSongSource]);
+
+  useEffect(() => {
+    if (selectedSong) {
+      return;
+    }
+
+    if (bundledSongSources[0]) {
+      setSelectedSongId(bundledSongSources[0].id);
+    }
+  }, [selectedSong]);
+
+  useEffect(() => {
+    setSelectedChartIndex(0);
+  }, [selectedSong?.id]);
 
   useEffect(() => {
     const frame = notefieldFrameRef.current;
@@ -541,6 +588,25 @@ function App() {
       isDisposed = true;
     };
   }, [selectedNoteskinOption]);
+
+  const handleImportSongFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      const nextSongSource = await loadLocalSongSource(files);
+
+      setSongLoadError(null);
+      setLocalSongSource(nextSongSource);
+      setSelectedSongId(nextSongSource.id);
+    } catch (error) {
+      setSongLoadError(error instanceof Error ? error.message : 'Unable to load the selected simfile folder.');
+    }
+  };
 
   const seekFromMinimapPointer = (clientY: number) => {
     const minimap = minimapRef.current;
@@ -652,22 +718,56 @@ function App() {
         <div className="toolbar-title">
           <p className="eyebrow">Dancing Bot</p>
           <h1>{displayTitle}</h1>
-          <p className="toolbar-subtitle">{sampleChart.metadata.artist}</p>
+          <p className="toolbar-subtitle">{simfile.metadata.artist}</p>
+          {songLoadError ? <p className="toolbar-message toolbar-message-error">{songLoadError}</p> : null}
         </div>
 
         <div className="toolbar-controls">
           <label className="toolbar-field">
+            <span>Song</span>
+            <select value={selectedSong?.id ?? ''} onChange={(event) => setSelectedSongId(event.target.value)}>
+              {availableSongSources.map((songSource) => (
+                <option key={songSource.id} value={songSource.id}>
+                  {songSource.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="toolbar-field">
             <span>Chart</span>
             <select
               value={selectedChartIndex}
+              disabled={simfile.charts.length === 0}
               onChange={(event) => setSelectedChartIndex(Number.parseInt(event.target.value, 10) || 0)}
             >
-              {sampleChart.charts.map((chart, chartIndex) => (
+              {simfile.charts.map((chart, chartIndex) => (
                 <option key={`${chart.stepType}-${chart.difficulty}-${chartIndex}`} value={chartIndex}>
                   {chart.difficulty} {chart.meter} - {chart.description || chart.stepType}
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="toolbar-field toolbar-field-action">
+            <span>Import Simfile</span>
+            <button type="button" className="toolbar-button" onClick={() => songImportRef.current?.click()}>
+              Load song folder
+            </button>
+            <input
+              ref={(element) => {
+                songImportRef.current = element;
+
+                if (element) {
+                  element.setAttribute('webkitdirectory', '');
+                  element.setAttribute('directory', '');
+                }
+              }}
+              hidden
+              type="file"
+              multiple
+              onChange={handleImportSongFolder}
+            />
           </label>
 
           <div className="toolbar-badges">
@@ -684,6 +784,7 @@ function App() {
             botWindowRect={botWindowRect}
             currentBeat={displayBeat}
             isPlaying={isPlaying}
+            simfile={simfile}
             resolvedNoteskin={resolvedNoteskin}
             playbackClockRef={playbackClockRef}
             selectedFormStyle={selectedBotFormStyle}

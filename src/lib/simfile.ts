@@ -5,6 +5,8 @@ export interface SimfileMetadata {
   subtitle: string;
   artist: string;
   credit: string;
+  banner: string;
+  background: string;
   music: string;
   offset: number;
 }
@@ -227,6 +229,8 @@ export const parseSmSimfile = (source: string): SimfileDocument => {
       subtitle: getFirstTagValue(tags, "SUBTITLE"),
       artist: getFirstTagValue(tags, "ARTIST"),
       credit: getFirstTagValue(tags, "CREDIT"),
+      banner: getFirstTagValue(tags, "BANNER"),
+      background: getFirstTagValue(tags, "BACKGROUND"),
       music: getFirstTagValue(tags, "MUSIC"),
       offset: Number.parseFloat(getFirstTagValue(tags, "OFFSET")) || 0,
     },

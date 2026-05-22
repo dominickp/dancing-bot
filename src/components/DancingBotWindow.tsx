@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
-import { sampleChart } from '../data/sampleChart';
 import { getPanelRotation } from '../lib/noteskin';
 import type { ResolvedDanceNoteskin, ResolvedSpriteAsset } from '../lib/noteskin';
 import { beatToSeconds, secondsToBeat } from '../lib/simfile';
-import type { Panel, TimedNoteEvent } from '../lib/simfile';
+import type { Panel, SimfileDocument, TimedNoteEvent } from '../lib/simfile';
 import type { PlaybackClock } from '../hooks/useChartPlayback';
 
 type FootName = 'left' | 'right';
@@ -449,6 +448,7 @@ export const clampBotWindowRect = (rect: BotWindowRect, width: number, height: n
 export const buildBotTimeline = (
   events: TimedNoteEvent[],
   holdEndBeatMap: Map<string, number>,
+  simfile: SimfileDocument,
 ): Record<FootName, BotStep[]> => {
   const feet: Record<FootName, BotFootState & { availableTimeSeconds: number }> = {
     left: {
@@ -498,7 +498,7 @@ export const buildBotTimeline = (
     for (const event of stepEvents) {
       const footName = chooseFootForEvent(event, feet, previousStep, reservedFeet);
       const foot = feet[footName];
-      const hitTimeSeconds = beatToSeconds(beat, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset);
+      const hitTimeSeconds = beatToSeconds(beat, simfile.bpms, simfile.stops, simfile.metadata.offset);
       const holdUntilBeat =
         event.kind === 'hold-head' || event.kind === 'roll-head'
           ? holdEndBeatMap.get(`${event.panel}:${event.beat.toFixed(6)}`) ?? event.beat
@@ -506,7 +506,7 @@ export const buildBotTimeline = (
       const holdUntilTimeSeconds =
         holdUntilBeat === null
           ? null
-          : beatToSeconds(holdUntilBeat, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset);
+          : beatToSeconds(holdUntilBeat, simfile.bpms, simfile.stops, simfile.metadata.offset);
       const preferredLeadSeconds = foot.panel === event.panel ? botSamePanelLeadSeconds : botMoveLeadSeconds;
       const secondsSinceLastStep = Number.isFinite(foot.availableTimeSeconds)
         ? Math.max(hitTimeSeconds - foot.availableTimeSeconds, 0)
@@ -562,6 +562,7 @@ interface DancingBotWindowProps {
   botWindowRect: BotWindowRect;
   currentBeat: number;
   isPlaying: boolean;
+  simfile: SimfileDocument;
   resolvedNoteskin: ResolvedDanceNoteskin | null;
   playbackClockRef: { current: PlaybackClock | null };
   selectedFormStyle: BotFormStyleId;
@@ -577,6 +578,7 @@ export function DancingBotWindow({
   botWindowRect,
   currentBeat,
   isPlaying,
+  simfile,
   resolvedNoteskin,
   playbackClockRef,
   selectedFormStyle,
@@ -585,7 +587,7 @@ export function DancingBotWindow({
 }: DancingBotWindowProps) {
   const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
     beat: currentBeat,
-    timeSeconds: beatToSeconds(currentBeat, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset),
+    timeSeconds: beatToSeconds(currentBeat, simfile.bpms, simfile.stops, simfile.metadata.offset),
   }));
 
   useEffect(() => {
@@ -595,11 +597,11 @@ export function DancingBotWindow({
 
     setPlaybackSnapshot({
       beat: currentBeat,
-      timeSeconds: beatToSeconds(currentBeat, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset),
+      timeSeconds: beatToSeconds(currentBeat, simfile.bpms, simfile.stops, simfile.metadata.offset),
     });
 
     return undefined;
-  }, [currentBeat, isPlaying]);
+  }, [currentBeat, isPlaying, simfile]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -611,7 +613,7 @@ export function DancingBotWindow({
     const tick = (timestamp: number) => {
       const clock = playbackClockRef.current;
       const timeSeconds = clock ? clock.audioTime + (timestamp - clock.perfTime) / 1000 : 0;
-      const beat = secondsToBeat(timeSeconds, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset);
+      const beat = secondsToBeat(timeSeconds, simfile.bpms, simfile.stops, simfile.metadata.offset);
 
       setPlaybackSnapshot({ beat, timeSeconds });
       animationFrameId = requestAnimationFrame(tick);
@@ -624,7 +626,7 @@ export function DancingBotWindow({
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [isPlaying, playbackClockRef]);
+  }, [isPlaying, playbackClockRef, simfile]);
 
   const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
   const botFootAngles = useMemo(() => getBotFootAngles(selectedFormStyle), [selectedFormStyle]);

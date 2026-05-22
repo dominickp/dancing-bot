@@ -62,6 +62,15 @@ body {
   color: rgba(248, 244, 233, 0.72);
 }
 
+.toolbar-message {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+}
+
+.toolbar-message-error {
+  color: #ff8d9c;
+}
+
 .toolbar-controls {
   display: flex;
   gap: 16px;

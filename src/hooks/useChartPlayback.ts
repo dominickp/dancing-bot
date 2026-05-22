@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { sampleChart, sampleAudioSource } from "../data/sampleChart";
 import { beatToSeconds, secondsToBeat } from "../lib/simfile";
-import type { Panel, TimedNoteEvent } from "../lib/simfile";
+import type { Panel, SimfileDocument, TimedNoteEvent } from "../lib/simfile";
 
 const renderWindowStepBeats = 2;
 const displayRefreshMs = 80;
@@ -14,6 +13,7 @@ export interface PlaybackClock {
 }
 
 interface UseChartPlaybackArgs {
+  audioSource: string | null;
   chartIndex: number;
   events: TimedNoteEvent[];
   lastBeat: number;
@@ -23,6 +23,7 @@ interface UseChartPlaybackArgs {
   maxVisibleBeats: number;
   setVisibleBeats: Dispatch<SetStateAction<number>>;
   receptorOffset: number;
+  simfile: SimfileDocument;
   onTriggerPanelFeedback: (event: TimedNoteEvent) => void;
 }
 
@@ -42,6 +43,7 @@ const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
 export function useChartPlayback({
+  audioSource,
   chartIndex,
   events,
   lastBeat,
@@ -51,6 +53,7 @@ export function useChartPlayback({
   maxVisibleBeats,
   setVisibleBeats,
   receptorOffset,
+  simfile,
   onTriggerPanelFeedback,
 }: UseChartPlaybackArgs): UseChartPlaybackResult {
   const [audioReady, setAudioReady] = useState(false);
@@ -100,9 +103,9 @@ export function useChartPlayback({
         0,
         beatToSeconds(
           beat,
-          sampleChart.bpms,
-          sampleChart.stops,
-          sampleChart.metadata.offset,
+          simfile.bpms,
+          simfile.stops,
+          simfile.metadata.offset,
         ),
       );
 
@@ -187,7 +190,13 @@ export function useChartPlayback({
   }, [isPlaying]);
 
   useEffect(() => {
-    const audio = new Audio(sampleAudioSource);
+    if (!audioSource) {
+      setAudioReady(false);
+      audioRef.current = null;
+      return undefined;
+    }
+
+    const audio = new Audio(audioSource);
     audio.preload = "auto";
 
     const handleLoadedMetadata = () => setAudioReady(true);
@@ -206,7 +215,7 @@ export function useChartPlayback({
       audio.removeEventListener("ended", handleEnded);
       audioRef.current = null;
     };
-  }, [lastBeat]);
+  }, [audioSource, lastBeat, refreshRenderWindow]);
 
   useEffect(() => {
     applyScrollPosition(currentBeatRef.current);
@@ -217,7 +226,7 @@ export function useChartPlayback({
     setAudioReady(false);
     triggeredHitKeysRef.current.clear();
     seekToBeat(0);
-  }, [chartIndex]);
+  }, [audioSource, chartIndex, seekToBeat]);
 
   useEffect(() => {
     if (!isPlayingRef.current) {
@@ -265,9 +274,9 @@ export function useChartPlayback({
 
       const nextBeat = secondsToBeat(
         estimatedAudioTime,
-        sampleChart.bpms,
-        sampleChart.stops,
-        sampleChart.metadata.offset,
+        simfile.bpms,
+        simfile.stops,
+        simfile.metadata.offset,
       );
 
       updateHitFeedback(lastAnimatedBeatRef.current, nextBeat);
@@ -315,6 +324,7 @@ export function useChartPlayback({
     lastBeat,
     pixelsPerBeat,
     receptorOffset,
+    simfile,
   ]);
 
   useEffect(() => {
