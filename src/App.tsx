@@ -4,13 +4,11 @@ import type { TimedNoteEvent } from './lib/simfile';
 import { beatToSeconds } from './lib/simfile';
 import { getSampleTimedChart, sampleChart } from './data/sampleChart';
 import {
-  buildImportedNoteskinOption,
   getBundledNoteskinOptions,
   getPanelRotation,
   loadResolvedDanceNoteskin,
-  releaseNoteskinOption,
 } from './lib/noteskin';
-import type { NoteskinOption, ResolvedDanceNoteskin, ResolvedSpriteAsset } from './lib/noteskin';
+import type { ResolvedDanceNoteskin, ResolvedSpriteAsset } from './lib/noteskin';
 import {
   buildBotTimeline,
   BotWindowRect,
@@ -280,11 +278,8 @@ const buildHoldSegments = (events: TimedNoteEvent[]): HoldSegment[] => {
 
 function App() {
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
-  const [selectedNoteskinId, setSelectedNoteskinId] = useState(bundledNoteskinOptions[0]?.id ?? 'metal');
   const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(defaultBotFormStyle);
-  const [localNoteskinOption, setLocalNoteskinOption] = useState<NoteskinOption | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
-  const [noteskinLoading, setNoteskinLoading] = useState(false);
   const [visibleBeats, setVisibleBeats] = useState(defaultVisibleBeats);
   const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>({
     x: 26,
@@ -292,7 +287,6 @@ function App() {
     width: 460,
     height: 700,
   });
-  const noteskinImportRef = useRef<HTMLInputElement | null>(null);
   const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
   const botWindowInteractionRef = useRef<BotWindowInteraction | null>(null);
@@ -311,12 +305,7 @@ function App() {
 
   const selectedChart = sampleChart.charts[selectedChartIndex] ?? sampleChart.charts[0];
   const selectedTimedChart = useMemo(() => getSampleTimedChart(selectedChartIndex), [selectedChartIndex]);
-  const noteskinOptions = useMemo(
-    () => (localNoteskinOption ? [...bundledNoteskinOptions, localNoteskinOption] : bundledNoteskinOptions),
-    [localNoteskinOption],
-  );
-  const selectedNoteskinOption =
-    noteskinOptions.find((option) => option.id === selectedNoteskinId) ?? noteskinOptions[0] ?? bundledNoteskinOptions[0];
+  const selectedNoteskinOption = bundledNoteskinOptions[0] ?? null;
   const holdSegments = useMemo(() => buildHoldSegments(selectedTimedChart.events), [selectedTimedChart.events]);
   const holdEndBeatMap = useMemo(() => buildHoldEndBeatMap(holdSegments), [holdSegments]);
   const botTimeline = useMemo(
@@ -352,7 +341,6 @@ function App() {
   } as CSSProperties;
 
   const {
-    audioReady,
     displayBeat,
     isPlaying,
     playbackClockRef,
@@ -536,9 +524,7 @@ function App() {
       return undefined;
     }
 
-    setNoteskinLoading(true);
-
-    void loadResolvedDanceNoteskin(selectedNoteskinOption, noteskinOptions)
+    void loadResolvedDanceNoteskin(selectedNoteskinOption, bundledNoteskinOptions)
       .then((nextResolvedNoteskin) => {
         if (!isDisposed) {
           setResolvedNoteskin(nextResolvedNoteskin);
@@ -548,23 +534,12 @@ function App() {
         if (!isDisposed) {
           setResolvedNoteskin(null);
         }
-      })
-      .finally(() => {
-        if (!isDisposed) {
-          setNoteskinLoading(false);
-        }
       });
 
     return () => {
       isDisposed = true;
     };
-  }, [noteskinOptions, selectedNoteskinOption]);
-
-  useEffect(() => {
-    return () => {
-      releaseNoteskinOption(localNoteskinOption);
-    };
-  }, [localNoteskinOption]);
+  }, [selectedNoteskinOption]);
 
   const seekFromMinimapPointer = (clientY: number) => {
     const minimap = minimapRef.current;
@@ -590,21 +565,6 @@ function App() {
     }
 
     seekFromMinimapPointer(event.clientY);
-  };
-
-  const handleImportNoteskin = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const nextOption = buildImportedNoteskinOption(event.target.files ?? []);
-    event.target.value = '';
-
-    if (!nextOption) {
-      return;
-    }
-
-    setLocalNoteskinOption((previousOption) => {
-      releaseNoteskinOption(previousOption);
-      return nextOption;
-    });
-    setSelectedNoteskinId(nextOption.id);
   };
 
   const beginBotWindowInteraction = (
@@ -709,45 +669,9 @@ function App() {
             </select>
           </label>
 
-          <label className="toolbar-field">
-            <span>Noteskin</span>
-            <select value={selectedNoteskinOption?.id ?? ''} onChange={(event) => setSelectedNoteskinId(event.target.value)}>
-              {noteskinOptions.map((noteskin) => (
-                <option key={noteskin.id} value={noteskin.id}>
-                  {noteskin.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="toolbar-field toolbar-field-action">
-            <span>Import Noteskin</span>
-            <button type="button" className="toolbar-button" onClick={() => noteskinImportRef.current?.click()}>
-              Load folder
-            </button>
-            <input
-              ref={(element) => {
-                noteskinImportRef.current = element;
-
-                if (element) {
-                  element.setAttribute('webkitdirectory', '');
-                  element.setAttribute('directory', '');
-                }
-              }}
-              className="toolbar-file-input"
-              type="file"
-              multiple
-              onChange={handleImportNoteskin}
-            />
-          </label>
-
           <div className="toolbar-badges">
             <span>{selectedChart?.difficulty} {selectedChart?.meter ?? 0}</span>
-            <span>{selectedNoteskinOption?.label ?? 'Noteskin'} noteskin</span>
-            <span>{visibleBeats.toFixed(2)} beats visible</span>
             <span>Beat {displayBeat.toFixed(2)}</span>
-            <span>{noteskinLoading ? 'Noteskin loading' : 'Noteskin ready'}</span>
-            <span>{audioReady ? 'Audio ready' : 'Audio loading'}</span>
           </div>
         </div>
       </header>
@@ -767,9 +691,6 @@ function App() {
           />
         }
         chartContentHeight={chartContentHeight}
-        chartDifficultyLabel={`${selectedChart?.difficulty} ${selectedChart?.meter ?? 0}`}
-        chartEventCount={selectedTimedChart.events.length}
-        chartOffsetSeconds={sampleChart.metadata.offset}
         displayBeat={displayBeat}
         explosionRefs={explosionRefs}
         getNoteDetailStyle={getEventDetailStyle}
@@ -780,7 +701,6 @@ function App() {
         getReceptorStyle={getReceptorStyle}
         handleMinimapPointerDown={handleMinimapPointerDown}
         handleMinimapPointerMove={handleMinimapPointerMove}
-        isPlaying={isPlaying}
         minimapMeasures={minimapMeasures}
         minimapRef={minimapRef}
         notefieldFrameRef={notefieldFrameRef}

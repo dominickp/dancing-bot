@@ -121,10 +121,6 @@ body {
   outline-offset: 2px;
 }
 
-.toolbar-file-input {
-  display: none;
-}
-
 .toolbar-badges {
   display: flex;
   gap: 10px;
@@ -146,36 +142,6 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 28px;
   background: rgba(12, 16, 24, 0.78);
-}
-
-.notefield-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.notefield-caption {
-  margin: 0;
-  max-width: 36rem;
-  color: rgba(248, 244, 233, 0.7);
-  text-align: right;
-}
-
-.notefield-status {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.notefield-status span {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(9, 12, 18, 0.88);
-  color: rgba(248, 244, 233, 0.72);
-  font-size: 0.75rem;
 }
 
 .notefield-frame {
@@ -650,7 +616,7 @@ body {
 }
 
 .notefield-layout {
-  height: calc(100% - 36px);
+  height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 118px;
   gap: 18px;

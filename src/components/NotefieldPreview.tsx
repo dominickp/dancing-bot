@@ -19,9 +19,6 @@ interface BeatGuide {
 }
 
 interface NotefieldPreviewProps {
-  chartDifficultyLabel: string;
-  chartEventCount: number;
-  chartOffsetSeconds: number;
   chartContentHeight: number;
   displayBeat: number;
   explosionRefs: MutableRefObject<Record<Panel, HTMLDivElement | null>>;
@@ -33,7 +30,6 @@ interface NotefieldPreviewProps {
   getReceptorStyle: (panel: Panel) => CSSProperties;
   handleMinimapPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleMinimapPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  isPlaying: boolean;
   minimapMeasures: MinimapMeasureView[];
   minimapRef: MutableRefObject<HTMLDivElement | null>;
   notefieldFrameRef: MutableRefObject<HTMLDivElement | null>;
@@ -52,9 +48,6 @@ interface NotefieldPreviewProps {
 }
 
 export function NotefieldPreview({
-  chartDifficultyLabel,
-  chartEventCount,
-  chartOffsetSeconds,
   chartContentHeight,
   displayBeat,
   explosionRefs,
@@ -66,7 +59,6 @@ export function NotefieldPreview({
   getReceptorStyle,
   handleMinimapPointerDown,
   handleMinimapPointerMove,
-  isPlaying,
   minimapMeasures,
   minimapRef,
   notefieldFrameRef,
@@ -85,17 +77,6 @@ export function NotefieldPreview({
 }: NotefieldPreviewProps) {
   return (
     <section className="notefield-panel" aria-label="Interactive notefield preview">
-      <div className="notefield-header">
-        <div className="notefield-status" aria-label="Playback status">
-          <span>{isPlaying ? 'Playing' : 'Paused'}</span>
-          <span>{chartEventCount} events</span>
-          <span>{chartDifficultyLabel}</span>
-          <span>{chartOffsetSeconds.toFixed(3)}s offset</span>
-        </div>
-
-        <p className="notefield-caption">Space toggles playback. Scroll scrubs anywhere on the page. Ctrl + scroll changes note spacing everywhere except form controls.</p>
-      </div>
-
       <div className="notefield-layout">
         <div className="notefield-frame" ref={notefieldFrameRef}>
           <div className="notefield-playfield" style={playfieldStyle}>
