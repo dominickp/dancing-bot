@@ -93,7 +93,7 @@ const getQuantizationColor = (beat: number): string => {
   }
 
   if (tick % 48 === 0) {
-    return '#47d7ac';
+    return '#63d17c';
   }
 
   if (tick % 32 === 0) {
