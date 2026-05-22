@@ -34,11 +34,66 @@ const minVisualScale = 0.68;
 const maxVisualScale = 1.24;
 
 type PanelName = (typeof panelOrder)[number];
+type FootName = 'left' | 'right';
 
 interface HoldSegment {
   panel: PanelName;
   startBeat: number;
   endBeat: number;
+}
+
+interface BotFootState {
+  foot: FootName;
+  panel: PanelName;
+  lastStepBeat: number;
+  holdUntilBeat: number | null;
+  lastEventKind: TimedNoteEvent['kind'] | null;
+}
+
+interface BotStep {
+  foot: FootName;
+  fromPanel: PanelName;
+  toPanel: PanelName;
+  hitBeat: number;
+  hitTimeSeconds: number;
+  moveStartTimeSeconds: number;
+  holdUntilTimeSeconds: number | null;
+}
+
+interface BotFootPose {
+  foot: FootName;
+  panel: PanelName;
+  x: number;
+  y: number;
+  scale: number;
+  isHolding: boolean;
+  isPressing: boolean;
+  lastStepBeat: number;
+}
+
+interface BotViewState {
+  feet: Record<FootName, BotFootPose>;
+  activePanels: Record<PanelName, boolean>;
+}
+
+interface BotPlaybackSnapshot {
+  beat: number;
+  timeSeconds: number;
+}
+
+interface BotWindowRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface BotWindowInteraction {
+  mode: 'drag' | 'resize';
+  pointerId: number;
+  originX: number;
+  originY: number;
+  startRect: BotWindowRect;
 }
 
 interface PlaybackClock {
@@ -57,8 +112,308 @@ const displayTitle = [sampleChart.metadata.title, sampleChart.metadata.subtitle]
   .join(' ');
 const bundledNoteskinOptions = getBundledNoteskinOptions();
 const genericArrowClipPath = 'polygon(50% 100%, 100% 50%, 72% 50%, 72% 0%, 28% 0%, 28% 50%, 0% 50%)';
+const footNames = ['left', 'right'] as const;
+const botPanelPositions: Record<PanelName, { x: number; y: number }> = {
+  left: { x: 18, y: 50 },
+  down: { x: 50, y: 82 },
+  up: { x: 50, y: 18 },
+  right: { x: 82, y: 50 },
+};
+const botFootAngles: Record<FootName, number> = {
+  left: -16,
+  right: 16,
+};
+const botWindowMinWidth = 248;
+const botWindowMinHeight = 232;
+const botStreamWindowBeats = 0.75;
+const botMoveLeadSeconds = 0.16;
+const botSamePanelLeadSeconds = 0.1;
+const botPressWindowSeconds = 0.08;
+const botHoldScale = 1.06;
+const botPressScale = 1.12;
+const botTravelLiftScale = 0.08;
+const botPadArrowColors: Record<PanelName, string> = {
+  left: '#51a8ff',
+  right: '#51a8ff',
+  up: '#ff5d73',
+  down: '#ff5d73',
+};
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const lerp = (start: number, end: number, amount: number): number => start + (end - start) * amount;
+const getOtherFoot = (foot: FootName): FootName => (foot === 'left' ? 'right' : 'left');
+const getHoldSegmentKey = (panel: PanelName, startBeat: number): string => `${panel}:${startBeat.toFixed(6)}`;
+const getBotPadArrowColor = (panel: PanelName): string => botPadArrowColors[panel];
+
+const isFootLocked = (foot: BotFootState, beat: number, targetPanel: PanelName): boolean =>
+  foot.holdUntilBeat !== null && foot.holdUntilBeat > beat && foot.panel !== targetPanel;
+
+const canUseFoot = (
+  footName: FootName,
+  feet: Record<FootName, BotFootState>,
+  beat: number,
+  targetPanel: PanelName,
+  reservedFeet: Set<FootName>,
+): boolean => !reservedFeet.has(footName) && !isFootLocked(feet[footName], beat, targetPanel);
+
+const chooseFootForEvent = (
+  event: TimedNoteEvent,
+  feet: Record<FootName, BotFootState>,
+  previousStep: { foot: FootName; panel: PanelName; beat: number } | null,
+  reservedFeet: Set<FootName>,
+): FootName => {
+  if (event.panel === 'left') {
+    return canUseFoot('left', feet, event.beat, event.panel, reservedFeet) ? 'left' : 'right';
+  }
+
+  if (event.panel === 'right') {
+    return canUseFoot('right', feet, event.beat, event.panel, reservedFeet) ? 'right' : 'left';
+  }
+
+  if (
+    previousStep &&
+    previousStep.panel === event.panel &&
+    event.beat - previousStep.beat <= botStreamWindowBeats &&
+    canUseFoot(previousStep.foot, feet, event.beat, event.panel, reservedFeet)
+  ) {
+    return previousStep.foot;
+  }
+
+  if (previousStep && event.beat - previousStep.beat <= botStreamWindowBeats) {
+    const alternatingFoot = getOtherFoot(previousStep.foot);
+
+    if (canUseFoot(alternatingFoot, feet, event.beat, event.panel, reservedFeet)) {
+      return alternatingFoot;
+    }
+  }
+
+  const footOnPanel = footNames.find(
+    (footName) => feet[footName].panel === event.panel && canUseFoot(footName, feet, event.beat, event.panel, reservedFeet),
+  );
+
+  if (footOnPanel) {
+    return footOnPanel;
+  }
+
+  const defaultFoot = event.panel === 'down' ? 'left' : 'right';
+
+  if (canUseFoot(defaultFoot, feet, event.beat, event.panel, reservedFeet)) {
+    return defaultFoot;
+  }
+
+  return getOtherFoot(defaultFoot);
+};
+
+const clampBotWindowRect = (rect: BotWindowRect, width: number, height: number): BotWindowRect => {
+  const nextWidth = clamp(rect.width, botWindowMinWidth, Math.max(botWindowMinWidth, width));
+  const nextHeight = clamp(rect.height, botWindowMinHeight, Math.max(botWindowMinHeight, height));
+  const maxX = Math.max(0, width - nextWidth);
+  const maxY = Math.max(0, height - nextHeight);
+
+  return {
+    width: nextWidth,
+    height: nextHeight,
+    x: clamp(rect.x, 0, maxX),
+    y: clamp(rect.y, 0, maxY),
+  };
+};
+
+const buildHoldEndBeatMap = (segments: HoldSegment[]): Map<string, number> => {
+  const map = new Map<string, number>();
+
+  for (const segment of segments) {
+    map.set(getHoldSegmentKey(segment.panel, segment.startBeat), segment.endBeat);
+  }
+
+  return map;
+};
+
+const buildBotTimeline = (
+  events: TimedNoteEvent[],
+  holdEndBeatMap: Map<string, number>,
+): Record<FootName, BotStep[]> => {
+  const feet: Record<FootName, BotFootState & { availableTimeSeconds: number }> = {
+    left: {
+      foot: 'left',
+      panel: 'left',
+      lastStepBeat: Number.NEGATIVE_INFINITY,
+      holdUntilBeat: null,
+      lastEventKind: null,
+      availableTimeSeconds: Number.NEGATIVE_INFINITY,
+    },
+    right: {
+      foot: 'right',
+      panel: 'right',
+      lastStepBeat: Number.NEGATIVE_INFINITY,
+      holdUntilBeat: null,
+      lastEventKind: null,
+      availableTimeSeconds: Number.NEGATIVE_INFINITY,
+    },
+  };
+  const stepsByFoot: Record<FootName, BotStep[]> = {
+    left: [],
+    right: [],
+  };
+  let previousStep: { foot: FootName; panel: PanelName; beat: number } | null = null;
+
+  for (let index = 0; index < events.length; ) {
+    const beat = events[index]?.beat ?? 0;
+
+    const stepEvents: TimedNoteEvent[] = [];
+
+    while (index < events.length && events[index]?.beat === beat) {
+      const nextEvent = events[index];
+
+      if (nextEvent && nextEvent.kind !== 'hold-tail' && nextEvent.kind !== 'mine') {
+        stepEvents.push(nextEvent);
+      }
+
+      index += 1;
+    }
+
+    if (stepEvents.length === 0) {
+      continue;
+    }
+
+    stepEvents.sort((left, right) => panelOrder.indexOf(left.panel) - panelOrder.indexOf(right.panel));
+    const reservedFeet = new Set<FootName>();
+
+    for (const event of stepEvents) {
+      const footName = chooseFootForEvent(event, feet, previousStep, reservedFeet);
+      const foot = feet[footName];
+      const hitTimeSeconds = beatToSeconds(beat, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset);
+      const holdUntilBeat =
+        event.kind === 'hold-head' || event.kind === 'roll-head'
+          ? holdEndBeatMap.get(getHoldSegmentKey(event.panel, event.beat)) ?? event.beat
+          : null;
+      const holdUntilTimeSeconds =
+        holdUntilBeat === null
+          ? null
+          : beatToSeconds(holdUntilBeat, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset);
+      const moveLeadSeconds = foot.panel === event.panel ? botSamePanelLeadSeconds : botMoveLeadSeconds;
+      const moveStartTimeSeconds = Math.max(hitTimeSeconds - moveLeadSeconds, foot.availableTimeSeconds);
+
+      stepsByFoot[footName].push({
+        foot: footName,
+        fromPanel: foot.panel,
+        toPanel: event.panel,
+        hitBeat: event.beat,
+        hitTimeSeconds,
+        moveStartTimeSeconds,
+        holdUntilTimeSeconds,
+      });
+
+      feet[footName] = {
+        ...foot,
+        panel: event.panel,
+        lastStepBeat: event.beat,
+        holdUntilBeat: holdUntilBeat ?? (foot.holdUntilBeat !== null && foot.holdUntilBeat > event.beat ? foot.holdUntilBeat : null),
+        lastEventKind: event.kind,
+        availableTimeSeconds: hitTimeSeconds,
+      };
+      previousStep = {
+        foot: footName,
+        panel: event.panel,
+        beat: event.beat,
+      };
+      reservedFeet.add(footName);
+    }
+  }
+
+  return stepsByFoot;
+};
+
+const sampleBotState = (stepsByFoot: Record<FootName, BotStep[]>, currentTimeSeconds: number): BotViewState => {
+  const sampleFootPose = (footName: FootName): BotFootPose => {
+    const initialPanel: PanelName = footName === 'left' ? 'left' : 'right';
+    const initialPosition = botPanelPositions[initialPanel];
+    const steps = stepsByFoot[footName];
+    let completedStep: BotStep | null = null;
+    let upcomingStep: BotStep | null = null;
+
+    for (const step of steps) {
+      if (step.hitTimeSeconds <= currentTimeSeconds) {
+        completedStep = step;
+        continue;
+      }
+
+      upcomingStep = step;
+      break;
+    }
+
+    const restingPanel = completedStep?.toPanel ?? initialPanel;
+    const restingPosition = botPanelPositions[restingPanel];
+    let x = restingPosition.x;
+    let y = restingPosition.y;
+    let panel = restingPanel;
+    let scale = 1;
+    let isHolding =
+      completedStep !== null &&
+      completedStep.holdUntilTimeSeconds !== null &&
+      completedStep.holdUntilTimeSeconds > currentTimeSeconds;
+    let isPressing =
+      completedStep !== null &&
+      currentTimeSeconds >= completedStep.hitTimeSeconds &&
+      currentTimeSeconds <= completedStep.hitTimeSeconds + botPressWindowSeconds;
+
+    if (upcomingStep && currentTimeSeconds >= upcomingStep.moveStartTimeSeconds) {
+      const fromPosition = botPanelPositions[upcomingStep.fromPanel];
+      const toPosition = botPanelPositions[upcomingStep.toPanel];
+      const moveDurationSeconds = Math.max(upcomingStep.hitTimeSeconds - upcomingStep.moveStartTimeSeconds, 0.001);
+      const moveProgress = clamp(
+        (currentTimeSeconds - upcomingStep.moveStartTimeSeconds) / moveDurationSeconds,
+        0,
+        1,
+      );
+
+      x = lerp(fromPosition.x, toPosition.x, moveProgress);
+      y = lerp(fromPosition.y, toPosition.y, moveProgress);
+      panel = upcomingStep.toPanel;
+      scale = Math.max(scale, 1 + Math.sin(moveProgress * Math.PI) * botTravelLiftScale);
+    }
+
+    if (isHolding) {
+      scale = Math.max(scale, botHoldScale);
+    } else if (isPressing) {
+      scale = Math.max(scale, botPressScale);
+    }
+
+    return {
+      foot: footName,
+      panel,
+      x,
+      y,
+      scale,
+      isHolding,
+      isPressing,
+      lastStepBeat: completedStep?.hitBeat ?? Number.NEGATIVE_INFINITY,
+    };
+  };
+
+  const feet: Record<FootName, BotFootPose> = {
+    left: sampleFootPose('left'),
+    right: sampleFootPose('right'),
+  };
+  const activePanels: Record<PanelName, boolean> = {
+    left: false,
+    down: false,
+    up: false,
+    right: false,
+  };
+
+  for (const footName of footNames) {
+    const foot = feet[footName];
+
+    if (foot.isHolding || foot.isPressing) {
+      activePanels[foot.panel] = true;
+    }
+  }
+
+  return { feet, activePanels };
+};
+
+const getBotFootTransform = (foot: BotFootPose): string =>
+  `translate(-50%, -50%) rotate(${botFootAngles[foot.foot]}deg) scale(${foot.scale})`;
 
 const getQuantizationColor = (beat: number): string => {
   const rounded = Math.round(beat * 48) / 48;
@@ -149,6 +504,28 @@ const getSpriteDetailStyle = (sprite: ResolvedSpriteAsset | null): CSSProperties
   };
 };
 
+const getTintedSpriteMaskStyle = (sprite: ResolvedSpriteAsset | null, color: string, rotation: number): CSSProperties => {
+  if (!sprite) {
+    return {};
+  }
+
+  const x = sprite.columns > 1 ? `${(sprite.frameX / Math.max(sprite.columns - 1, 1)) * 100}%` : '0%';
+  const y = sprite.rows > 1 ? `${(sprite.frameY / Math.max(sprite.rows - 1, 1)) * 100}%` : '0%';
+
+  return {
+    backgroundColor: color,
+    transform: `rotate(${rotation}deg)`,
+    WebkitMaskImage: `url("${sprite.url}")`,
+    maskImage: `url("${sprite.url}")`,
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+    WebkitMaskSize: `${sprite.columns * 100}% ${sprite.rows * 100}%`,
+    maskSize: `${sprite.columns * 100}% ${sprite.rows * 100}%`,
+    WebkitMaskPosition: `${x} ${y}`,
+    maskPosition: `${x} ${y}`,
+  };
+};
+
 const getNoteSprite = (
   panelAssets: ResolvedDanceNoteskin['panelAssets'][PanelName] | undefined,
   event: TimedNoteEvent,
@@ -203,6 +580,178 @@ const buildHoldSegments = (events: TimedNoteEvent[]): HoldSegment[] => {
   return segments;
 };
 
+interface DancingBotWindowProps {
+  botTimeline: Record<FootName, BotStep[]>;
+  botWindowRect: BotWindowRect;
+  currentBeat: number;
+  isPlaying: boolean;
+  resolvedNoteskin: ResolvedDanceNoteskin | null;
+  playbackClockRef: { current: PlaybackClock | null };
+  beginBotWindowInteraction: (
+    event: React.PointerEvent<HTMLElement>,
+    mode: BotWindowInteraction['mode'],
+  ) => void;
+}
+
+function DancingBotWindow({
+  botTimeline,
+  botWindowRect,
+  currentBeat,
+  isPlaying,
+  resolvedNoteskin,
+  playbackClockRef,
+  beginBotWindowInteraction,
+}: DancingBotWindowProps) {
+  const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
+    beat: currentBeat,
+    timeSeconds: beatToSeconds(currentBeat, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset),
+  }));
+
+  useEffect(() => {
+    if (isPlaying) {
+      return undefined;
+    }
+
+    setPlaybackSnapshot({
+      beat: currentBeat,
+      timeSeconds: beatToSeconds(currentBeat, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset),
+    });
+
+    return undefined;
+  }, [currentBeat, isPlaying]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      return undefined;
+    }
+
+    let animationFrameId: number | null = null;
+
+    const tick = (timestamp: number) => {
+      const clock = playbackClockRef.current;
+      const timeSeconds = clock ? clock.audioTime + (timestamp - clock.perfTime) / 1000 : 0;
+      const beat = secondsToBeat(timeSeconds, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset);
+
+      setPlaybackSnapshot({ beat, timeSeconds });
+      animationFrameId = requestAnimationFrame(tick);
+    };
+
+    animationFrameId = requestAnimationFrame(tick);
+
+    return () => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isPlaying, playbackClockRef]);
+
+  const botState = useMemo(
+    () => sampleBotState(botTimeline, playbackSnapshot.timeSeconds),
+    [botTimeline, playbackSnapshot.timeSeconds],
+  );
+
+  return (
+    <aside
+      className="bot-window"
+      style={{
+        left: botWindowRect.x,
+        top: botWindowRect.y,
+        width: botWindowRect.width,
+        height: botWindowRect.height,
+      }}
+      aria-label="Dancing bot preview"
+    >
+      <header className="bot-window-header" onPointerDown={(event) => beginBotWindowInteraction(event, 'drag')}>
+        <div>
+          <p className="bot-window-eyebrow">Virtual Window</p>
+          <h3>Dancing Bot</h3>
+        </div>
+        <span className="bot-window-beat">Beat {playbackSnapshot.beat.toFixed(2)}</span>
+      </header>
+
+      <div className="bot-window-body">
+        <div className="bot-window-status" aria-label="Bot status">
+          <span>Straight form</span>
+          <span>Live-synced landing</span>
+          <span>Resize from corner</span>
+        </div>
+
+        <div className="bot-pad-stage">
+          <div className="bot-pad-surface">
+            {panelOrder.map((panel) => (
+              <div
+                key={panel}
+                className={`bot-pad-panel bot-pad-panel-${panel}${botState.activePanels[panel] ? ' is-active' : ''}`}
+              >
+                {resolvedNoteskin?.panelAssets[panel].receptor ? (
+                  <div className="bot-pad-panel-icon" aria-hidden="true">
+                    <div
+                      className="bot-pad-panel-icon-layer bot-pad-panel-icon-tint"
+                      style={getTintedSpriteMaskStyle(
+                        resolvedNoteskin.panelAssets[panel].receptor,
+                        getBotPadArrowColor(panel),
+                        getPanelRotation(resolvedNoteskin, panel),
+                      )}
+                    />
+                    <div
+                      className="bot-pad-panel-icon-layer bot-pad-panel-icon-original"
+                      style={getSpriteBackgroundStyle(
+                        resolvedNoteskin.panelAssets[panel].receptor,
+                        getPanelRotation(resolvedNoteskin, panel),
+                      )}
+                    />
+                  </div>
+                ) : (
+                  <span className="bot-pad-panel-fallback">{panel.slice(0, 1).toUpperCase()}</span>
+                )}
+              </div>
+            ))}
+
+            {footNames.map((footName) => {
+              const foot = botState.feet[footName];
+
+              return (
+                <div
+                  key={footName}
+                  className={`bot-foot bot-foot-${footName}${foot.isHolding ? ' is-holding' : ''}${foot.isPressing ? ' is-pressing' : ''}`}
+                  style={{
+                    left: `${foot.x}%`,
+                    top: `${foot.y}%`,
+                    transform: getBotFootTransform(foot),
+                  }}
+                  title={`${footName} foot on ${foot.panel}`}
+                >
+                  <span>{footName === 'left' ? 'L' : 'R'}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="bot-foot-readout" aria-label="Current foot placement">
+          {footNames.map((footName) => {
+            const foot = botState.feet[footName];
+
+            return (
+              <span key={footName}>
+                {footName === 'left' ? 'Left' : 'Right'} foot: {foot.panel}
+                {foot.isHolding ? ' hold' : ''}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="bot-window-resize"
+        aria-label="Resize dancing bot window"
+        onPointerDown={(event) => beginBotWindowInteraction(event, 'resize')}
+      />
+    </aside>
+  );
+}
+
 function App() {
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
   const [selectedNoteskinId, setSelectedNoteskinId] = useState(bundledNoteskinOptions[0]?.id ?? 'metal');
@@ -214,11 +763,19 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [visibleBeats, setVisibleBeats] = useState(defaultVisibleBeats);
   const [audioReady, setAudioReady] = useState(false);
+  const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>({
+    x: 26,
+    y: 24,
+    width: 320,
+    height: 320,
+  });
   const animationFrameRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const noteskinImportRef = useRef<HTMLInputElement | null>(null);
+  const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
   const scrollLayerRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
+  const botWindowInteractionRef = useRef<BotWindowInteraction | null>(null);
   const currentBeatRef = useRef(0);
   const renderBeatAnchorRef = useRef(0);
   const playbackClockRef = useRef<PlaybackClock | null>(null);
@@ -248,6 +805,11 @@ function App() {
   const selectedNoteskinOption =
     noteskinOptions.find((option) => option.id === selectedNoteskinId) ?? noteskinOptions[0] ?? bundledNoteskinOptions[0];
   const holdSegments = useMemo(() => buildHoldSegments(selectedTimedChart.events), [selectedTimedChart.events]);
+  const holdEndBeatMap = useMemo(() => buildHoldEndBeatMap(holdSegments), [holdSegments]);
+  const botTimeline = useMemo(
+    () => buildBotTimeline(selectedTimedChart.events, holdEndBeatMap),
+    [holdEndBeatMap, selectedTimedChart.events],
+  );
   const pixelsPerBeat = viewportHeight / visibleBeats;
   const visualScale = clamp(Math.sqrt(defaultVisibleBeats / visibleBeats), minVisualScale, maxVisualScale);
   const laneGap = Math.round(baseLaneGap * visualScale);
@@ -433,6 +995,77 @@ function App() {
 
     return beats;
   }, [measureEnd, measureStart]);
+
+  useEffect(() => {
+    const frame = notefieldFrameRef.current;
+
+    if (!frame) {
+      return undefined;
+    }
+
+    const syncBotWindowRect = () => {
+      const bounds = frame.getBoundingClientRect();
+
+      setBotWindowRect((previousRect) => clampBotWindowRect(previousRect, bounds.width, bounds.height));
+    };
+
+    syncBotWindowRect();
+    window.addEventListener('resize', syncBotWindowRect);
+
+    return () => {
+      window.removeEventListener('resize', syncBotWindowRect);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const interaction = botWindowInteractionRef.current;
+      const frame = notefieldFrameRef.current;
+
+      if (!interaction || !frame) {
+        return;
+      }
+
+      const bounds = frame.getBoundingClientRect();
+      const deltaX = event.clientX - interaction.originX;
+      const deltaY = event.clientY - interaction.originY;
+
+      setBotWindowRect(() => {
+        const nextRect =
+          interaction.mode === 'drag'
+            ? {
+                ...interaction.startRect,
+                x: interaction.startRect.x + deltaX,
+                y: interaction.startRect.y + deltaY,
+              }
+            : {
+                ...interaction.startRect,
+                width: interaction.startRect.width + deltaX,
+                height: interaction.startRect.height + deltaY,
+              };
+
+        return clampBotWindowRect(nextRect, bounds.width, bounds.height);
+      });
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (botWindowInteractionRef.current?.pointerId !== event.pointerId) {
+        return;
+      }
+
+      botWindowInteractionRef.current = null;
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, []);
 
   useEffect(() => {
     let isDisposed = false;
@@ -707,6 +1340,22 @@ function App() {
     setSelectedNoteskinId(nextOption.id);
   };
 
+  const beginBotWindowInteraction = (
+    event: React.PointerEvent<HTMLElement>,
+    mode: BotWindowInteraction['mode'],
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    botWindowInteractionRef.current = {
+      mode,
+      pointerId: event.pointerId,
+      originX: event.clientX,
+      originY: event.clientY,
+      startRect: botWindowRect,
+    };
+  };
+
   return (
     <main className="app-shell">
       <header className="toolbar">
@@ -787,7 +1436,7 @@ function App() {
         </div>
 
         <div className="notefield-layout">
-          <div className="notefield-frame">
+          <div className="notefield-frame" ref={notefieldFrameRef}>
             <div className="notefield-playfield" style={playfieldStyle}>
               <div className="receptor-row" aria-hidden="true">
                 {panelOrder.map((panel) => (
@@ -881,6 +1530,16 @@ function App() {
                 </div>
               </div>
             </div>
+
+            <DancingBotWindow
+              botTimeline={botTimeline}
+              botWindowRect={botWindowRect}
+              currentBeat={displayBeat}
+              isPlaying={isPlaying}
+              resolvedNoteskin={resolvedNoteskin}
+              playbackClockRef={playbackClockRef}
+              beginBotWindowInteraction={beginBotWindowInteraction}
+            />
           </div>
 
           <aside className="minimap-panel" aria-label="Song minimap">

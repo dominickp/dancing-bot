@@ -192,6 +192,297 @@ body {
     linear-gradient(180deg, #10141d 0%, #090c12 100%);
 }
 
+.bot-window {
+  position: absolute;
+  z-index: 5;
+  min-width: 248px;
+  min-height: 232px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 22px;
+  background: rgba(7, 9, 15, 0.9);
+  box-shadow: 0 24px 44px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+}
+
+.bot-window-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 14px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: grab;
+  touch-action: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 177, 74, 0.14),
+    rgba(255, 177, 74, 0)
+  );
+}
+
+.bot-window-header:active {
+  cursor: grabbing;
+}
+
+.bot-window-header h3 {
+  margin: 2px 0 0;
+  font-size: 1.05rem;
+}
+
+.bot-window-eyebrow {
+  margin: 0;
+  color: #ffb14a;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.bot-window-beat {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(248, 244, 233, 0.84);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.bot-window-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 14px 18px 18px;
+}
+
+.bot-window-status,
+.bot-foot-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bot-window-status span,
+.bot-foot-readout span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(248, 244, 233, 0.76);
+  font-size: 0.72rem;
+}
+
+.bot-pad-stage {
+  position: relative;
+  container-type: size;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(134, 134, 134, 0.12),
+      transparent 42%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.02)
+    );
+}
+
+.bot-pad-surface {
+  position: relative;
+  width: min(calc(100cqw - 20px), calc(100cqh - 20px));
+  height: min(calc(100cqw - 20px), calc(100cqh - 20px));
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.bot-pad-panel {
+  position: absolute;
+  width: 28%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  /* background: rgba(255, 255, 255, 0.05); */
+  background: rgba(9, 12, 18, 0.5);
+  color: rgba(248, 244, 233, 0.68);
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.bot-pad-panel-icon,
+.bot-pad-panel-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58%;
+  height: 58%;
+  border-radius: 16px;
+  /* background: rgba(9, 12, 18, 0.5); */
+}
+
+.bot-pad-panel-icon {
+  position: relative;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.28));
+  overflow: hidden;
+}
+
+.bot-pad-panel-icon-layer {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+}
+
+.bot-pad-panel-icon-original {
+  mix-blend-mode: multiply;
+  opacity: 1;
+}
+
+.bot-pad-panel-fallback {
+  color: rgba(248, 244, 233, 0.82);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.bot-pad-panel-left {
+  left: 4%;
+  top: 36%;
+}
+
+.bot-pad-panel-down {
+  left: 36%;
+  bottom: 4%;
+}
+
+.bot-pad-panel-up {
+  left: 36%;
+  top: 4%;
+}
+
+.bot-pad-panel-right {
+  right: 4%;
+  top: 36%;
+}
+
+.bot-pad-panel.is-active {
+  transform: scale(1.03);
+}
+
+.bot-pad-panel-left.is-active,
+.bot-pad-panel-right.is-active {
+  background: rgba(81, 168, 255, 0.18);
+  border-color: rgba(81, 168, 255, 0.46);
+  box-shadow:
+    0 0 26px rgba(81, 168, 255, 0.3),
+    inset 0 0 20px rgba(81, 168, 255, 0.12);
+}
+
+.bot-pad-panel-up.is-active,
+.bot-pad-panel-down.is-active {
+  background: rgba(255, 93, 115, 0.18);
+  border-color: rgba(255, 93, 115, 0.46);
+  box-shadow:
+    0 0 26px rgba(255, 93, 115, 0.3),
+    inset 0 0 20px rgba(255, 93, 115, 0.12);
+}
+
+.bot-foot {
+  position: absolute;
+  width: 18%;
+  aspect-ratio: 0.58;
+  display: grid;
+  place-items: center;
+  border-radius: 52% 52% 42% 42%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.32);
+  transform-origin: center;
+  transition:
+    left 140ms ease,
+    top 140ms ease,
+    filter 140ms ease;
+}
+
+.bot-foot::before {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 12%;
+  height: 34%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.bot-foot span {
+  position: relative;
+  z-index: 1;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.bot-foot-left {
+  background: linear-gradient(180deg, #ff8b6f, #cc5a47);
+}
+
+.bot-foot-right {
+  background: linear-gradient(180deg, #7bc9ff, #3a8ec7);
+}
+
+.bot-foot.is-pressing {
+  filter: brightness(1.18);
+}
+
+.bot-foot.is-holding {
+  box-shadow:
+    0 0 0 2px rgba(255, 177, 74, 0.2),
+    0 18px 26px rgba(0, 0, 0, 0.32);
+}
+
+.bot-window-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  padding: 0;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.bot-window-resize::before {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 12px;
+  height: 12px;
+  border-right: 2px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.5);
+}
+
 .notefield-playfield {
   position: relative;
   width: min(100%, var(--playfield-width));
@@ -474,6 +765,18 @@ body {
 
   .notefield-frame {
     min-height: 0;
+  }
+
+  .bot-window {
+    min-width: 224px;
+  }
+
+  .bot-window-header {
+    padding: 14px 14px 12px;
+  }
+
+  .bot-window-body {
+    padding: 12px 14px 14px;
   }
 
   .notefield-layout {
