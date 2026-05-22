@@ -100,6 +100,31 @@ body {
   outline-offset: 2px;
 }
 
+.toolbar-field-action {
+  align-self: stretch;
+}
+
+.toolbar-button {
+  min-width: 160px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  color: #f8f4e9;
+  background: rgba(255, 255, 255, 0.06);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.toolbar-button:focus-visible {
+  outline: 2px solid rgba(255, 177, 74, 0.55);
+  outline-offset: 2px;
+}
+
+.toolbar-file-input {
+  display: none;
+}
+
 .toolbar-badges {
   display: flex;
   gap: 10px;
@@ -125,8 +150,11 @@ body {
 
 .notefield-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .notefield-caption {
@@ -134,6 +162,20 @@ body {
   max-width: 36rem;
   color: rgba(248, 244, 233, 0.7);
   text-align: right;
+}
+
+.notefield-status {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.notefield-status span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(9, 12, 18, 0.88);
+  color: rgba(248, 244, 233, 0.72);
+  font-size: 0.75rem;
 }
 
 .notefield-frame {
@@ -148,6 +190,13 @@ body {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 80px),
     linear-gradient(180deg, #10141d 0%, #090c12 100%);
+}
+
+.notefield-playfield {
+  position: relative;
+  width: min(100%, var(--playfield-width));
+  height: 100%;
+  margin: 0 auto;
 }
 
 .notefield-layout {
@@ -166,28 +215,37 @@ body {
   z-index: 2;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  padding: 0 20px;
+  gap: var(--lane-gap);
+  padding: 0 var(--playfield-gutter);
 }
 
 .receptor {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   display: grid;
   place-items: center;
-  height: 40px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  font-weight: 700;
-  color: #0f1116;
+  width: var(--receptor-height);
+  height: var(--receptor-height);
+  border-radius: var(--receptor-radius);
+  justify-self: center;
+}
+
+.receptor-sprite {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.34));
+  transform-origin: center;
 }
 
 .receptor-explosion {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 110px;
-  height: 110px;
+  width: var(--explosion-size);
+  height: var(--explosion-size);
   border-radius: 50%;
   pointer-events: none;
   opacity: 0;
@@ -227,53 +285,28 @@ body {
   );
 }
 
-.receptor-left,
-.quant-quarter {
-  background: #ff5d73;
-}
-
-.receptor-down,
-.quant-eighth {
-  background: #47d7ac;
-}
-
-.receptor-up,
-.quant-sixteenth {
-  background: #51a8ff;
-}
-
-.receptor-right,
-.quant-twelfth {
-  background: #ffd84f;
-}
-
-.quant-other {
-  background: #d08cff;
-}
-
 .lane-grid {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  padding: 0 20px 20px;
+  gap: var(--lane-gap);
+  padding: 0 var(--playfield-gutter) 20px;
 }
 
 .chart-scroll-layer {
   position: absolute;
-  inset: 0 20px 20px;
+  inset: 0 var(--playfield-gutter) 20px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  gap: var(--lane-gap);
   transform: translate3d(0, 72px, 0);
   will-change: transform;
   contain: layout paint style;
+  clip-path: inset(var(--receptor-offset) 0 0 0);
 }
 
 .lane-column {
   position: relative;
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .measure-guide {
@@ -299,58 +332,43 @@ body {
 .lane-note {
   position: absolute;
   left: 50%;
-  width: 48px;
-  height: 18px;
+  width: var(--note-width);
+  height: var(--note-height);
   transform: translateX(-50%);
-  border-radius: 999px;
   backface-visibility: hidden;
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
 }
 
 .hold-body {
   position: absolute;
   left: 50%;
-  width: 18px;
+  width: var(--hold-width);
   transform: translateX(-50%);
   border-radius: 999px;
   backface-visibility: hidden;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 216, 79, 0.94),
-    rgba(255, 93, 115, 0.75)
-  );
-  box-shadow: 0 0 20px rgba(255, 216, 79, 0.16);
+  background-repeat: repeat-y;
+  background-position: center top;
+  background-size: 100% auto;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.14);
 }
 
 .lane-note.mine {
-  background: #ffffff;
-  border: 2px solid #ff5d73;
+  background: transparent;
+  box-shadow: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
 }
 
 .lane-note.hold-head,
 .lane-note.roll-head {
-  height: 22px;
-  border: 2px solid rgba(9, 12, 18, 0.4);
-}
-
-.playhead-status {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  top: 12px;
-  z-index: 3;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  pointer-events: none;
-}
-
-.playhead-status span {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(9, 12, 18, 0.88);
-  color: rgba(248, 244, 233, 0.72);
-  font-size: 0.75rem;
+  width: calc(var(--note-width) + 4px);
+  height: calc(var(--note-height) + 4px);
+  filter: saturate(1.08);
 }
 
 .minimap-panel {

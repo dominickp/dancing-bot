@@ -38,7 +38,7 @@ Status: In progress
 - Support play/pause from current position, mouse-wheel scrubbing, and `Ctrl + scroll` speed changes.
 - Show measure counters, quantization colors, hold notes, mines, and target hit effects.
 - Add a minimap for fast seeking.
-Progress update: The app now exposes a timed event stream and renders a toolbar-plus-full-page notefield preview with fixed receptors, measure guides, quantization colors, chart difficulty switching, basic hold bodies, receptor hit explosions, play/pause via Space, page-wide scroll scrubbing, page-wide Ctrl + wheel zoom, sample audio playback synced to the playhead, a clickable minimap for fast seeking, a transform-based scroll layer, and an interpolated playback clock that reduces per-frame React work for smoother zoomed playback. Full hold behavior and richer hit effects still need work.
+Progress update: The app now exposes a timed event stream and renders a toolbar-plus-full-page notefield preview with fixed receptors, measure guides, chart difficulty switching, basic hold bodies, receptor hit explosions, play/pause via Space, page-wide scroll scrubbing, page-wide Ctrl + wheel zoom with a deeper zoom-in range, a centered fixed-width playfield that scales notes and receptors together while capping their maximum size, receptor-line clipping so hit notes vanish cleanly once they pass the targets, sample audio playback synced to the playhead, a clickable minimap for fast seeking, a transform-based scroll layer, an interpolated playback clock that reduces per-frame React work for smoother zoomed playback, and a StepMania-style noteskin compatibility subset that resolves dance-skin receptors, tap notes, mines, and hold bodies through `NoteSkin.lua`, `metrics.ini`, actor scripts, and fallback-aware file lookup. Full hold behavior and richer hit effects still need work.
 
 ### 4. Foot assignment engine
 Status: Not started
@@ -64,11 +64,12 @@ Status: Not started
 - Add form presets starting with a basic/straight form and structure the code so heels out, toes out, and slanted can be added later.
 
 ### 7. Noteskin and asset compatibility
-Status: Not started
+Status: In progress
 - Start with an internal default noteskin.
 - Research the minimum subset needed for StepMania noteskin compatibility and add an import layer after the base renderer is stable.
 - Keep the rendering abstraction separate from parsing so noteskin support does not block core playback.
 - Use the local ITGMania and Simply Love installations as the first source for checking actual file layout and asset conventions during this phase.
+Progress update: The noteskin layer now uses a StepMania-style compatibility subset for `dance` skins, including `NoteSkin.lua` redirection, `metrics.ini` fallback parsing, actor-script texture resolution, bundled `metal` and `cel` support, and local folder import so additional standard noteskins can be loaded without code changes. Full arbitrary Lua actor execution and exact StepMania model rendering are still out of scope for this pass.
 
 ## Initial Milestone
 First milestone should be a thin vertical slice:
