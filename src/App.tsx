@@ -185,6 +185,29 @@ const getSpriteDetailFillStyle = (sprite: ResolvedSpriteAsset | null): CSSProper
   };
 };
 
+const applySpriteStyleToElement = (element: HTMLDivElement, spriteStyle: CSSProperties | null): void => {
+  element.style.backgroundImage = '';
+  element.style.backgroundSize = '';
+  element.style.backgroundPosition = '';
+  element.style.backgroundColor = '';
+  element.style.webkitMaskImage = '';
+  element.style.maskImage = '';
+  element.style.webkitMaskRepeat = '';
+  element.style.maskRepeat = '';
+  element.style.webkitMaskSize = '';
+  element.style.maskSize = '';
+  element.style.webkitMaskPosition = '';
+  element.style.maskPosition = '';
+  element.style.clipPath = '';
+  element.style.overflow = '';
+
+  if (!spriteStyle) {
+    return;
+  }
+
+  Object.assign(element.style, spriteStyle);
+};
+
 const getNoteSprite = (
   panelAssets: ResolvedDanceNoteskin['panelAssets'][PanelName] | undefined,
   event: TimedNoteEvent,
@@ -296,7 +319,7 @@ function App() {
   const holdWidth = Math.max(Math.round(baseHoldWidth * visualScale), 12);
   const receptorHeight = Math.max(Math.round(baseReceptorHeight * visualScale), 28);
   const receptorRadius = Math.max(Math.round(14 * visualScale), 10);
-  const explosionSize = Math.max(Math.round(baseExplosionSize * visualScale), 72);
+  const explosionSize = Math.round(receptorHeight * 1.28);
   const chartContentHeight = (selectedTimedChart.lastBeat + renderBufferBeats * 2) * pixelsPerBeat + receptorOffset;
   const totalChartBeats = Math.max(selectedTimedChart.lastBeat, 1);
   const playfieldStyle = {
@@ -331,9 +354,15 @@ function App() {
     maxVisibleBeats,
     setVisibleBeats,
     receptorOffset,
-    onTriggerPanelFeedback: (panel) => {
-      const receptor = receptorRefs.current[panel];
-      const explosion = explosionRefs.current[panel];
+    onTriggerPanelFeedback: (event) => {
+      const receptor = receptorRefs.current[event.panel];
+      const explosion = explosionRefs.current[event.panel];
+      const panelAssets = resolvedNoteskin?.panelAssets[event.panel];
+      const explosionSprite =
+        event.kind === 'hold-head' || event.kind === 'roll-head'
+          ? panelAssets?.holdExplosion ?? panelAssets?.tapExplosionBright ?? panelAssets?.tapExplosionDim ?? null
+          : panelAssets?.tapExplosionBright ?? panelAssets?.tapExplosionDim ?? null;
+      const explosionRotation = getPanelRotation(resolvedNoteskin, event.panel);
 
       receptor?.animate(
         [
@@ -344,11 +373,15 @@ function App() {
         { duration: 140, easing: 'ease-out' },
       );
 
+      if (explosion) {
+        applySpriteStyleToElement(explosion, explosionSprite ? getSpriteFillStyle(explosionSprite) : null);
+      }
+
       explosion?.animate(
         [
-          { opacity: 0, transform: 'translate(-50%, -50%) scale(0.3)' },
-          { opacity: 0.95, transform: 'translate(-50%, -50%) scale(1)' },
-          { opacity: 0, transform: 'translate(-50%, -50%) scale(1.5)' },
+          { opacity: 0, transform: `translate(-50%, -50%) rotate(${explosionRotation}deg) scale(0.3)` },
+          { opacity: 0.95, transform: `translate(-50%, -50%) rotate(${explosionRotation}deg) scale(1)` },
+          { opacity: 0, transform: `translate(-50%, -50%) rotate(${explosionRotation}deg) scale(1.5)` },
         ],
         { duration: 180, easing: 'ease-out' },
       );

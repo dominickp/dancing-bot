@@ -23,7 +23,7 @@ interface UseChartPlaybackArgs {
   maxVisibleBeats: number;
   setVisibleBeats: Dispatch<SetStateAction<number>>;
   receptorOffset: number;
-  onTriggerPanelFeedback: (panel: Panel) => void;
+  onTriggerPanelFeedback: (event: TimedNoteEvent) => void;
 }
 
 interface UseChartPlaybackResult {
@@ -143,7 +143,7 @@ export function useChartPlayback({
       }
 
       triggeredHitKeysRef.current.add(hitKey);
-      panelFeedbackRef.current(event.panel);
+      panelFeedbackRef.current(event);
     }
 
     for (const event of events) {

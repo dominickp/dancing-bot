@@ -102,6 +102,9 @@ export interface ResolvedPanelAssets {
   tapMine: ResolvedSpriteAsset | null;
   holdBodyActive: ResolvedSpriteAsset | null;
   holdBodyInactive: ResolvedSpriteAsset | null;
+  tapExplosionBright: ResolvedSpriteAsset | null;
+  tapExplosionDim: ResolvedSpriteAsset | null;
+  holdExplosion: ResolvedSpriteAsset | null;
 }
 
 export interface ResolvedDanceNoteskin {
@@ -985,6 +988,27 @@ export const loadResolvedDanceNoteskin = async (
         rootDefinition.id,
         buttonName,
         "Hold Body Inactive",
+        new Set<string>(),
+      ),
+      tapExplosionBright: await resolvePanelAsset(
+        definitionCache,
+        rootDefinition.id,
+        buttonName,
+        "Tap Explosion Bright W1",
+        new Set<string>(),
+      ),
+      tapExplosionDim: await resolvePanelAsset(
+        definitionCache,
+        rootDefinition.id,
+        buttonName,
+        "Tap Explosion Dim W1",
+        new Set<string>(),
+      ),
+      holdExplosion: await resolvePanelAsset(
+        definitionCache,
+        rootDefinition.id,
+        buttonName,
+        "Hold Explosion",
         new Set<string>(),
       ),
     };

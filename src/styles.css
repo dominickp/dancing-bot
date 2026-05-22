@@ -701,6 +701,9 @@ body {
   opacity: 0;
   transform: translate(-50%, -50%) scale(0.4);
   mix-blend-mode: screen;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
 }
 
 .receptor-explosion-left {
