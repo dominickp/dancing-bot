@@ -128,6 +128,8 @@ const botWindowMinHeight = 232;
 const botStreamWindowBeats = 0.75;
 const botMoveLeadSeconds = 0.16;
 const botSamePanelLeadSeconds = 0.1;
+const botMinMoveLeadSeconds = 0.045;
+const botAdaptiveLeadRatio = 0.72;
 const botPressWindowSeconds = 0.08;
 const botHoldScale = 1.06;
 const botPressScale = 1.12;
@@ -302,8 +304,14 @@ const buildBotTimeline = (
         holdUntilBeat === null
           ? null
           : beatToSeconds(holdUntilBeat, sampleChart.bpms, sampleChart.stops, sampleChart.metadata.offset);
-      const moveLeadSeconds = foot.panel === event.panel ? botSamePanelLeadSeconds : botMoveLeadSeconds;
-      const moveStartTimeSeconds = Math.max(hitTimeSeconds - moveLeadSeconds, foot.availableTimeSeconds);
+      const preferredLeadSeconds = foot.panel === event.panel ? botSamePanelLeadSeconds : botMoveLeadSeconds;
+      const secondsSinceLastStep = Number.isFinite(foot.availableTimeSeconds)
+        ? Math.max(hitTimeSeconds - foot.availableTimeSeconds, 0)
+        : Number.POSITIVE_INFINITY;
+      const adaptiveLeadSeconds = Number.isFinite(secondsSinceLastStep)
+        ? clamp(secondsSinceLastStep * botAdaptiveLeadRatio, botMinMoveLeadSeconds, preferredLeadSeconds)
+        : preferredLeadSeconds;
+      const moveStartTimeSeconds = Math.max(hitTimeSeconds - adaptiveLeadSeconds, foot.availableTimeSeconds);
 
       stepsByFoot[footName].push({
         foot: footName,
@@ -363,10 +371,13 @@ const sampleBotState = (stepsByFoot: Record<FootName, BotStep[]>, currentTimeSec
       completedStep !== null &&
       completedStep.holdUntilTimeSeconds !== null &&
       completedStep.holdUntilTimeSeconds > currentTimeSeconds;
+    const pressEndTimeSeconds = completedStep
+      ? Math.min(completedStep.hitTimeSeconds + botPressWindowSeconds, upcomingStep?.moveStartTimeSeconds ?? Number.POSITIVE_INFINITY)
+      : Number.NEGATIVE_INFINITY;
     let isPressing =
       completedStep !== null &&
       currentTimeSeconds >= completedStep.hitTimeSeconds &&
-      currentTimeSeconds <= completedStep.hitTimeSeconds + botPressWindowSeconds;
+      currentTimeSeconds <= pressEndTimeSeconds;
 
     if (upcomingStep && currentTimeSeconds >= upcomingStep.moveStartTimeSeconds) {
       const fromPosition = botPanelPositions[upcomingStep.fromPanel];
@@ -377,11 +388,12 @@ const sampleBotState = (stepsByFoot: Record<FootName, BotStep[]>, currentTimeSec
         0,
         1,
       );
+      const liftStrength = clamp(moveDurationSeconds / botMoveLeadSeconds, 0.45, 1);
 
       x = lerp(fromPosition.x, toPosition.x, moveProgress);
       y = lerp(fromPosition.y, toPosition.y, moveProgress);
       panel = upcomingStep.toPanel;
-      scale = Math.max(scale, 1 + Math.sin(moveProgress * Math.PI) * botTravelLiftScale);
+      scale = Math.max(scale, 1 + Math.sin(moveProgress * Math.PI) * botTravelLiftScale * liftStrength);
     }
 
     if (isHolding) {
