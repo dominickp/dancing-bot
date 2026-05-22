@@ -662,7 +662,7 @@ body {
   top: 20px;
   left: 0;
   right: 0;
-  z-index: 1;
+  z-index: 3;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--lane-gap);
@@ -749,7 +749,7 @@ body {
 .chart-scroll-layer {
   position: absolute;
   inset: 0 var(--playfield-gutter) 20px;
-  z-index: 2;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--lane-gap);
@@ -761,6 +761,7 @@ body {
 
 .lane-column {
   position: relative;
+  z-index: 1;
 }
 
 .measure-guide {
@@ -768,6 +769,7 @@ body {
   left: 0;
   right: 0;
   height: 0;
+  z-index: 0;
   pointer-events: none;
 }
 
@@ -824,6 +826,7 @@ body {
 .hold-body {
   position: absolute;
   left: 50%;
+  z-index: 1;
   width: var(--hold-width);
   transform: translateX(-50%);
   border-radius: 999px;
