@@ -212,7 +212,7 @@ body {
   top: 20px;
   left: 0;
   right: 0;
-  z-index: 2;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--lane-gap);
@@ -296,6 +296,7 @@ body {
 .chart-scroll-layer {
   position: absolute;
   inset: 0 var(--playfield-gutter) 20px;
+  z-index: 2;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--lane-gap);
@@ -314,8 +315,15 @@ body {
   left: 0;
   right: 0;
   height: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
   pointer-events: none;
+}
+
+.measure-guide-major {
+  border-top: 2px solid rgba(255, 255, 255, 0.6);
+}
+
+.measure-guide-minor {
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .measure-guide span {

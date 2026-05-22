@@ -17,6 +17,7 @@ export interface ResolvedSpriteAsset {
   detailColumns?: number;
   detailRows?: number;
   detailFrameX?: number;
+  maskStrategy?: "texture" | "clip";
   detailFrameY?: number;
 }
 
@@ -24,6 +25,74 @@ interface SpriteFrameSelection {
   frameX?: number;
   frameY?: number;
 }
+const frameHasTransparentPixels = async (
+  url: string,
+  columns: number,
+  rows: number,
+  frameX: number,
+  frameY: number,
+): Promise<boolean> => {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const nextImage = new Image();
+    nextImage.onload = () => resolve(nextImage);
+    nextImage.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+    nextImage.src = url;
+  });
+
+  const frameWidth = Math.max(
+    1,
+    Math.floor(image.naturalWidth / Math.max(columns, 1)),
+  );
+  const frameHeight = Math.max(
+    1,
+    Math.floor(image.naturalHeight / Math.max(rows, 1)),
+  );
+  const sourceX = Math.min(frameX, Math.max(columns - 1, 0)) * frameWidth;
+  const sourceY = Math.min(frameY, Math.max(rows - 1, 0)) * frameHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = frameWidth;
+  canvas.height = frameHeight;
+
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+
+  if (!context) {
+    return true;
+  }
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    frameWidth,
+    frameHeight,
+    0,
+    0,
+    frameWidth,
+    frameHeight,
+  );
+
+  const samplePoints = [
+    [0, 0],
+    [frameWidth - 1, 0],
+    [0, frameHeight - 1],
+    [frameWidth - 1, frameHeight - 1],
+    [Math.floor(frameWidth / 2), Math.floor(frameHeight / 2)],
+    [Math.floor(frameWidth * 0.25), Math.floor(frameHeight * 0.25)],
+    [Math.floor(frameWidth * 0.75), Math.floor(frameHeight * 0.25)],
+    [Math.floor(frameWidth * 0.25), Math.floor(frameHeight * 0.75)],
+    [Math.floor(frameWidth * 0.75), Math.floor(frameHeight * 0.75)],
+  ];
+
+  for (const [sampleX, sampleY] of samplePoints) {
+    const alpha = context.getImageData(sampleX, sampleY, 1, 1).data[3];
+
+    if (alpha < 250) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 export interface ResolvedPanelAssets {
   rotation: number;
@@ -461,6 +530,7 @@ const buildSpriteAsset = async (
       Math.max(rows - 1, 0),
     ),
     renderMode,
+    maskStrategy: renderMode === "mask" ? "texture" : undefined,
   };
 };
 
@@ -490,8 +560,19 @@ const buildMaskedDetailSpriteAsset = async (
     return maskAsset;
   }
 
+  const maskStrategy = (await frameHasTransparentPixels(
+    maskAsset.url,
+    maskAsset.columns,
+    maskAsset.rows,
+    maskAsset.frameX,
+    maskAsset.frameY,
+  ))
+    ? "texture"
+    : "clip";
+
   return {
     ...maskAsset,
+    maskStrategy,
     detailUrl: detailAsset.url,
     detailColumns: detailAsset.columns,
     detailRows: detailAsset.rows,

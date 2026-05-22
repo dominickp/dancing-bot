@@ -56,6 +56,7 @@ const displayTitle = [sampleChart.metadata.title, sampleChart.metadata.subtitle]
   .filter(Boolean)
   .join(' ');
 const bundledNoteskinOptions = getBundledNoteskinOptions();
+const genericArrowClipPath = 'polygon(50% 100%, 100% 50%, 72% 50%, 72% 0%, 28% 0%, 28% 50%, 0% 50%)';
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
@@ -100,6 +101,14 @@ const getSpriteBackgroundStyle = (
   const y = sprite.rows > 1 ? `${(sprite.frameY / Math.max(sprite.rows - 1, 1)) * 100}%` : '0%';
 
   if (sprite.renderMode === 'mask') {
+    if (sprite.maskStrategy === 'clip') {
+      return {
+        ...style,
+        clipPath: genericArrowClipPath,
+        overflow: 'hidden',
+      } as CSSProperties;
+    }
+
     return {
       ...style,
       WebkitMaskImage: `url("${sprite.url}")`,
@@ -415,11 +424,11 @@ function App() {
 
   const measureStart = Math.floor((renderBeatAnchor - renderBufferBeats) / 4) * 4;
   const measureEnd = Math.ceil((renderBeatAnchor + visibleBeats + renderBufferBeats) / 4) * 4;
-  const visibleMeasures = useMemo(() => {
-    const beats: number[] = [];
+  const visibleBeatGuides = useMemo(() => {
+    const beats: Array<{ beat: number; isMeasure: boolean }> = [];
 
-    for (let beat = measureStart; beat <= measureEnd; beat += 4) {
-      beats.push(beat);
+    for (let beat = measureStart; beat <= measureEnd; beat += 1) {
+      beats.push({ beat, isMeasure: beat % 4 === 0 });
     }
 
     return beats;
@@ -808,9 +817,13 @@ function App() {
 
               <div className="lane-grid" style={{ height: receptorOffset + viewportHeight }}>
                 <div className="chart-scroll-layer" ref={scrollLayerRef} style={{ height: chartContentHeight }}>
-                  {visibleMeasures.map((beat) => (
-                    <div key={beat} className="measure-guide" style={{ top: beat * pixelsPerBeat }}>
-                      <span>Measure {beat / 4 + 1}</span>
+                  {visibleBeatGuides.map(({ beat, isMeasure }) => (
+                    <div
+                      key={beat}
+                      className={`measure-guide${isMeasure ? ' measure-guide-major' : ' measure-guide-minor'}`}
+                      style={{ top: beat * pixelsPerBeat }}
+                    >
+                      {isMeasure ? <span>Measure {beat / 4 + 1}</span> : null}
                     </div>
                   ))}
 
@@ -853,18 +866,14 @@ function App() {
                                     {
                                       top: event.beat * pixelsPerBeat,
                                       left: '50%',
-                                      transform: `translateX(-50%) rotate(${getPanelRotation(resolvedNoteskin, event.panel)}deg)`,
+                                      transform: `translate(-50%, -50%) rotate(${getPanelRotation(resolvedNoteskin, event.panel)}deg)`,
                                     },
                                   ),
                                   backgroundColor: getNoteColor(noteSprite, event.beat),
                                 } as CSSProperties
                               }
                               title={`${event.panel} ${event.kind} @ beat ${event.beat.toFixed(3)}`}
-                            >
-                              {noteSprite?.renderMode === 'mask' && noteSprite.detailUrl ? (
-                                <div className="lane-note-detail" style={getSpriteDetailStyle(noteSprite)} />
-                              ) : null}
-                            </div>
+                            />
                           );
                         })}
                     </div>
