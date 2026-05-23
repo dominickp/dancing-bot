@@ -234,6 +234,12 @@ const defaultRotations: Record<string, number> = {
 
 const imageExtensions = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
 
+const normalizePath = (value: string): string =>
+  value.replace(/\\/g, "/").replace(/^\/+/, "").trim();
+
+const withBaseUrl = (path: string): string =>
+  `${import.meta.env.BASE_URL}${normalizePath(path)}`;
+
 export const bundledNoteskinOptions: NoteskinOption[] = Object.entries(
   bundledNoteskinFiles,
 ).map(([id, files]) => ({
@@ -243,13 +249,10 @@ export const bundledNoteskinOptions: NoteskinOption[] = Object.entries(
     kind: "bundled",
     id,
     label: id.charAt(0).toUpperCase() + id.slice(1),
-    rootUrl: `/noteskins/dance/${id}`,
+    rootUrl: withBaseUrl(`noteskins/dance/${id}`),
     files,
   },
 }));
-
-const normalizePath = (value: string): string =>
-  value.replace(/\\/g, "/").replace(/^\/+/, "").trim();
 
 const encodePath = (value: string): string =>
   normalizePath(value).split("/").map(encodeURIComponent).join("/");

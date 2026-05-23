@@ -12,6 +12,18 @@ Build for production:
 npm run build
 ```
 
+The app ships with bundled example simfiles, so users can immediately try the preview without importing their own song folder first.
+
+## Deploy To GitHub Pages
+This repo now includes a GitHub Actions workflow at `.github/workflows/deploy-pages.yml` that publishes the Vite build output to GitHub Pages.
+
+1. Push the repository to GitHub.
+2. In the repository settings, open Pages.
+3. Set the source to `GitHub Actions`.
+4. Push to `main` and the workflow will build and deploy `dist`.
+
+Because the Vite config uses a relative `base`, the generated asset URLs work both locally and when the app is hosted from a repository subpath on GitHub Pages.
+
 ## Goal
 Create a "dancing bot", similar to ArrowVortex's dancing bot that plays a StepMania simfile and shows an animation of two feet stepping on the dance pad arrows.
 
