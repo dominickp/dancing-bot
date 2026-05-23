@@ -303,6 +303,8 @@ function App() {
   const [selectedSongId, setSelectedSongId] = useState(bundledSongSources[0]?.id ?? '');
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
   const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(defaultBotFormStyle);
+  const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(true);
+  const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(true);
   const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
   const [songLoadError, setSongLoadError] = useState<string | null>(null);
@@ -662,6 +664,16 @@ function App() {
     restoreNotefieldFocus();
   };
 
+  const handleBotPanelGlowToggle = () => {
+    setIsBotPanelGlowEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
+  const handleBotPanelLightsToggle = () => {
+    setIsBotPanelLightsEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
   const handleImportSongFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     event.target.value = '';
@@ -897,7 +909,11 @@ function App() {
             resolvedNoteskin={resolvedNoteskin}
             playbackClockRef={playbackClockRef}
             selectedFormStyle={selectedBotFormStyle}
+            isPanelGlowEnabled={isBotPanelGlowEnabled}
+            isPanelLightsEnabled={isBotPanelLightsEnabled}
             onFormStyleChange={handleBotFormStyleChange}
+            onPanelGlowToggle={handleBotPanelGlowToggle}
+            onPanelLightsToggle={handleBotPanelLightsToggle}
             beginBotWindowInteraction={beginBotWindowInteraction}
           />
         }

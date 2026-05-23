@@ -242,19 +242,22 @@ const botFutureControlSlots = [
     description: 'Reserved for the next form style.',
   },
   {
-    key: 'panel-glow',
-    label: 'Panel Glow',
-    description: 'Reserved for the panel glow toggle.',
-  },
-  {
-    key: 'panel-lights',
-    label: 'Panel Lights',
-    description: 'Reserved for the panel lights toggle.',
-  },
-  {
     key: 'shoe-image',
     label: 'Shoes',
     description: 'Reserved for shoe image selection.',
+  },
+] as const;
+
+const botPanelToggleOptions = [
+  {
+    key: 'panel-glow',
+    label: 'Glow',
+    tooltip: 'Panel Glow: toggles the outer glow around active panels.',
+  },
+  {
+    key: 'panel-lights',
+    label: 'Lights',
+    tooltip: 'Panel Lights: toggles the red and blue pressed panel lighting.',
   },
 ] as const;
 
@@ -842,7 +845,11 @@ interface DancingBotWindowProps {
   resolvedNoteskin: ResolvedDanceNoteskin | null;
   playbackClockRef: { current: PlaybackClock | null };
   selectedFormStyle: BotFormStyleId;
+  isPanelGlowEnabled: boolean;
+  isPanelLightsEnabled: boolean;
   onFormStyleChange: (nextStyle: BotFormStyleId) => void;
+  onPanelGlowToggle: () => void;
+  onPanelLightsToggle: () => void;
   beginBotWindowInteraction: (
     event: ReactPointerEvent<HTMLElement>,
     mode: BotWindowInteraction['mode'],
@@ -858,7 +865,11 @@ export function DancingBotWindow({
   resolvedNoteskin,
   playbackClockRef,
   selectedFormStyle,
+  isPanelGlowEnabled,
+  isPanelLightsEnabled,
   onFormStyleChange,
+  onPanelGlowToggle,
+  onPanelLightsToggle,
   beginBotWindowInteraction,
 }: DancingBotWindowProps) {
   const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
@@ -980,17 +991,45 @@ export function DancingBotWindow({
             </div>
 
             <div className="bot-future-control-grid" aria-label="Upcoming controls">
-              {botFutureControlSlots.map((slot) => (
-                <div
-                  key={slot.key}
-                  className="bot-future-control-slot"
-                  aria-hidden="true"
-                  data-tooltip={slot.description}
-                >
-                  <span className="bot-future-control-label">{slot.label}</span>
-                  <span className="bot-future-control-value">Coming soon</span>
-                </div>
-              ))}
+              <div
+                className="bot-future-control-slot"
+                aria-hidden="true"
+                data-tooltip={botFutureControlSlots[0].description}
+              >
+                <span className="bot-future-control-label">{botFutureControlSlots[0].label}</span>
+                <span className="bot-future-control-value">Coming soon</span>
+              </div>
+
+              <button
+                type="button"
+                className={`bot-future-control-slot bot-future-control-toggle${isPanelGlowEnabled ? ' is-enabled' : ''}`}
+                aria-pressed={isPanelGlowEnabled}
+                data-tooltip={botPanelToggleOptions[0].tooltip}
+                onClick={onPanelGlowToggle}
+              >
+                <span className="bot-future-control-label">{botPanelToggleOptions[0].label}</span>
+                <span className="bot-future-control-value">{isPanelGlowEnabled ? 'On' : 'Off'}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`bot-future-control-slot bot-future-control-toggle${isPanelLightsEnabled ? ' is-enabled' : ''}`}
+                aria-pressed={isPanelLightsEnabled}
+                data-tooltip={botPanelToggleOptions[1].tooltip}
+                onClick={onPanelLightsToggle}
+              >
+                <span className="bot-future-control-label">{botPanelToggleOptions[1].label}</span>
+                <span className="bot-future-control-value">{isPanelLightsEnabled ? 'On' : 'Off'}</span>
+              </button>
+
+              <div
+                className="bot-future-control-slot"
+                aria-hidden="true"
+                data-tooltip={botFutureControlSlots[1].description}
+              >
+                <span className="bot-future-control-label">{botFutureControlSlots[1].label}</span>
+                <span className="bot-future-control-value">Coming soon</span>
+              </div>
             </div>
           </div>
         </section>
@@ -1004,7 +1043,7 @@ export function DancingBotWindow({
             {panelOrder.map((panel) => (
               <div
                 key={panel}
-                className={`bot-pad-panel bot-pad-panel-${panel}${botState.activePanels[panel] ? ' is-active' : ''}`}
+                className={`bot-pad-panel bot-pad-panel-${panel}${botState.activePanels[panel] ? ' is-active' : ''}${isPanelGlowEnabled ? ' is-glow-enabled' : ''}${isPanelLightsEnabled ? ' is-lights-enabled' : ''}`}
               >
                 {resolvedNoteskin?.panelAssets[panel].receptor ? (
                   <div className="bot-pad-panel-icon" aria-hidden="true">
