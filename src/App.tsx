@@ -302,6 +302,7 @@ const buildHoldSegments = (events: TimedNoteEvent[]): HoldSegment[] => {
 }
 
 function App() {
+  const [isMobileUnsupported, setIsMobileUnsupported] = useState(false);
   const [selectedSongId, setSelectedSongId] = useState(bundledSongSources[0]?.id ?? '');
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
   const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(defaultBotFormStyle);
@@ -495,6 +496,20 @@ function App() {
 
     return beats;
   }, [measureEnd, measureStart]);
+
+  useEffect(() => {
+    const updateUnsupportedState = () => {
+      const hasCoarsePointer = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+      setIsMobileUnsupported(hasCoarsePointer || window.innerWidth <= 900);
+    };
+
+    updateUnsupportedState();
+    window.addEventListener('resize', updateUnsupportedState);
+
+    return () => {
+      window.removeEventListener('resize', updateUnsupportedState);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -865,6 +880,21 @@ function App() {
       getQuantizationColor(event.beat),
     );
   };
+
+  if (isMobileUnsupported) {
+    return (
+      <main className="mobile-warning-screen">
+        <div className="mobile-warning-card">
+          <p className="eyebrow">Desktop Only</p>
+          <h1>Dancing Bot is not supported on mobile yet.</h1>
+          <p className="mobile-warning-copy">
+            This preview needs a larger screen and desktop controls. Open it on a laptop or desktop browser to use
+            the notefield and bot window properly.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="app-shell">
