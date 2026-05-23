@@ -174,6 +174,7 @@ const botAdaptiveLeadRatio = 0.72;
 const botFastMoveDurationScale = 0.72;
 const botPressWindowSeconds = 0.08;
 const botRepeatedPanelPulseRatio = 0.65;
+const botRollRetriggerBeats = 0.5;
 const botHoldScale = 1.06;
 const botPressScale = 1.12;
 const botTravelLiftScale = 0.08;
@@ -449,6 +450,25 @@ const chooseFootForEvent = (
   return getOtherFoot(defaultFoot);
 };
 
+const buildRollStepBeats = (startBeat: number, endBeat: number): number[] => {
+  if (endBeat <= startBeat) {
+    return [startBeat];
+  }
+
+  const stepBeats = [startBeat];
+
+  for (
+    let nextBeat = startBeat + botRollRetriggerBeats;
+    nextBeat < endBeat - 0.000001;
+    nextBeat += botRollRetriggerBeats
+  ) {
+    stepBeats.push(nextBeat);
+  }
+
+  stepBeats.push(endBeat);
+  return stepBeats;
+};
+
 const sampleBotState = (
   stepsByFoot: Record<FootName, BotStep[]>,
   panelTimeline: BotPanelTimeline,
@@ -689,58 +709,68 @@ export const buildBotTimeline = (
 
     for (const event of stepEvents) {
       const footName: FootName = resolvedFeet?.get(event) ?? chooseFootForEvent(event, feet, previousStep, reservedFeet);
-      const foot = feet[footName];
-      const hitTimeSeconds = beatToSeconds(beat, simfile.bpms, simfile.stops, simfile.metadata.offset);
-      const holdUntilBeat =
+      let foot = feet[footName];
+      const sustainUntilBeat =
         event.kind === 'hold-head' || event.kind === 'roll-head'
           ? holdEndBeatMap.get(`${event.panel}:${event.beat.toFixed(6)}`) ?? event.beat
           : null;
-      const holdUntilTimeSeconds =
-        holdUntilBeat === null
-          ? null
-          : beatToSeconds(holdUntilBeat, simfile.bpms, simfile.stops, simfile.metadata.offset);
-      const preferredLeadSeconds = foot.panel === event.panel ? botSamePanelLeadSeconds : botMoveLeadSeconds;
-      const secondsSinceLastStep = Number.isFinite(foot.availableTimeSeconds)
-        ? Math.max(hitTimeSeconds - foot.availableTimeSeconds, 0)
-        : Number.POSITIVE_INFINITY;
-      const adaptiveLeadSeconds = Number.isFinite(secondsSinceLastStep)
-        ? clamp(secondsSinceLastStep * botAdaptiveLeadRatio, botMinMoveLeadSeconds, preferredLeadSeconds)
-        : preferredLeadSeconds;
-      const moveStartTimeSeconds = Math.max(hitTimeSeconds - adaptiveLeadSeconds, foot.availableTimeSeconds);
-      const availableMoveWindowSeconds = Math.max(hitTimeSeconds - moveStartTimeSeconds, 0.001);
-      const compressedMoveRatio =
-        foot.panel === event.panel || preferredLeadSeconds <= 0
-          ? 0
-          : clamp(1 - adaptiveLeadSeconds / preferredLeadSeconds, 0, 1);
-      const moveDurationScale = lerp(1, botFastMoveDurationScale, compressedMoveRatio);
-      const moveEndTimeSeconds = Math.min(
-        hitTimeSeconds,
-        moveStartTimeSeconds + availableMoveWindowSeconds * moveDurationScale,
-      );
+      const stepBeats =
+        event.kind === 'roll-head' && sustainUntilBeat !== null
+          ? buildRollStepBeats(event.beat, sustainUntilBeat)
+          : [event.beat];
 
-      stepsByFoot[footName].push({
-        foot: footName,
-        fromPanel: foot.panel,
-        toPanel: event.panel,
-        hitBeat: event.beat,
-        hitTimeSeconds,
-        moveStartTimeSeconds,
-        moveEndTimeSeconds,
-        holdUntilTimeSeconds,
-      });
+      for (const stepBeat of stepBeats) {
+        const hitTimeSeconds = beatToSeconds(stepBeat, simfile.bpms, simfile.stops, simfile.metadata.offset);
+        const holdUntilTimeSeconds =
+          event.kind === 'hold-head' && sustainUntilBeat !== null
+            ? beatToSeconds(sustainUntilBeat, simfile.bpms, simfile.stops, simfile.metadata.offset)
+            : null;
+        const preferredLeadSeconds = foot.panel === event.panel ? botSamePanelLeadSeconds : botMoveLeadSeconds;
+        const secondsSinceLastStep = Number.isFinite(foot.availableTimeSeconds)
+          ? Math.max(hitTimeSeconds - foot.availableTimeSeconds, 0)
+          : Number.POSITIVE_INFINITY;
+        const adaptiveLeadSeconds = Number.isFinite(secondsSinceLastStep)
+          ? clamp(secondsSinceLastStep * botAdaptiveLeadRatio, botMinMoveLeadSeconds, preferredLeadSeconds)
+          : preferredLeadSeconds;
+        const moveStartTimeSeconds = Math.max(hitTimeSeconds - adaptiveLeadSeconds, foot.availableTimeSeconds);
+        const availableMoveWindowSeconds = Math.max(hitTimeSeconds - moveStartTimeSeconds, 0.001);
+        const compressedMoveRatio =
+          foot.panel === event.panel || preferredLeadSeconds <= 0
+            ? 0
+            : clamp(1 - adaptiveLeadSeconds / preferredLeadSeconds, 0, 1);
+        const moveDurationScale = lerp(1, botFastMoveDurationScale, compressedMoveRatio);
+        const moveEndTimeSeconds = Math.min(
+          hitTimeSeconds,
+          moveStartTimeSeconds + availableMoveWindowSeconds * moveDurationScale,
+        );
 
-      feet[footName] = {
-        ...foot,
-        panel: event.panel,
-        lastStepBeat: event.beat,
-        holdUntilBeat: holdUntilBeat ?? (foot.holdUntilBeat !== null && foot.holdUntilBeat > event.beat ? foot.holdUntilBeat : null),
-        lastEventKind: event.kind,
-        availableTimeSeconds: hitTimeSeconds,
-      };
+        stepsByFoot[footName].push({
+          foot: footName,
+          fromPanel: foot.panel,
+          toPanel: event.panel,
+          hitBeat: stepBeat,
+          hitTimeSeconds,
+          moveStartTimeSeconds,
+          moveEndTimeSeconds,
+          holdUntilTimeSeconds,
+        });
+
+        foot = {
+          ...foot,
+          panel: event.panel,
+          lastStepBeat: stepBeat,
+          holdUntilBeat:
+            sustainUntilBeat ?? (foot.holdUntilBeat !== null && foot.holdUntilBeat > stepBeat ? foot.holdUntilBeat : null),
+          lastEventKind: event.kind,
+          availableTimeSeconds: hitTimeSeconds,
+        };
+      }
+
+      feet[footName] = foot;
       previousStep = {
         foot: footName,
         panel: event.panel,
-        beat: event.beat,
+        beat: stepBeats.at(-1) ?? event.beat,
       };
       reservedFeet.add(footName);
     }
