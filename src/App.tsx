@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ChangeEvent, FocusEvent } from 'react';
 import type { SimfileDocument, TimedChart, TimedNoteEvent } from './lib/simfile';
 import {
   getBundledNoteskinOptions,
@@ -631,6 +631,37 @@ function App() {
     };
   }, [selectedNoteskinOption]);
 
+  const restoreNotefieldFocus = () => {
+    window.requestAnimationFrame(() => {
+      notefieldFrameRef.current?.focus({ preventScroll: true });
+    });
+  };
+
+  const handleDropdownBlur = (event: FocusEvent<HTMLSelectElement>) => {
+    if (event.relatedTarget instanceof HTMLElement) {
+      return;
+    }
+
+    restoreNotefieldFocus();
+  };
+
+  const handleSongChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSongId(event.target.value);
+    event.currentTarget.blur();
+    restoreNotefieldFocus();
+  };
+
+  const handleChartChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setSelectedChartIndex(Number.parseInt(event.target.value, 10) || 0);
+    event.currentTarget.blur();
+    restoreNotefieldFocus();
+  };
+
+  const handleBotFormStyleChange = (nextStyle: BotFormStyleId) => {
+    setSelectedBotFormStyle(nextStyle);
+    restoreNotefieldFocus();
+  };
+
   const handleImportSongFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     event.target.value = '';
@@ -812,7 +843,7 @@ function App() {
         <div className="toolbar-controls">
           <label className="toolbar-field">
             <span>Song</span>
-            <select value={selectedSong?.id ?? ''} onChange={(event) => setSelectedSongId(event.target.value)}>
+            <select value={selectedSong?.id ?? ''} onChange={handleSongChange} onBlur={handleDropdownBlur}>
               {availableSongSources.map((songSource) => (
                 <option key={songSource.id} value={songSource.id}>
                   {songSource.label}
@@ -823,11 +854,7 @@ function App() {
 
           <label className="toolbar-field">
             <span>Chart</span>
-            <select
-              value={selectedChartIndex}
-              disabled={simfile.charts.length === 0}
-              onChange={(event) => setSelectedChartIndex(Number.parseInt(event.target.value, 10) || 0)}
-            >
+            <select value={selectedChartIndex} disabled={simfile.charts.length === 0} onChange={handleChartChange} onBlur={handleDropdownBlur}>
               {simfile.charts.map((chart, chartIndex) => (
                 <option key={`${chart.stepType}-${chart.difficulty}-${chartIndex}`} value={chartIndex}>
                   {chart.difficulty} {chart.meter} - {chart.description || chart.stepType}
@@ -870,7 +897,8 @@ function App() {
             resolvedNoteskin={resolvedNoteskin}
             playbackClockRef={playbackClockRef}
             selectedFormStyle={selectedBotFormStyle}
-            onFormStyleChange={setSelectedBotFormStyle}
+            onFormStyleChange={handleBotFormStyleChange}
+            onFormStyleBlur={handleDropdownBlur}
             beginBotWindowInteraction={beginBotWindowInteraction}
           />
         }

@@ -158,12 +158,8 @@ body {
   height: 100%;
   min-height: 0;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
   touch-action: none;
   cursor: ns-resize;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 80px),
-    linear-gradient(180deg, #10141d 0%, #090c12 100%);
 }
 
 .bot-window {
@@ -749,12 +745,13 @@ body {
   inset: 0 var(--playfield-gutter) 20px;
   transform: translate3d(0, 72px, 0);
   will-change: transform;
-  contain: layout paint style;
-  clip-path: inset(var(--receptor-offset) 0 0 0);
 }
 
 .measure-guide-layer {
   z-index: 1;
+  overflow: visible;
+  contain: layout style;
+  clip-path: inset(var(--receptor-offset) -64px 0 0);
 }
 
 .chart-scroll-layer {
@@ -762,6 +759,8 @@ body {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--lane-gap);
+  contain: layout paint style;
+  clip-path: inset(var(--receptor-offset) 0 0 0);
 }
 
 .lane-column {
@@ -788,13 +787,15 @@ body {
 
 .measure-guide span {
   position: absolute;
-  right: 12px;
-  top: -11px;
+  right: 0;
+  top: 0;
   padding: 2px 8px;
   border-radius: 999px;
   background: rgba(9, 12, 18, 0.9);
   color: rgba(248, 244, 233, 0.58);
   font-size: 0.7rem;
+  transform: translate(calc(100% + 10px), -50%);
+  white-space: nowrap;
 }
 
 .lane-note {

@@ -789,6 +789,7 @@ interface DancingBotWindowProps {
   playbackClockRef: { current: PlaybackClock | null };
   selectedFormStyle: BotFormStyleId;
   onFormStyleChange: (nextStyle: BotFormStyleId) => void;
+  onFormStyleBlur: (event: React.FocusEvent<HTMLSelectElement>) => void;
   beginBotWindowInteraction: (
     event: ReactPointerEvent<HTMLElement>,
     mode: BotWindowInteraction['mode'],
@@ -805,6 +806,7 @@ export function DancingBotWindow({
   playbackClockRef,
   selectedFormStyle,
   onFormStyleChange,
+  onFormStyleBlur,
   beginBotWindowInteraction,
 }: DancingBotWindowProps) {
   const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
@@ -879,7 +881,14 @@ export function DancingBotWindow({
       <div className="bot-window-body">
         <label className="bot-form-picker">
           <span>Form Style</span>
-          <select value={selectedFormStyle} onChange={(event) => onFormStyleChange(event.target.value as BotFormStyleId)}>
+          <select
+            value={selectedFormStyle}
+            onChange={(event) => {
+              onFormStyleChange(event.target.value as BotFormStyleId);
+              event.currentTarget.blur();
+            }}
+            onBlur={onFormStyleBlur}
+          >
             {botFormStyleOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.label}

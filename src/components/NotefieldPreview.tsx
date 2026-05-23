@@ -87,7 +87,7 @@ export function NotefieldPreview({
   return (
     <section className="notefield-panel" aria-label="Interactive notefield preview">
       <div className="notefield-layout">
-        <div className="notefield-frame" ref={notefieldFrameRef}>
+        <div className="notefield-frame" ref={notefieldFrameRef} tabIndex={-1}>
           <div
             className={`notefield-playfield${isPlayfieldDragging ? ' is-dragging' : ''}`}
             style={playfieldStyle}
@@ -121,7 +121,7 @@ export function NotefieldPreview({
                     className={`measure-guide${isMeasure ? ' measure-guide-major' : ' measure-guide-minor'}`}
                     style={{ top: beat * pixelsPerBeat }}
                   >
-                    {isMeasure ? <span>Measure {beat / 4 + 1}</span> : null}
+                    {isMeasure ? <span>M {beat / 4 + 1}</span> : null}
                   </div>
                 ))}
               </div>
