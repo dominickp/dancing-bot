@@ -974,6 +974,30 @@ export function DancingBotWindow({
     };
   }, [isPlaying, playbackClockRef, simfile]);
 
+  useEffect(() => {
+    const preloadTargets = botFootStyleOptions
+      .map((option) => option.image)
+      .filter((image): image is string => image !== null);
+
+    if (preloadTargets.length === 0) {
+      return undefined;
+    }
+
+    const preloadedImages = preloadTargets.map((imageUrl) => {
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = imageUrl;
+      void image.decode().catch(() => undefined);
+      return image;
+    });
+
+    return () => {
+      for (const image of preloadedImages) {
+        image.src = '';
+      }
+    };
+  }, []);
+
   const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
   const botFootAngles = useMemo(() => getBotFootAngles(selectedFormStyle), [selectedFormStyle]);
   const botPanelTimeline = useMemo(() => buildBotPanelTimeline(botTimeline), [botTimeline]);
