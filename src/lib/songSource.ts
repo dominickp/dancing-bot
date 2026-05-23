@@ -2,6 +2,10 @@ import bossyAudioUrl from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bossy
 import bossyBackgroundUrl from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bg.png";
 import bossyBannerUrl from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bn.png";
 import bossySimfileText from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bossyremix.ssc?raw";
+import ferrariAudioUrl from "../../example-simfiles/Ferrari/Ferrari.ogg";
+import ferrariBackgroundUrl from "../../example-simfiles/Ferrari/ferrari-bg.png";
+import ferrariBannerUrl from "../../example-simfiles/Ferrari/ferrari.png";
+import ferrariSimfileText from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
 import groovyAudioUrl from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.ogg";
 import groovySimfileText from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.sm?raw";
 import { buildTimedChart, parseSimfile } from "./simfile";
@@ -138,6 +142,16 @@ const createLocalResolver = (files: File[]): SongAssetResolver => {
 };
 
 export const bundledSongSources: LoadedSongSource[] = [
+  createSongSource({
+    id: "ferrari",
+    sourceType: "bundled",
+    simfileText: ferrariSimfileText,
+    resolver: createBundledResolver({
+      "Ferrari.ogg": ferrariAudioUrl,
+      "ferrari-bg.png": ferrariBackgroundUrl,
+      "ferrari.png": ferrariBannerUrl,
+    }),
+  }),
   createSongSource({
     id: "bossy-jorts-speedy-mix",
     sourceType: "bundled",
