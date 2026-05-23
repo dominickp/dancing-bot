@@ -10,13 +10,14 @@ import type { ResolvedDanceNoteskin, ResolvedSpriteAsset } from './lib/noteskin'
 import {
   buildBotTimeline,
   defaultBotFootStyle,
+  defaultBotPadStyle,
   BotWindowRect,
   BotWindowInteraction,
   clampBotWindowRect,
   defaultBotFormStyle,
   DancingBotWindow,
 } from './components/DancingBotWindow';
-import type { BotFootStyleId, BotFormStyleId } from './components/DancingBotWindow';
+import type { BotFootStyleId, BotFormStyleId, BotPadStyleId } from './components/DancingBotWindow';
 import type { BotStep } from './components/DancingBotWindow';
 import { NotefieldPreview } from './components/NotefieldPreview';
 import { useChartPlayback } from './hooks/useChartPlayback';
@@ -305,6 +306,7 @@ function App() {
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
   const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(defaultBotFormStyle);
   const [selectedBotFootStyle, setSelectedBotFootStyle] = useState<BotFootStyleId>(defaultBotFootStyle);
+  const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(defaultBotPadStyle);
   const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(true);
   const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(true);
   const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
@@ -681,6 +683,11 @@ function App() {
     restoreNotefieldFocus();
   };
 
+  const handleBotPadStyleToggle = () => {
+    setSelectedBotPadStyle((currentStyle) => (currentStyle === 'itg' ? 'ddr' : 'itg'));
+    restoreNotefieldFocus();
+  };
+
   const handleBotPanelGlowToggle = () => {
     setIsBotPanelGlowEnabled((currentValue) => !currentValue);
     restoreNotefieldFocus();
@@ -927,10 +934,12 @@ function App() {
             playbackClockRef={playbackClockRef}
             selectedFormStyle={selectedBotFormStyle}
             selectedFootStyle={selectedBotFootStyle}
+            selectedPadStyle={selectedBotPadStyle}
             isPanelGlowEnabled={isBotPanelGlowEnabled}
             isPanelLightsEnabled={isBotPanelLightsEnabled}
             onFormStyleChange={handleBotFormStyleChange}
             onFootStyleCycle={handleBotFootStyleCycle}
+            onPadStyleToggle={handleBotPadStyleToggle}
             onPanelGlowToggle={handleBotPanelGlowToggle}
             onPanelLightsToggle={handleBotPanelLightsToggle}
             beginBotWindowInteraction={beginBotWindowInteraction}

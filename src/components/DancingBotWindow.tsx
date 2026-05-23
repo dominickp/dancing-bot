@@ -10,7 +10,9 @@ type FootName = 'left' | 'right';
 export type BotFormStyleId = 'straight-wide' | 'straight-minimal' | 'heels-out' | 'toes-out';
 export const defaultBotFormStyle: BotFormStyleId = 'straight-wide';
 export type BotFootStyleId = 'default' | 'silhouette-white' | 'shoe';
-export const defaultBotFootStyle: BotFootStyleId = 'default';
+export const defaultBotFootStyle: BotFootStyleId = 'silhouette-white';
+export type BotPadStyleId = 'itg' | 'ddr';
+export const defaultBotPadStyle: BotPadStyleId = 'itg';
 
 interface BotPanelTarget {
   x: number;
@@ -180,11 +182,19 @@ const botRollRetriggerBeats = 0.5;
 const botHoldScale = 1.06;
 const botPressScale = 1.12;
 const botTravelLiftScale = 0.08;
-const botPadArrowColors: Record<Panel, string> = {
-  left: '#51a8ff',
-  right: '#51a8ff',
-  up: '#ff5d73',
-  down: '#ff5d73',
+const botPadArrowColorsByStyle: Record<BotPadStyleId, Record<Panel, string>> = {
+  itg: {
+    left: '#51a8ff',
+    right: '#51a8ff',
+    up: '#ff5d73',
+    down: '#ff5d73',
+  },
+  ddr: {
+    left: '#79cfff',
+    right: '#79cfff',
+    up: '#ff84bc',
+    down: '#ff84bc',
+  },
 };
 const botPanelPositions: Record<Panel, { x: number; y: number }> = {
   left: { x: -1, y: 0 },
@@ -237,14 +247,6 @@ const botFormIconOptions: Array<{
     accent: '#80e3bb',
   },
 ];
-const botFutureControlSlots = [
-  {
-    key: 'future-form',
-    label: 'Form',
-    description: 'Reserved for the next form style.',
-  },
-] as const;
-
 const botFootStyleOptions: Array<{
   id: BotFootStyleId;
   label: string;
@@ -273,6 +275,10 @@ const botFootStyleOptions: Array<{
 
 const botPanelToggleOptions = [
   {
+    key: 'pad-style',
+    label: 'Pad Style',
+  },
+  {
     key: 'panel-glow',
     label: 'Glow',
     tooltip: 'Panel Glow: toggles the outer glow around active panels.',
@@ -287,11 +293,15 @@ const botPanelToggleOptions = [
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const lerp = (start: number, end: number, amount: number): number => start + (end - start) * amount;
 const getOtherFoot = (foot: FootName): FootName => (foot === 'left' ? 'right' : 'left');
-const getBotPadArrowColor = (panel: Panel): string => botPadArrowColors[panel];
+const getBotPadArrowColor = (panel: Panel, padStyle: BotPadStyleId): string =>
+  botPadArrowColorsByStyle[padStyle][panel];
 const getBotFootTargets = (formStyle: BotFormStyleId): BotFootTargetMap =>
   botFootTargetsByForm[formStyle] ?? botFootTargetsByForm['straight-wide'];
 const getBotFootAngles = (formStyle: BotFormStyleId): BotFootAngleMap =>
   botFootAnglesByForm[formStyle] ?? botFootAnglesByForm['straight-wide'];
+const getBotPanelEffectStyle = (panel: Panel, padStyle: BotPadStyleId): CSSProperties => ({
+  ['--bot-panel-accent' as string]: getBotPadArrowColor(panel, padStyle),
+});
 
 const buildBotPanelTimeline = (stepsByFoot: Record<FootName, BotStep[]>): BotPanelTimeline => {
   const stepsByPanel: Record<Panel, BotStep[]> = {
@@ -869,10 +879,12 @@ interface DancingBotWindowProps {
   playbackClockRef: { current: PlaybackClock | null };
   selectedFormStyle: BotFormStyleId;
   selectedFootStyle: BotFootStyleId;
+  selectedPadStyle: BotPadStyleId;
   isPanelGlowEnabled: boolean;
   isPanelLightsEnabled: boolean;
   onFormStyleChange: (nextStyle: BotFormStyleId) => void;
   onFootStyleCycle: () => void;
+  onPadStyleToggle: () => void;
   onPanelGlowToggle: () => void;
   onPanelLightsToggle: () => void;
   beginBotWindowInteraction: (
@@ -891,10 +903,12 @@ export function DancingBotWindow({
   playbackClockRef,
   selectedFormStyle,
   selectedFootStyle,
+  selectedPadStyle,
   isPanelGlowEnabled,
   isPanelLightsEnabled,
   onFormStyleChange,
   onFootStyleCycle,
+  onPadStyleToggle,
   onPanelGlowToggle,
   onPanelLightsToggle,
   beginBotWindowInteraction,
@@ -1012,14 +1026,14 @@ export function DancingBotWindow({
 
           <div className="bot-settings-group">
             <div className="bot-future-control-grid" aria-label="Upcoming controls">
-              <div
-                className="bot-future-control-slot"
-                aria-hidden="true"
-                data-tooltip={botFutureControlSlots[0].description}
+              <button
+                type="button"
+                className={`bot-future-control-slot bot-future-control-toggle${selectedPadStyle === 'ddr' ? ' is-enabled' : ''}`}
+                onClick={onPadStyleToggle}
               >
-                <span className="bot-future-control-label">{botFutureControlSlots[0].label}</span>
-                <span className="bot-future-control-value">Coming soon</span>
-              </div>
+                <span className="bot-future-control-label">{botPanelToggleOptions[0].label}</span>
+                <span className="bot-future-control-value">{selectedPadStyle === 'ddr' ? 'DDR' : 'ITG'}</span>
+              </button>
 
               <button
                 type="button"
@@ -1027,7 +1041,7 @@ export function DancingBotWindow({
                 aria-pressed={isPanelGlowEnabled}
                 onClick={onPanelGlowToggle}
               >
-                <span className="bot-future-control-label">{botPanelToggleOptions[0].label}</span>
+                <span className="bot-future-control-label">{botPanelToggleOptions[1].label}</span>
                 <span className="bot-future-control-value">{isPanelGlowEnabled ? 'On' : 'Off'}</span>
               </button>
 
@@ -1037,7 +1051,7 @@ export function DancingBotWindow({
                 aria-pressed={isPanelLightsEnabled}
                 onClick={onPanelLightsToggle}
               >
-                <span className="bot-future-control-label">{botPanelToggleOptions[1].label}</span>
+                <span className="bot-future-control-label">{botPanelToggleOptions[2].label}</span>
                 <span className="bot-future-control-value">{isPanelLightsEnabled ? 'On' : 'Off'}</span>
               </button>
 
@@ -1063,6 +1077,7 @@ export function DancingBotWindow({
               <div
                 key={panel}
                 className={`bot-pad-panel bot-pad-panel-${panel}${botState.activePanels[panel] ? ' is-active' : ''}${isPanelGlowEnabled ? ' is-glow-enabled' : ''}${isPanelLightsEnabled ? ' is-lights-enabled' : ''}`}
+                style={getBotPanelEffectStyle(panel, selectedPadStyle)}
               >
                 {resolvedNoteskin?.panelAssets[panel].receptor ? (
                   <div className="bot-pad-panel-icon" aria-hidden="true">
@@ -1070,7 +1085,7 @@ export function DancingBotWindow({
                       className="bot-pad-panel-icon-layer bot-pad-panel-icon-tint"
                       style={getTintedSpriteMaskStyle(
                         resolvedNoteskin.panelAssets[panel].receptor,
-                        getBotPadArrowColor(panel),
+                        getBotPadArrowColor(panel, selectedPadStyle),
                         getPanelRotation(resolvedNoteskin, panel),
                       )}
                     />
