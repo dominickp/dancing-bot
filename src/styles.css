@@ -804,8 +804,8 @@ body {
 }
 
 .bot-foot-image {
-  width: 130%;
-  height: 130%;
+  width: 120%;
+  height: 120%;
   object-fit: contain;
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.3));
   user-select: none;

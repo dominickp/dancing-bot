@@ -977,7 +977,6 @@ export function DancingBotWindow({
           <div className="bot-settings-group">
             <div className="bot-settings-group-header">
               <span>Form Style</span>
-              <small>Choose one active stance.</small>
             </div>
 
             <div className="bot-icon-toggle-grid" role="radiogroup" aria-label="Bot form style">
@@ -1018,7 +1017,6 @@ export function DancingBotWindow({
           <div className="bot-settings-group">
             <div className="bot-settings-group-header">
               <span>More Controls</span>
-              <small>Space reserved for upcoming toggles.</small>
             </div>
 
             <div className="bot-future-control-grid" aria-label="Upcoming controls">
@@ -1035,7 +1033,6 @@ export function DancingBotWindow({
                 type="button"
                 className={`bot-future-control-slot bot-future-control-toggle${isPanelGlowEnabled ? ' is-enabled' : ''}`}
                 aria-pressed={isPanelGlowEnabled}
-                data-tooltip={botPanelToggleOptions[0].tooltip}
                 onClick={onPanelGlowToggle}
               >
                 <span className="bot-future-control-label">{botPanelToggleOptions[0].label}</span>
@@ -1046,7 +1043,6 @@ export function DancingBotWindow({
                 type="button"
                 className={`bot-future-control-slot bot-future-control-toggle${isPanelLightsEnabled ? ' is-enabled' : ''}`}
                 aria-pressed={isPanelLightsEnabled}
-                data-tooltip={botPanelToggleOptions[1].tooltip}
                 onClick={onPanelLightsToggle}
               >
                 <span className="bot-future-control-label">{botPanelToggleOptions[1].label}</span>
@@ -1056,7 +1052,6 @@ export function DancingBotWindow({
               <button
                 type="button"
                 className={`bot-future-control-slot bot-future-control-toggle${selectedFootStyle !== 'default' ? ' is-enabled' : ''}`}
-                data-tooltip={selectedFootStyleOption.tooltip}
                 onClick={onFootStyleCycle}
               >
                 <span className="bot-future-control-label">Feet</span>
