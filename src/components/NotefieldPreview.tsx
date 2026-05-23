@@ -23,6 +23,7 @@ interface NotefieldPreviewProps {
   chartContentHeight: number;
   displayBeat: number;
   explosionRefs: MutableRefObject<Record<Panel, HTMLDivElement | null>>;
+  handlePlayfieldPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   getNoteDetailStyle: (event: TimedNoteEvent) => CSSProperties | null;
   getHoldStyle: (segment: HoldSegmentView) => CSSProperties;
   getHoldCapStyle: (segment: HoldSegmentView) => CSSProperties;
@@ -38,6 +39,7 @@ interface NotefieldPreviewProps {
   notefieldFrameRef: MutableRefObject<HTMLDivElement | null>;
   panelOrder: readonly Panel[];
   pixelsPerBeat: number;
+  isPlayfieldDragging: boolean;
   playfieldStyle: CSSProperties;
   receptorOffset: number;
   receptorRefs: MutableRefObject<Record<Panel, HTMLDivElement | null>>;
@@ -54,6 +56,7 @@ export function NotefieldPreview({
   chartContentHeight,
   displayBeat,
   explosionRefs,
+  handlePlayfieldPointerDown,
   getNoteDetailStyle,
   getHoldStyle,
   getHoldCapStyle,
@@ -69,6 +72,7 @@ export function NotefieldPreview({
   notefieldFrameRef,
   panelOrder,
   pixelsPerBeat,
+  isPlayfieldDragging,
   playfieldStyle,
   receptorOffset,
   receptorRefs,
@@ -84,7 +88,11 @@ export function NotefieldPreview({
     <section className="notefield-panel" aria-label="Interactive notefield preview">
       <div className="notefield-layout">
         <div className="notefield-frame" ref={notefieldFrameRef}>
-          <div className="notefield-playfield" style={playfieldStyle}>
+          <div
+            className={`notefield-playfield${isPlayfieldDragging ? ' is-dragging' : ''}`}
+            style={playfieldStyle}
+            onPointerDown={handlePlayfieldPointerDown}
+          >
             <div className="receptor-row" aria-hidden="true">
               {panelOrder.map((panel) => (
                 <div

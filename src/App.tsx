@@ -55,6 +55,12 @@ interface MinimapMeasure {
   density: number;
 }
 
+interface PlayfieldInteraction {
+  pointerId: number;
+  originX: number;
+  startOffsetX: number;
+}
+
 const bundledNoteskinOptions = getBundledNoteskinOptions();
 const genericArrowClipPath = 'polygon(50% 100%, 100% 50%, 72% 50%, 72% 0%, 28% 0%, 28% 50%, 0% 50%)';
 const emptyTimedChart: TimedChart = { events: [], lastBeat: 0, lastTimeSeconds: 0 };
@@ -301,6 +307,9 @@ function App() {
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
   const [songLoadError, setSongLoadError] = useState<string | null>(null);
   const [visibleBeats, setVisibleBeats] = useState(defaultVisibleBeats);
+  const [frameWidth, setFrameWidth] = useState(0);
+  const [playfieldOffsetX, setPlayfieldOffsetX] = useState(0);
+  const [isPlayfieldDragging, setIsPlayfieldDragging] = useState(false);
   const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>({
     x: 26,
     y: 24,
@@ -310,6 +319,7 @@ function App() {
   const songImportRef = useRef<HTMLInputElement | null>(null);
   const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
+  const playfieldInteractionRef = useRef<PlayfieldInteraction | null>(null);
   const botWindowInteractionRef = useRef<BotWindowInteraction | null>(null);
   const receptorRefs = useRef<Record<PanelName, HTMLDivElement | null>>({
     left: null,
@@ -356,8 +366,10 @@ function App() {
   const explosionSize = Math.round(receptorHeight * 1.28);
   const chartContentHeight = (selectedTimedChart.lastBeat + renderBufferBeats * 2) * pixelsPerBeat + receptorOffset;
   const totalChartBeats = Math.max(selectedTimedChart.lastBeat, 1);
+  const maxPlayfieldOffsetX = Math.max(0, (frameWidth - playfieldWidth) / 2);
   const playfieldStyle = {
     '--playfield-width': `${playfieldWidth}px`,
+    '--playfield-offset-x': `${playfieldOffsetX}px`,
     '--lane-gap': `${laneGap}px`,
     '--playfield-gutter': `${sidePadding}px`,
     '--note-width': `${noteWidth}px`,
@@ -508,6 +520,8 @@ function App() {
     const syncBotWindowRect = () => {
       const bounds = frame.getBoundingClientRect();
 
+      setFrameWidth(bounds.width);
+      setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -maxPlayfieldOffsetX, maxPlayfieldOffsetX));
       setBotWindowRect((previousRect) => clampBotWindowRect(previousRect, bounds.width, bounds.height));
     };
 
@@ -517,10 +531,28 @@ function App() {
     return () => {
       window.removeEventListener('resize', syncBotWindowRect);
     };
-  }, []);
+  }, [maxPlayfieldOffsetX]);
+
+  useEffect(() => {
+    setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -maxPlayfieldOffsetX, maxPlayfieldOffsetX));
+  }, [maxPlayfieldOffsetX]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
+      const playfieldInteraction = playfieldInteractionRef.current;
+
+      if (playfieldInteraction) {
+        setIsPlayfieldDragging(true);
+        setPlayfieldOffsetX(
+          clamp(
+            playfieldInteraction.startOffsetX + (event.clientX - playfieldInteraction.originX),
+            -maxPlayfieldOffsetX,
+            maxPlayfieldOffsetX,
+          ),
+        );
+        return;
+      }
+
       const interaction = botWindowInteractionRef.current;
       const frame = notefieldFrameRef.current;
 
@@ -551,6 +583,11 @@ function App() {
     };
 
     const handlePointerUp = (event: PointerEvent) => {
+      if (playfieldInteractionRef.current?.pointerId === event.pointerId) {
+        playfieldInteractionRef.current = null;
+        setIsPlayfieldDragging(false);
+      }
+
       if (botWindowInteractionRef.current?.pointerId !== event.pointerId) {
         return;
       }
@@ -567,7 +604,7 @@ function App() {
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
     };
-  }, []);
+  }, [maxPlayfieldOffsetX]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -637,6 +674,21 @@ function App() {
     }
 
     seekFromMinimapPointer(event.clientY);
+  };
+
+  const handlePlayfieldPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    playfieldInteractionRef.current = {
+      pointerId: event.pointerId,
+      originX: event.clientX,
+      startOffsetX: playfieldOffsetX,
+    };
+    setIsPlayfieldDragging(true);
   };
 
   const beginBotWindowInteraction = (
@@ -839,6 +891,7 @@ function App() {
         getReceptorStyle={getReceptorStyle}
         handleMinimapPointerDown={handleMinimapPointerDown}
         handleMinimapPointerMove={handleMinimapPointerMove}
+        handlePlayfieldPointerDown={handlePlayfieldPointerDown}
         measureGuideLayerRef={measureGuideLayerRef}
         minimapMeasures={minimapMeasures}
         minimapRef={minimapRef}
@@ -846,6 +899,7 @@ function App() {
         panelOrder={panelOrder}
         pixelsPerBeat={pixelsPerBeat}
         playfieldStyle={playfieldStyle}
+        isPlayfieldDragging={isPlayfieldDragging}
         receptorOffset={receptorOffset}
         receptorRefs={receptorRefs}
         scrollLayerRef={scrollLayerRef}

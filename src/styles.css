@@ -653,9 +653,16 @@ body {
 
 .notefield-playfield {
   position: relative;
+  left: 50%;
   width: min(100%, var(--playfield-width));
   height: 100%;
-  margin: 0 auto;
+  transform: translateX(calc(-50% + var(--playfield-offset-x, 0px)));
+  cursor: grab;
+  touch-action: none;
+}
+
+.notefield-playfield.is-dragging {
+  cursor: grabbing;
 }
 
 .notefield-layout {
