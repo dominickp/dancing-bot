@@ -11,6 +11,7 @@ Controls are based on ArrowVortex:
 - Click to drag the notefield to move it side to side
 
 ## Todo/known issues
+- Adjust dancing bot timing
 - Footswitches not yet supported
 - Crossing over and turning not yet supported
 - Brackets not yet supported
