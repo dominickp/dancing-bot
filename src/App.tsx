@@ -888,7 +888,7 @@ function App() {
           <p className="eyebrow">Desktop Only</p>
           <h1>Dancing Bot is not supported on mobile yet.</h1>
           <p className="mobile-warning-copy">
-            This preview needs a larger screen and desktop controls. Open it on a laptop or desktop browser to use
+            Dancing Bot needs a larger screen and a mouse and keyboard for controls. Open it on a laptop or desktop browser to use
             the notefield and bot window properly.
           </p>
         </div>
