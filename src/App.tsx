@@ -314,7 +314,7 @@ function App() {
     x: 26,
     y: 24,
     width: 460,
-    height: 700,
+    height: 800,
   });
   const songImportRef = useRef<HTMLInputElement | null>(null);
   const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
@@ -898,7 +898,6 @@ function App() {
             playbackClockRef={playbackClockRef}
             selectedFormStyle={selectedBotFormStyle}
             onFormStyleChange={handleBotFormStyleChange}
-            onFormStyleBlur={handleDropdownBlur}
             beginBotWindowInteraction={beginBotWindowInteraction}
           />
         }

@@ -203,6 +203,60 @@ const botFormStyleOptions = [
   { id: 'heels-out', label: 'Heels Out' },
   { id: 'toes-out', label: 'Toes Out' },
 ] as const;
+const baseAssetUrl = import.meta.env.BASE_URL;
+const botFormIconOptions: Array<{
+  id: BotFormStyleId;
+  tooltip: string;
+  image: string;
+  accent: string;
+}> = [
+  {
+    id: 'straight-wide',
+    tooltip: 'Straight (Wide)',
+    image: `${baseAssetUrl}img/form_straight-wide.png`,
+    accent: '#7fc7ff',
+  },
+  {
+    id: 'straight-minimal',
+    tooltip: 'Straight (Minimal)',
+    image: `${baseAssetUrl}img/form_straight.png`,
+    accent: '#f4ca6c',
+  },
+  {
+    id: 'heels-out',
+    tooltip: 'Heels Out',
+    image: `${baseAssetUrl}img/form_heelsout.png`,
+    accent: '#fd8aa0',
+  },
+  {
+    id: 'toes-out',
+    tooltip: 'Toes Out (Based)',
+    image: `${baseAssetUrl}img/form_toe-out.png`,
+    accent: '#80e3bb',
+  },
+];
+const botFutureControlSlots = [
+  {
+    key: 'future-form',
+    label: 'Form',
+    description: 'Reserved for the next form style.',
+  },
+  {
+    key: 'panel-glow',
+    label: 'Panel Glow',
+    description: 'Reserved for the panel glow toggle.',
+  },
+  {
+    key: 'panel-lights',
+    label: 'Panel Lights',
+    description: 'Reserved for the panel lights toggle.',
+  },
+  {
+    key: 'shoe-image',
+    label: 'Shoes',
+    description: 'Reserved for shoe image selection.',
+  },
+] as const;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const lerp = (start: number, end: number, amount: number): number => start + (end - start) * amount;
@@ -789,7 +843,6 @@ interface DancingBotWindowProps {
   playbackClockRef: { current: PlaybackClock | null };
   selectedFormStyle: BotFormStyleId;
   onFormStyleChange: (nextStyle: BotFormStyleId) => void;
-  onFormStyleBlur: (event: React.FocusEvent<HTMLSelectElement>) => void;
   beginBotWindowInteraction: (
     event: ReactPointerEvent<HTMLElement>,
     mode: BotWindowInteraction['mode'],
@@ -806,7 +859,6 @@ export function DancingBotWindow({
   playbackClockRef,
   selectedFormStyle,
   onFormStyleChange,
-  onFormStyleBlur,
   beginBotWindowInteraction,
 }: DancingBotWindowProps) {
   const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
@@ -879,23 +931,69 @@ export function DancingBotWindow({
       </header>
 
       <div className="bot-window-body">
-        <label className="bot-form-picker">
-          <span>Form Style</span>
-          <select
-            value={selectedFormStyle}
-            onChange={(event) => {
-              onFormStyleChange(event.target.value as BotFormStyleId);
-              event.currentTarget.blur();
-            }}
-            onBlur={onFormStyleBlur}
-          >
-            {botFormStyleOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <section className="bot-settings-panel" aria-label="Dancing bot settings">
+          <div className="bot-settings-group">
+            <div className="bot-settings-group-header">
+              <span>Form Style</span>
+              <small>Choose one active stance.</small>
+            </div>
+
+            <div className="bot-icon-toggle-grid" role="radiogroup" aria-label="Bot form style">
+              {botFormIconOptions.map((option) => {
+                const isSelected = option.id === selectedFormStyle;
+
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    aria-label={option.tooltip}
+                    className={`bot-icon-toggle${isSelected ? ' is-selected' : ''}`}
+                    data-tooltip={option.tooltip}
+                    onClick={() => onFormStyleChange(option.id)}
+                    style={{ ['--bot-toggle-accent' as string]: option.accent } as CSSProperties}
+                  >
+                    <span className="bot-icon-toggle-swatch" aria-hidden="true">
+                      <img src={option.image} alt="" className="bot-icon-toggle-image" />
+                    </span>
+                  </button>
+                );
+              })}
+
+              <div
+                className="bot-icon-toggle bot-icon-toggle-placeholder"
+                aria-hidden="true"
+                data-tooltip="Reserved for an additional form style."
+              >
+                <span className="bot-icon-toggle-swatch">
+                  <span className="bot-icon-toggle-plus">+</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bot-settings-group">
+            <div className="bot-settings-group-header">
+              <span>More Controls</span>
+              <small>Space reserved for upcoming toggles.</small>
+            </div>
+
+            <div className="bot-future-control-grid" aria-label="Upcoming controls">
+              {botFutureControlSlots.map((slot) => (
+                <div
+                  key={slot.key}
+                  className="bot-future-control-slot"
+                  aria-hidden="true"
+                  data-tooltip={slot.description}
+                >
+                  <span className="bot-future-control-label">{slot.label}</span>
+                  <span className="bot-future-control-value">Coming soon</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
         <div className="bot-pad-stage">
           <div className="bot-pad-surface">
@@ -951,19 +1049,6 @@ export function DancingBotWindow({
               );
             })}
           </div>
-        </div>
-
-        <div className="bot-foot-readout" aria-label="Current foot placement">
-          {footNames.map((footName) => {
-            const foot = botState.feet[footName];
-
-            return (
-              <span key={footName}>
-                {footName === 'left' ? 'Left' : 'Right'} foot: {foot.panel}
-                {foot.isHolding ? ' hold' : ''}
-              </span>
-            );
-          })}
         </div>
       </div>
 
