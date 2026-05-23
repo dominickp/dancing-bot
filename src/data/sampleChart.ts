@@ -1,5 +1,5 @@
-import sampleSimfileText from "../../example-simfiles/Diskasting - Dogtown Clash Remix - [Zaia]/Dogtown Clash Remix.sm?raw";
-import sampleAudioUrl from "../../example-simfiles/Diskasting - Dogtown Clash Remix - [Zaia]/Dskasting Feat. Feral - Dogtown Clash Remix_gain-adjusted.ogg";
+import sampleSimfileText from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.sm?raw";
+import sampleAudioUrl from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.ogg";
 import { buildTimedChart, parseSmSimfile } from "../lib/simfile";
 
 export const sampleChart = parseSmSimfile(sampleSimfileText);

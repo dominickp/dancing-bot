@@ -219,26 +219,76 @@ const parseChart = (rawChart: string): SimfileChart => {
   };
 };
 
-export const parseSmSimfile = (source: string): SimfileDocument => {
-  const tags = parseTagMap(source);
-  const charts = (tags.get("NOTES") ?? []).map(parseChart);
+const getBlockTagValue = (source: string, key: string): string => {
+  const match = source.match(new RegExp(`#${key}:([\\s\\S]*?);`, "i"));
+  return match?.[1]?.trim() ?? "";
+};
+
+const parseSscChart = (rawChartBlock: string): SimfileChart => {
+  const stepType = getBlockTagValue(rawChartBlock, "STEPSTYPE");
+  const description = getBlockTagValue(rawChartBlock, "DESCRIPTION");
+  const difficulty = getBlockTagValue(rawChartBlock, "DIFFICULTY");
+  const meterText = getBlockTagValue(rawChartBlock, "METER");
+  const radarText = getBlockTagValue(rawChartBlock, "RADARVALUES");
+  const noteData = getBlockTagValue(rawChartBlock, "NOTES");
+  const measures = parseMeasureBlock(noteData);
 
   return {
-    metadata: {
-      title: getFirstTagValue(tags, "TITLE"),
-      subtitle: getFirstTagValue(tags, "SUBTITLE"),
-      artist: getFirstTagValue(tags, "ARTIST"),
-      credit: getFirstTagValue(tags, "CREDIT"),
-      banner: getFirstTagValue(tags, "BANNER"),
-      background: getFirstTagValue(tags, "BACKGROUND"),
-      music: getFirstTagValue(tags, "MUSIC"),
-      offset: Number.parseFloat(getFirstTagValue(tags, "OFFSET")) || 0,
-    },
+    stepType,
+    description,
+    difficulty,
+    meter: Number.parseInt(meterText, 10) || 0,
+    radarValues: radarText
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map((value) => Number.parseFloat(value))
+      .filter((value) => Number.isFinite(value)),
+    measures,
+    summary: summarizeMeasures(measures),
+  };
+};
+
+const parseSscCharts = (source: string): SimfileChart[] => {
+  const chartBlocks =
+    source.match(/#NOTEDATA:[\s\S]*?(?=(?:#NOTEDATA:)|$)/gi) ?? [];
+
+  return chartBlocks
+    .map(parseSscChart)
+    .filter((chart) => chart.measures.length > 0);
+};
+
+const parseMetadata = (tags: Map<string, string[]>): SimfileMetadata => ({
+  title: getFirstTagValue(tags, "TITLE"),
+  subtitle: getFirstTagValue(tags, "SUBTITLE"),
+  artist: getFirstTagValue(tags, "ARTIST"),
+  credit: getFirstTagValue(tags, "CREDIT"),
+  banner: getFirstTagValue(tags, "BANNER"),
+  background: getFirstTagValue(tags, "BACKGROUND"),
+  music: getFirstTagValue(tags, "MUSIC"),
+  offset: Number.parseFloat(getFirstTagValue(tags, "OFFSET")) || 0,
+});
+
+const isSupportedChart = (chart: SimfileChart): boolean =>
+  chart.stepType.trim().toLowerCase() === "dance-single";
+
+export const parseSimfile = (source: string): SimfileDocument => {
+  const tags = parseTagMap(source);
+  const sscCharts = parseSscCharts(source);
+  const charts =
+    sscCharts.length > 0
+      ? sscCharts.filter(isSupportedChart)
+      : (tags.get("NOTES") ?? []).map(parseChart).filter(isSupportedChart);
+
+  return {
+    metadata: parseMetadata(tags),
     bpms: parseBpms(getFirstTagValue(tags, "BPMS")),
     stops: parseStops(getFirstTagValue(tags, "STOPS")),
     charts,
   };
 };
+
+export const parseSmSimfile = parseSimfile;
 
 const getBpmAtBeat = (beat: number, bpms: BpmSegment[]): number => {
   if (bpms.length === 0) {

@@ -1,10 +1,10 @@
-import dogtownAudioUrl from "../../example-simfiles/Diskasting - Dogtown Clash Remix - [Zaia]/Dskasting Feat. Feral - Dogtown Clash Remix_gain-adjusted.ogg";
-import dogtownSimfileText from "../../example-simfiles/Diskasting - Dogtown Clash Remix - [Zaia]/Dogtown Clash Remix.sm?raw";
-import ferrariAudioUrl from "../../example-simfiles/Ferrari/Ferrari.ogg";
-import ferrariBackgroundUrl from "../../example-simfiles/Ferrari/ferrari-bg.png";
-import ferrariBannerUrl from "../../example-simfiles/Ferrari/ferrari.png";
-import ferrariSimfileText from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
-import { buildTimedChart, parseSmSimfile } from "./simfile";
+import bossyAudioUrl from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bossyremix.ogg";
+import bossyBackgroundUrl from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bg.png";
+import bossyBannerUrl from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bn.png";
+import bossySimfileText from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bossyremix.ssc?raw";
+import groovyAudioUrl from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.ogg";
+import groovySimfileText from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.sm?raw";
+import { buildTimedChart, parseSimfile } from "./simfile";
 import type { SimfileDocument, TimedChart } from "./simfile";
 
 type SongSourceType = "bundled" | "local";
@@ -74,7 +74,7 @@ const createSongSource = ({
   simfileText,
   resolver,
 }: SongSourceDefinition): LoadedSongSource => {
-  const document = parseSmSimfile(simfileText);
+  const document = parseSimfile(simfileText);
 
   return {
     id,
@@ -139,22 +139,21 @@ const createLocalResolver = (files: File[]): SongAssetResolver => {
 
 export const bundledSongSources: LoadedSongSource[] = [
   createSongSource({
-    id: "dogtown-clash-remix",
+    id: "bossy-jorts-speedy-mix",
     sourceType: "bundled",
-    simfileText: dogtownSimfileText,
+    simfileText: bossySimfileText,
     resolver: createBundledResolver({
-      "Dskasting Feat. Feral - Dogtown Clash Remix_gain-adjusted.ogg":
-        dogtownAudioUrl,
+      "bossyremix.ogg": bossyAudioUrl,
+      "bg.png": bossyBackgroundUrl,
+      "bn.png": bossyBannerUrl,
     }),
   }),
   createSongSource({
-    id: "ferrari",
+    id: "groovy-rollercoaster-acid-trip",
     sourceType: "bundled",
-    simfileText: ferrariSimfileText,
+    simfileText: groovySimfileText,
     resolver: createBundledResolver({
-      "Ferrari.ogg": ferrariAudioUrl,
-      "ferrari-bg.png": ferrariBackgroundUrl,
-      "ferrari.png": ferrariBannerUrl,
+      "Groovy Rollercoaster Acid Trip.ogg": groovyAudioUrl,
     }),
   }),
 ];
@@ -162,11 +161,11 @@ export const bundledSongSources: LoadedSongSource[] = [
 export const loadLocalSongSource = async (
   files: File[],
 ): Promise<LoadedSongSource> => {
-  const simfile = files.find((file) => /\.sm$/i.test(file.name));
+  const simfile = files.find((file) => /\.(?:sm|ssc)$/i.test(file.name));
 
   if (!simfile) {
     throw new Error(
-      "Select a simfile folder that contains a .sm file and its assets.",
+      "Select a simfile folder that contains a .sm or .ssc file and its assets.",
     );
   }
 
@@ -174,13 +173,13 @@ export const loadLocalSongSource = async (
   const simfileText = await simfile.text();
   const loadedSong = createSongSource({
     id: `local-${Date.now()}`,
-    label: `${simfile.name.replace(/\.sm$/i, "")} (Local)`,
+    label: `${simfile.name.replace(/\.(?:sm|ssc)$/i, "")} (Local)`,
     sourceType: "local",
     simfileText,
     resolver,
   });
 
-  loadedSong.label = `${getSongLabel(loadedSong.document, simfile.name.replace(/\.sm$/i, ""))} (Local)`;
+  loadedSong.label = `${getSongLabel(loadedSong.document, simfile.name.replace(/\.(?:sm|ssc)$/i, ""))} (Local)`;
   return loadedSong;
 };
 
