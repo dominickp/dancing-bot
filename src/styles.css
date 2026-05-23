@@ -655,7 +655,7 @@ body {
   top: 20px;
   left: 0;
   right: 0;
-  z-index: 2;
+  z-index: 4;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--lane-gap);
@@ -667,6 +667,7 @@ body {
   overflow: visible;
   display: grid;
   place-items: center;
+  isolation: isolate;
   width: var(--receptor-height);
   height: var(--receptor-height);
   border-radius: var(--receptor-radius);
@@ -676,6 +677,7 @@ body {
 .receptor-sprite {
   position: absolute;
   inset: 0;
+  z-index: 1;
   background-repeat: no-repeat;
   background-size: 100% 100%;
   background-position: center;
@@ -687,13 +689,13 @@ body {
   position: absolute;
   left: 50%;
   top: 50%;
+  z-index: 3;
   width: var(--explosion-size);
   height: var(--explosion-size);
   border-radius: 50%;
   pointer-events: none;
   opacity: 0;
   transform: translate(-50%, -50%) scale(0.4);
-  mix-blend-mode: screen;
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;

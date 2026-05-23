@@ -408,8 +408,8 @@ function App() {
       const panelAssets = resolvedNoteskin?.panelAssets[event.panel];
       const explosionSprite =
         event.kind === 'hold-head' || event.kind === 'roll-head'
-          ? panelAssets?.holdExplosion ?? panelAssets?.tapExplosionBright ?? panelAssets?.tapExplosionDim ?? null
-          : panelAssets?.tapExplosionBright ?? panelAssets?.tapExplosionDim ?? null;
+          ? panelAssets?.holdExplosion ?? panelAssets?.tapExplosionDim ?? panelAssets?.tapExplosionBright ?? null
+          : panelAssets?.tapExplosionDim ?? panelAssets?.tapExplosionBright ?? null;
       const explosionRotation = getPanelRotation(resolvedNoteskin, event.panel);
 
       receptor?.animate(
