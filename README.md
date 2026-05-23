@@ -10,14 +10,15 @@ Controls are based on ArrowVortex:
 - CTRL + mousewheel scroll zooms you in to the chart (spaces out the notes)
 - Click to drag the notefield to move it side to side
 
-## Todo/known issues
+## TODO / Known issues
 - Adjust dancing bot timing
+- Add assist tick sound
 - Footswitches not yet supported
 - Crossing over and turning not yet supported
 - Brackets not yet supported
 - Hands not yet supported
 
-For the above reasons, a lot of tech charts don't work well right now. What does work well are stamina songs/streams.
+For some of the above reasons, a lot of tech charts don't work well right now. What does work well are stamina songs/streams.
 
 ## Run
 ```bash
