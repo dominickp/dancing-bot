@@ -812,6 +812,7 @@ body {
 .lane-note {
   position: absolute;
   left: 50%;
+  z-index: 1;
   width: var(--receptor-height);
   height: var(--receptor-height);
   transform: translateX(-50%);
@@ -843,15 +844,23 @@ body {
 .hold-body {
   position: absolute;
   left: 50%;
-  z-index: 1;
+  z-index: 0;
   width: var(--hold-width);
   transform: translateX(-50%);
-  border-radius: 999px;
   backface-visibility: hidden;
   background-repeat: repeat-y;
   background-position: center top;
   background-size: 100% auto;
   box-shadow: 0 0 20px rgba(255, 255, 255, 0.14);
+}
+
+.hold-cap {
+  position: absolute;
+  left: 50%;
+  z-index: 0;
+  width: var(--receptor-height);
+  height: var(--receptor-height);
+  pointer-events: none;
 }
 
 .lane-note.mine {

@@ -35,7 +35,6 @@ const baseLaneGap = 0;
 const baseSidePadding = 12;
 const baseNoteWidth = 44;
 const baseNoteHeight = 44;
-const baseHoldWidth = 18;
 const baseReceptorHeight = 56;
 const baseExplosionSize = 110;
 const minVisualScale = 0.68;
@@ -47,6 +46,7 @@ interface HoldSegment {
   panel: PanelName;
   startBeat: number;
   endBeat: number;
+  kind: 'hold' | 'roll';
 }
 
 interface MinimapMeasure {
@@ -166,8 +166,8 @@ const getSpriteBackgroundStyle = (
   rotation: number,
   baseStyle: CSSProperties = {},
 ): CSSProperties => ({
-  ...baseStyle,
   ...getSpriteFillStyle(sprite),
+  ...baseStyle,
   transform: baseStyle.transform ?? `rotate(${rotation}deg)`,
 });
 
@@ -259,12 +259,15 @@ const getNoteColor = (sprite: ResolvedSpriteAsset | null, beat: number): string 
 };
 
 const buildHoldSegments = (events: TimedNoteEvent[]): HoldSegment[] => {
-  const activeHeads = new Map<PanelName, number>();
+  const activeHeads = new Map<PanelName, { startBeat: number; kind: HoldSegment['kind'] }>();
   const segments: HoldSegment[] = [];
 
   for (const event of events) {
     if (event.kind === 'hold-head' || event.kind === 'roll-head') {
-      activeHeads.set(event.panel, event.beat);
+      activeHeads.set(event.panel, {
+        startBeat: event.beat,
+        kind: event.kind === 'roll-head' ? 'roll' : 'hold',
+      });
       continue;
     }
 
@@ -272,16 +275,17 @@ const buildHoldSegments = (events: TimedNoteEvent[]): HoldSegment[] => {
       continue;
     }
 
-    const startBeat = activeHeads.get(event.panel);
+    const activeHead = activeHeads.get(event.panel);
 
-    if (startBeat === undefined) {
+    if (!activeHead) {
       continue;
     }
 
     segments.push({
       panel: event.panel,
-      startBeat,
+      startBeat: activeHead.startBeat,
       endBeat: event.beat,
+      kind: activeHead.kind,
     });
     activeHeads.delete(event.panel);
   }
@@ -346,8 +350,8 @@ function App() {
   );
   const noteWidth = Math.max(Math.round(baseNoteWidth * visualScale), 28);
   const noteHeight = Math.max(Math.round(baseNoteHeight * visualScale), 12);
-  const holdWidth = Math.max(Math.round(baseHoldWidth * visualScale), 12);
   const receptorHeight = Math.max(Math.round(baseReceptorHeight * visualScale), 28);
+  const holdWidth = receptorHeight;
   const receptorRadius = Math.max(Math.round(14 * visualScale), 10);
   const explosionSize = Math.round(receptorHeight * 1.28);
   const chartContentHeight = (selectedTimedChart.lastBeat + renderBufferBeats * 2) * pixelsPerBeat + receptorOffset;
@@ -445,6 +449,7 @@ function App() {
     () =>
       selectedTimedChart.events.filter(
         (event) =>
+          event.kind !== 'hold-tail' &&
           event.beat >= renderBeatAnchor - renderBufferBeats &&
           event.beat <= renderBeatAnchor + visibleBeats + renderBufferBeats,
       ),
@@ -656,17 +661,47 @@ function App() {
       getPanelRotation(resolvedNoteskin, panel),
     );
 
-  const getHoldStyle = (segment: HoldSegment): CSSProperties =>
-    getSpriteBackgroundStyle(
-      resolvedNoteskin?.panelAssets[segment.panel].holdBodyActive ?? null,
-      getPanelRotation(resolvedNoteskin, segment.panel),
-      {
-        top: segment.startBeat * pixelsPerBeat,
-        height: Math.max((segment.endBeat - segment.startBeat) * pixelsPerBeat, 10),
-        left: '50%',
-        transform: `translateX(-50%) rotate(${getPanelRotation(resolvedNoteskin, segment.panel)}deg)`,
-      },
-    );
+  const getHoldStyle = (segment: HoldSegment): CSSProperties => {
+    const panelAssets = resolvedNoteskin?.panelAssets[segment.panel];
+    const bodySprite =
+      segment.kind === 'roll'
+        ? panelAssets?.rollBodyInactive ?? panelAssets?.holdBodyInactive ?? null
+        : panelAssets?.holdBodyInactive ?? panelAssets?.rollBodyInactive ?? null;
+    const bodyTop = segment.startBeat * pixelsPerBeat;
+    const capHeight = Math.max(Math.round(holdWidth / 2), 12);
+    const bodyBottom = segment.endBeat * pixelsPerBeat - capHeight / 2;
+    const bodyHeight = Math.max(bodyBottom - bodyTop, 8);
+
+    return getSpriteBackgroundStyle(bodySprite, 0, {
+      top: bodyTop,
+      height: bodyHeight,
+      left: '50%',
+      backgroundRepeat: 'repeat-y',
+      backgroundSize: '100% auto',
+      backgroundPosition: '0% 100%',
+      transform: 'translateX(-50%)',
+    });
+  };
+
+  const getHoldCapStyle = (segment: HoldSegment): CSSProperties => {
+    const panelAssets = resolvedNoteskin?.panelAssets[segment.panel];
+    const capSprite =
+      segment.kind === 'roll'
+        ? panelAssets?.rollBottomCapInactive ?? panelAssets?.holdBottomCapInactive ?? null
+        : panelAssets?.holdBottomCapInactive ?? panelAssets?.rollBottomCapInactive ?? null;
+    const capHeight = Math.max(Math.round(holdWidth / 2), 12);
+
+    return getSpriteBackgroundStyle(capSprite, 0, {
+      top: segment.endBeat * pixelsPerBeat,
+      left: '50%',
+      width: holdWidth,
+      height: capHeight,
+      backgroundSize: '100% 100%',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      transform: 'translate(-50%, -50%)',
+    });
+  };
 
   const getEventStyle = (event: TimedNoteEvent): CSSProperties => {
     const noteSprite = getNoteSprite(resolvedNoteskin?.panelAssets[event.panel], event);
@@ -797,6 +832,7 @@ function App() {
         explosionRefs={explosionRefs}
         getNoteDetailStyle={getEventDetailStyle}
         getHoldStyle={getHoldStyle}
+        getHoldCapStyle={getHoldCapStyle}
         getNoteFrameStyle={getEventFrameStyle}
         getNoteStyle={getEventStyle}
         getNoteUnderlayStyle={getEventUnderlayStyle}

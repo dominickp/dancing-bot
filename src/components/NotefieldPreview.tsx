@@ -5,6 +5,7 @@ interface HoldSegmentView {
   panel: Panel;
   startBeat: number;
   endBeat: number;
+  kind: 'hold' | 'roll';
 }
 
 interface MinimapMeasureView {
@@ -24,6 +25,7 @@ interface NotefieldPreviewProps {
   explosionRefs: MutableRefObject<Record<Panel, HTMLDivElement | null>>;
   getNoteDetailStyle: (event: TimedNoteEvent) => CSSProperties | null;
   getHoldStyle: (segment: HoldSegmentView) => CSSProperties;
+  getHoldCapStyle: (segment: HoldSegmentView) => CSSProperties;
   getNoteFrameStyle: (event: TimedNoteEvent) => CSSProperties;
   getNoteStyle: (event: TimedNoteEvent) => CSSProperties;
   getNoteUnderlayStyle: (event: TimedNoteEvent) => CSSProperties | null;
@@ -54,6 +56,7 @@ export function NotefieldPreview({
   explosionRefs,
   getNoteDetailStyle,
   getHoldStyle,
+  getHoldCapStyle,
   getNoteFrameStyle,
   getNoteStyle,
   getNoteUnderlayStyle,
@@ -120,13 +123,14 @@ export function NotefieldPreview({
                   <div key={panel} className="lane-column" data-panel={panel} style={{ height: chartContentHeight }}>
                     {visibleHolds
                       .filter((segment) => segment.panel === panel)
-                      .map((segment) => (
-                        <div
-                          key={`${segment.panel}-${segment.startBeat}-${segment.endBeat}`}
-                          className="hold-body"
-                          style={getHoldStyle(segment)}
-                        />
-                      ))}
+                      .flatMap((segment) => {
+                        const segmentKey = `${segment.panel}-${segment.startBeat}-${segment.endBeat}-${segment.kind}`;
+
+                        return [
+                          <div key={`${segmentKey}-body`} className="hold-body" style={getHoldStyle(segment)} />,
+                          <div key={`${segmentKey}-cap`} className="hold-cap" style={getHoldCapStyle(segment)} />,
+                        ];
+                      })}
 
                     {visibleEvents
                       .filter((event) => event.panel === panel)
