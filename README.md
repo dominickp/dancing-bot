@@ -13,6 +13,7 @@ Controls are based on ArrowVortex:
 ## TODO / Known issues
 - Adjust dancing bot timing
 - Add assist tick sound
+- Add rate mod (speed/slow down song/animation)
 - Footswitches not yet supported
 - Crossing over and turning not yet supported
 - Brackets not yet supported
