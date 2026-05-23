@@ -9,13 +9,14 @@ import {
 import type { ResolvedDanceNoteskin, ResolvedSpriteAsset } from './lib/noteskin';
 import {
   buildBotTimeline,
+  defaultBotFootStyle,
   BotWindowRect,
   BotWindowInteraction,
   clampBotWindowRect,
   defaultBotFormStyle,
   DancingBotWindow,
 } from './components/DancingBotWindow';
-import type { BotFormStyleId } from './components/DancingBotWindow';
+import type { BotFootStyleId, BotFormStyleId } from './components/DancingBotWindow';
 import type { BotStep } from './components/DancingBotWindow';
 import { NotefieldPreview } from './components/NotefieldPreview';
 import { useChartPlayback } from './hooks/useChartPlayback';
@@ -303,6 +304,7 @@ function App() {
   const [selectedSongId, setSelectedSongId] = useState(bundledSongSources[0]?.id ?? '');
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
   const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(defaultBotFormStyle);
+  const [selectedBotFootStyle, setSelectedBotFootStyle] = useState<BotFootStyleId>(defaultBotFootStyle);
   const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(true);
   const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(true);
   const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
@@ -664,6 +666,21 @@ function App() {
     restoreNotefieldFocus();
   };
 
+  const handleBotFootStyleCycle = () => {
+    setSelectedBotFootStyle((currentStyle) => {
+      if (currentStyle === 'default') {
+        return 'silhouette-white';
+      }
+
+      if (currentStyle === 'silhouette-white') {
+        return 'shoe';
+      }
+
+      return 'default';
+    });
+    restoreNotefieldFocus();
+  };
+
   const handleBotPanelGlowToggle = () => {
     setIsBotPanelGlowEnabled((currentValue) => !currentValue);
     restoreNotefieldFocus();
@@ -909,9 +926,11 @@ function App() {
             resolvedNoteskin={resolvedNoteskin}
             playbackClockRef={playbackClockRef}
             selectedFormStyle={selectedBotFormStyle}
+            selectedFootStyle={selectedBotFootStyle}
             isPanelGlowEnabled={isBotPanelGlowEnabled}
             isPanelLightsEnabled={isBotPanelLightsEnabled}
             onFormStyleChange={handleBotFormStyleChange}
+            onFootStyleCycle={handleBotFootStyleCycle}
             onPanelGlowToggle={handleBotPanelGlowToggle}
             onPanelLightsToggle={handleBotPanelLightsToggle}
             beginBotWindowInteraction={beginBotWindowInteraction}

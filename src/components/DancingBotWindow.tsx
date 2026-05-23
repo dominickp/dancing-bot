@@ -9,6 +9,8 @@ import type { PlaybackClock } from '../hooks/useChartPlayback';
 type FootName = 'left' | 'right';
 export type BotFormStyleId = 'straight-wide' | 'straight-minimal' | 'heels-out' | 'toes-out';
 export const defaultBotFormStyle: BotFormStyleId = 'straight-wide';
+export type BotFootStyleId = 'default' | 'silhouette-white' | 'shoe';
+export const defaultBotFootStyle: BotFootStyleId = 'default';
 
 interface BotPanelTarget {
   x: number;
@@ -241,12 +243,33 @@ const botFutureControlSlots = [
     label: 'Form',
     description: 'Reserved for the next form style.',
   },
-  {
-    key: 'shoe-image',
-    label: 'Shoes',
-    description: 'Reserved for shoe image selection.',
-  },
 ] as const;
+
+const botFootStyleOptions: Array<{
+  id: BotFootStyleId;
+  label: string;
+  tooltip: string;
+  image: string | null;
+}> = [
+  {
+    id: 'default',
+    label: 'Classic',
+    tooltip: 'Foot Style: Classic. Click to cycle to the next foot style.',
+    image: null,
+  },
+  {
+    id: 'silhouette-white',
+    label: 'Silhouette',
+    tooltip: 'Foot Style: Silhouette White. Click to cycle to the next foot style.',
+    image: `${baseAssetUrl}img/foot_sillouette-white.png`,
+  },
+  {
+    id: 'shoe',
+    label: 'Shoe',
+    tooltip: 'Foot Style: Shoe. Click to cycle to the next foot style.',
+    image: `${baseAssetUrl}img/foot_shoe.png`,
+  },
+];
 
 const botPanelToggleOptions = [
   {
@@ -845,9 +868,11 @@ interface DancingBotWindowProps {
   resolvedNoteskin: ResolvedDanceNoteskin | null;
   playbackClockRef: { current: PlaybackClock | null };
   selectedFormStyle: BotFormStyleId;
+  selectedFootStyle: BotFootStyleId;
   isPanelGlowEnabled: boolean;
   isPanelLightsEnabled: boolean;
   onFormStyleChange: (nextStyle: BotFormStyleId) => void;
+  onFootStyleCycle: () => void;
   onPanelGlowToggle: () => void;
   onPanelLightsToggle: () => void;
   beginBotWindowInteraction: (
@@ -865,9 +890,11 @@ export function DancingBotWindow({
   resolvedNoteskin,
   playbackClockRef,
   selectedFormStyle,
+  selectedFootStyle,
   isPanelGlowEnabled,
   isPanelLightsEnabled,
   onFormStyleChange,
+  onFootStyleCycle,
   onPanelGlowToggle,
   onPanelLightsToggle,
   beginBotWindowInteraction,
@@ -918,6 +945,10 @@ export function DancingBotWindow({
   const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
   const botFootAngles = useMemo(() => getBotFootAngles(selectedFormStyle), [selectedFormStyle]);
   const botPanelTimeline = useMemo(() => buildBotPanelTimeline(botTimeline), [botTimeline]);
+  const selectedFootStyleOption = useMemo(
+    () => botFootStyleOptions.find((option) => option.id === selectedFootStyle) ?? botFootStyleOptions[0],
+    [selectedFootStyle],
+  );
   const botState = useMemo(
     () => sampleBotState(botTimeline, botPanelTimeline, botFootTargets, botFootAngles, playbackSnapshot.timeSeconds),
     [botFootAngles, botFootTargets, botPanelTimeline, botTimeline, playbackSnapshot.timeSeconds],
@@ -1022,14 +1053,15 @@ export function DancingBotWindow({
                 <span className="bot-future-control-value">{isPanelLightsEnabled ? 'On' : 'Off'}</span>
               </button>
 
-              <div
-                className="bot-future-control-slot"
-                aria-hidden="true"
-                data-tooltip={botFutureControlSlots[1].description}
+              <button
+                type="button"
+                className={`bot-future-control-slot bot-future-control-toggle${selectedFootStyle !== 'default' ? ' is-enabled' : ''}`}
+                data-tooltip={selectedFootStyleOption.tooltip}
+                onClick={onFootStyleCycle}
               >
-                <span className="bot-future-control-label">{botFutureControlSlots[1].label}</span>
-                <span className="bot-future-control-value">Coming soon</span>
-              </div>
+                <span className="bot-future-control-label">Feet</span>
+                <span className="bot-future-control-value">{selectedFootStyleOption.label}</span>
+              </button>
             </div>
           </div>
         </section>
@@ -1071,11 +1103,12 @@ export function DancingBotWindow({
 
             {footNames.map((footName) => {
               const foot = botState.feet[footName];
+              const isImageFoot = selectedFootStyleOption.image !== null;
 
               return (
                 <div
                   key={footName}
-                  className={`bot-foot bot-foot-${footName}${foot.isHolding ? ' is-holding' : ''}${foot.isPressing ? ' is-pressing' : ''}`}
+                  className={`bot-foot bot-foot-${footName}${foot.isHolding ? ' is-holding' : ''}${foot.isPressing ? ' is-pressing' : ''}${isImageFoot ? ' is-image-foot' : ''}`}
                   style={{
                     left: `${foot.x}%`,
                     top: `${foot.y}%`,
@@ -1083,7 +1116,15 @@ export function DancingBotWindow({
                   }}
                   title={`${footName} foot on ${foot.panel}`}
                 >
-                  <span>{footName === 'left' ? 'L' : 'R'}</span>
+                  {selectedFootStyleOption.image ? (
+                    <img
+                      src={selectedFootStyleOption.image}
+                      alt=""
+                      className={`bot-foot-image${footName === 'right' ? ' is-mirrored' : ''}`}
+                    />
+                  ) : (
+                    <span>{footName === 'left' ? 'L' : 'R'}</span>
+                  )}
                 </div>
               );
             })}
