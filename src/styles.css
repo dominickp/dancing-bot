@@ -162,6 +162,10 @@ body {
   cursor: ns-resize;
 }
 
+.notefield-frame:focus {
+  outline: none;
+}
+
 .bot-window {
   position: absolute;
   z-index: 5;
