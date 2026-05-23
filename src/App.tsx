@@ -877,48 +877,59 @@ function App() {
         </div>
 
         <div className="toolbar-controls">
-          <label className="toolbar-field">
-            <span>Song</span>
-            <select value={selectedSong?.id ?? ''} onChange={handleSongChange} onBlur={handleDropdownBlur}>
-              {availableSongSources.map((songSource) => (
-                <option key={songSource.id} value={songSource.id}>
-                  {songSource.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <a
+            className="toolbar-link"
+            href="https://github.com/dominickp/dancing-bot"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View source on GitHub
+          </a>
 
-          <label className="toolbar-field">
-            <span>Chart</span>
-            <select value={selectedChartIndex} disabled={simfile.charts.length === 0} onChange={handleChartChange} onBlur={handleDropdownBlur}>
-              {simfile.charts.map((chart, chartIndex) => (
-                <option key={`${chart.stepType}-${chart.difficulty}-${chartIndex}`} value={chartIndex}>
-                  {chart.difficulty} {chart.meter} - {chart.description || chart.stepType}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="toolbar-control-row">
+            <label className="toolbar-field">
+              <span>Song</span>
+              <select value={selectedSong?.id ?? ''} onChange={handleSongChange} onBlur={handleDropdownBlur}>
+                {availableSongSources.map((songSource) => (
+                  <option key={songSource.id} value={songSource.id}>
+                    {songSource.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label className="toolbar-field toolbar-field-action">
-            <span>Import Simfile</span>
-            <button type="button" className="toolbar-button" onClick={() => songImportRef.current?.click()}>
-              Load song folder
-            </button>
-            <input
-              ref={(element) => {
-                songImportRef.current = element;
+            <label className="toolbar-field">
+              <span>Chart</span>
+              <select value={selectedChartIndex} disabled={simfile.charts.length === 0} onChange={handleChartChange} onBlur={handleDropdownBlur}>
+                {simfile.charts.map((chart, chartIndex) => (
+                  <option key={`${chart.stepType}-${chart.difficulty}-${chartIndex}`} value={chartIndex}>
+                    {chart.difficulty} {chart.meter} - {chart.description || chart.stepType}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-                if (element) {
-                  element.setAttribute('webkitdirectory', '');
-                  element.setAttribute('directory', '');
-                }
-              }}
-              hidden
-              type="file"
-              multiple
-              onChange={handleImportSongFolder}
-            />
-          </label>
+            <label className="toolbar-field toolbar-field-action">
+              <span>Import Simfile</span>
+              <button type="button" className="toolbar-button" onClick={() => songImportRef.current?.click()}>
+                Load song folder
+              </button>
+              <input
+                ref={(element) => {
+                  songImportRef.current = element;
+
+                  if (element) {
+                    element.setAttribute('webkitdirectory', '');
+                    element.setAttribute('directory', '');
+                  }
+                }}
+                hidden
+                type="file"
+                multiple
+                onChange={handleImportSongFolder}
+              />
+            </label>
+          </div>
         </div>
       </header>
 

@@ -14,6 +14,7 @@ Controls are based on ArrowVortex:
 - Footswitches not yet supported
 - Crossing over and turning not yet supported
 - Brackets not yet supported
+- Hands not yet supported
 
 For the above reasons, a lot of tech charts don't work well right now. What does work well are stamina songs/streams.
 

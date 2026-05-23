@@ -62,6 +62,26 @@ body {
   color: rgba(248, 244, 233, 0.72);
 }
 
+.toolbar-link {
+  display: inline-flex;
+  align-items: center;
+  color: #6a6a6a;
+  text-decoration: none;
+  font-size: 0.84rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.toolbar-link:hover {
+  color: #bbbbbb;
+}
+
+.toolbar-link:focus-visible {
+  outline: 2px solid rgba(255, 177, 74, 0.55);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
 .toolbar-message {
   margin: 6px 0 0;
   font-size: 0.82rem;
@@ -73,8 +93,16 @@ body {
 
 .toolbar-controls {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.toolbar-control-row {
+  display: flex;
   gap: 16px;
   align-items: end;
+  justify-content: flex-end;
   flex-wrap: wrap;
 }
 
@@ -1192,6 +1220,16 @@ body {
     padding: 16px;
     align-items: start;
     flex-direction: column;
+  }
+
+  .toolbar-link {
+    white-space: normal;
+  }
+
+  .toolbar-controls,
+  .toolbar-control-row {
+    align-items: start;
+    justify-content: flex-start;
   }
 
   .notefield-panel {
