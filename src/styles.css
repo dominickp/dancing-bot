@@ -672,7 +672,8 @@ body {
   top: 34.75%;
 }
 
-.bot-pad-panel.is-active {
+.bot-pad-panel.is-active.is-glow-enabled,
+.bot-pad-panel.is-active.is-lights-enabled {
   transform: scale(1.03);
 }
 

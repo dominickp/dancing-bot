@@ -975,10 +975,6 @@ export function DancingBotWindow({
       <div className="bot-window-body">
         <section className="bot-settings-panel" aria-label="Dancing bot settings">
           <div className="bot-settings-group">
-            <div className="bot-settings-group-header">
-              <span>Form Style</span>
-            </div>
-
             <div className="bot-icon-toggle-grid" role="radiogroup" aria-label="Bot form style">
               {botFormIconOptions.map((option) => {
                 const isSelected = option.id === selectedFormStyle;
@@ -1015,10 +1011,6 @@ export function DancingBotWindow({
           </div>
 
           <div className="bot-settings-group">
-            <div className="bot-settings-group-header">
-              <span>More Controls</span>
-            </div>
-
             <div className="bot-future-control-grid" aria-label="Upcoming controls">
               <div
                 className="bot-future-control-slot"
