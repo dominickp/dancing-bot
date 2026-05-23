@@ -7,7 +7,7 @@ import type { Panel, SimfileDocument, TimedNoteEvent } from '../lib/simfile';
 import type { PlaybackClock } from '../hooks/useChartPlayback';
 
 type FootName = 'left' | 'right';
-export type BotFormStyleId = 'straight-wide' | 'straight-minimal' | 'heels-out' | 'toes-out';
+export type BotFormStyleId = 'straight-wide' | 'straight-minimal' | 'heels-out' | 'toes-out' | 'slanted-right';
 export const defaultBotFormStyle: BotFormStyleId = 'straight-wide';
 export type BotFootStyleId = 'default' | 'silhouette-white' | 'shoe';
 export const defaultBotFootStyle: BotFootStyleId = 'silhouette-white';
@@ -144,11 +144,24 @@ const botToesOutFootTargets: BotFootTargetMap = {
     right: { x: 60, y: 44 },
   },
 };
+const botSlantedRightFootTargets: BotFootTargetMap = {
+  left: botHeelsOutFootTargets.left,
+  right: botToesOutFootTargets.right,
+};
 const botFootTargetsByForm: Record<BotFormStyleId, BotFootTargetMap> = {
   'straight-wide': botWideFootTargets,
   'straight-minimal': botMinimalFootTargets,
   'heels-out': botHeelsOutFootTargets,
   'toes-out': botToesOutFootTargets,
+  'slanted-right': botSlantedRightFootTargets,
+};
+const botHeelsOutFootAngles: BotFootAngleMap = {
+  left: { left: 38, down: 14, up: 16, right: 24 },
+  right: { left: -24, down: -14, up: -16, right: -38 },
+};
+const botToesOutFootAngles: BotFootAngleMap = {
+  left: { left: -40, down: -6, up: -10, right: -26 },
+  right: { left: 26, down: 6, up: 10, right: 40 },
 };
 const botFootAnglesByForm: Record<BotFormStyleId, BotFootAngleMap> = {
   'straight-wide': {
@@ -159,13 +172,11 @@ const botFootAnglesByForm: Record<BotFormStyleId, BotFootAngleMap> = {
     left: { left: -9, down: -9, up: -9, right: -9 },
     right: { left: 9, down: 9, up: 9, right: 9 },
   },
-  'heels-out': {
-    left: { left: 38, down: 14, up: 16, right: 24 },
-    right: { left: -24, down: -14, up: -16, right: -38 },
-  },
-  'toes-out': {
-    left: { left: -40, down: -6, up: -10, right: -26 },
-    right: { left: 26, down: 6, up: 10, right: 40 },
+  'heels-out': botHeelsOutFootAngles,
+  'toes-out': botToesOutFootAngles,
+  'slanted-right': {
+    left: botHeelsOutFootAngles.left,
+    right: botToesOutFootAngles.right,
   },
 };
 const botWindowMinWidth = 248;
@@ -214,6 +225,7 @@ const botFormStyleOptions = [
   { id: 'straight-minimal', label: 'Straight Form (Minimal)' },
   { id: 'heels-out', label: 'Heels Out' },
   { id: 'toes-out', label: 'Toes Out' },
+  { id: 'slanted-right', label: 'Slanted Form (Right)' },
 ] as const;
 const baseAssetUrl = import.meta.env.BASE_URL;
 const botFormIconOptions: Array<{
@@ -245,6 +257,12 @@ const botFormIconOptions: Array<{
     tooltip: 'Toes Out (Based)',
     image: `${baseAssetUrl}img/form_toe-out.png`,
     accent: '#80e3bb',
+  },
+  {
+    id: 'slanted-right',
+    tooltip: 'Slanted Right',
+    image: `${baseAssetUrl}img/form_slanted-right.png`,
+    accent: '#d2a9ff',
   },
 ];
 const botFootStyleOptions: Array<{
@@ -1011,16 +1029,6 @@ export function DancingBotWindow({
                   </button>
                 );
               })}
-
-              <div
-                className="bot-icon-toggle bot-icon-toggle-placeholder"
-                aria-hidden="true"
-                data-tooltip="Reserved for an additional form style."
-              >
-                <span className="bot-icon-toggle-swatch">
-                  <span className="bot-icon-toggle-plus">+</span>
-                </span>
-              </div>
             </div>
           </div>
 
