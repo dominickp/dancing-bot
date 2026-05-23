@@ -11,6 +11,8 @@ Controls are based on ArrowVortex:
 - Click to drag the notefield to move it side to side
 
 ## TODO / Known issues
+- Investigate smeditor/itgmania tech parse as a reference (since it has code that detects which foot, and part of the foot, should be used for each step)
+  - https://github.com/itgmania/itgmania/blob/release/src/StepParityGenerator.h
 - Adjust dancing bot timing
 - Add assist tick sound
 - Add rate mod (speed/slow down song/animation)
