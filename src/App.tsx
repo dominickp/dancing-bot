@@ -856,11 +856,6 @@ function App() {
               onChange={handleImportSongFolder}
             />
           </label>
-
-          <div className="toolbar-badges">
-            <span>{selectedChart?.difficulty} {selectedChart?.meter ?? 0}</span>
-            <span>Beat {displayBeat.toFixed(2)}</span>
-          </div>
         </div>
       </header>
 
