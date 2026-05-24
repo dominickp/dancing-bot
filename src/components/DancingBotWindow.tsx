@@ -42,8 +42,10 @@ export interface BotStep {
   footPart: BotFootPart | null;
   fromPanel: Panel;
   toPanel: Panel;
+  isLifted: boolean;
   heelPanel: Panel | null;
   toePanel: Panel | null;
+  activePanels: Panel[];
   hitBeat: number;
   hitTimeSeconds: number;
   moveStartTimeSeconds: number;
@@ -67,12 +69,20 @@ interface BotFootPose {
   scale: number;
   isHolding: boolean;
   isPressing: boolean;
+  isLifted: boolean;
   lastStepBeat: number;
 }
 
 interface BotViewState {
   feet: Record<FootName, BotFootPose>;
   activePanels: Record<Panel, boolean>;
+}
+
+interface BotFootMotionSample {
+  pose: BotFootPose;
+  completedStep: BotStep | null;
+  upcomingStep: BotStep | null;
+  moveProgress: number;
 }
 
 interface BotPlaybackSnapshot {
@@ -203,6 +213,7 @@ const botRollRetriggerBeats = 0.5;
 const botHoldScale = 1.06;
 const botPressScale = 1.12;
 const botTravelLiftScale = 0.08;
+const botFootswitchLiftHeight = 9;
 const botPadArrowColorsByStyle: Record<BotPadStyleId, Record<Panel, string>> = {
   itg: {
     left: '#51a8ff',
@@ -346,6 +357,16 @@ const getBotPanelEffectStyle = (panel: Panel, padStyle: BotPadStyleId): CSSPrope
   ['--bot-panel-accent' as string]: getBotPadArrowColor(panel, padStyle),
 });
 
+const getUniquePanels = (...panels: Array<Panel | null>): Panel[] => {
+  const values = panels.filter((panel): panel is Panel => panel !== null);
+  return [...new Set(values)];
+};
+
+const isBracketStep = (step: Pick<BotStep, 'heelPanel' | 'toePanel'>): boolean =>
+  step.heelPanel !== null && step.toePanel !== null && step.heelPanel !== step.toePanel;
+
+const getHomePanel = (foot: FootName): Panel => (foot === 'left' ? 'left' : 'right');
+
 const buildBotPanelTimeline = (stepsByFoot: Record<FootName, BotStep[]>): BotPanelTimeline => {
   const stepsByPanel: Record<Panel, BotStep[]> = {
     left: [],
@@ -356,7 +377,11 @@ const buildBotPanelTimeline = (stepsByFoot: Record<FootName, BotStep[]>): BotPan
 
   for (const footName of footNames) {
     for (const step of stepsByFoot[footName]) {
-      stepsByPanel[step.toPanel].push(step);
+      const activePanels = step.activePanels.length > 0 ? step.activePanels : [];
+
+      for (const panel of activePanels) {
+        stepsByPanel[panel].push(step);
+      }
     }
   }
 
@@ -610,8 +635,50 @@ const getAnchorPanel = (foot: FootName, heelPanel: Panel | null, toePanel: Panel
   return toePanel ?? heelPanel ?? 'right';
 };
 
+const getBracketAngle = (foot: FootName, heelTarget: BotPanelTarget, toeTarget: BotPanelTarget): number => {
+  const deltaX = toeTarget.x - heelTarget.x;
+  const deltaY = toeTarget.y - heelTarget.y;
+  const baseAngle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI + 90;
+
+  if (foot === 'left') {
+    return Math.min(152, Math.max(-72, baseAngle));
+  }
+
+  return Math.min(72, Math.max(-152, baseAngle));
+};
+
+
+const getCrossoverTarget = (
+  step: Pick<BotStep, 'foot' | 'fromPanel' | 'toPanel'>,
+  footTargets: BotFootTargetMap,
+  footAngles: BotFootAngleMap,
+): { x: number; y: number; angle: number; panel: Panel } | null => {
+  if (step.foot === 'right' && step.toPanel === 'left') {
+    const baseTarget = footTargets.right.left;
+
+    return {
+      x: baseTarget.x + 10,
+      y: baseTarget.y - 10,
+      angle: -102,
+      panel: 'left',
+    };
+  }
+
+  if (step.foot === 'left' && step.toPanel === 'right') {
+    const baseTarget = footTargets.left.right;
+
+    return {
+      x: baseTarget.x - 10,
+      y: baseTarget.y - 10,
+      angle: 102,
+      panel: 'right',
+    };
+  }
+
+  return null;
+};
 const getStepPoseTarget = (
-  step: Pick<BotStep, 'foot' | 'toPanel' | 'heelPanel' | 'toePanel'>,
+  step: Pick<BotStep, 'foot' | 'fromPanel' | 'toPanel' | 'heelPanel' | 'toePanel'>,
   footTargets: BotFootTargetMap,
   footAngles: BotFootAngleMap,
 ): { x: number; y: number; angle: number; panel: Panel } => {
@@ -624,9 +691,15 @@ const getStepPoseTarget = (
     return {
       x: (heelTarget.x + toeTarget.x) / 2,
       y: (heelTarget.y + toeTarget.y) / 2,
-      angle: ((heelAngle ?? 0) + (toeAngle ?? 0)) / 2,
+      angle: getBracketAngle(step.foot, heelTarget, toeTarget),
       panel: step.toPanel,
     };
+  }
+
+  const crossoverTarget = getCrossoverTarget(step, footTargets, footAngles);
+
+  if (crossoverTarget) {
+    return crossoverTarget;
   }
 
   const fallbackPanel = step.heelPanel ?? step.toePanel ?? step.toPanel;
@@ -638,6 +711,152 @@ const getStepPoseTarget = (
   };
 };
 
+const applyCrossoverTurn = (
+  feet: Record<FootName, BotFootPose>,
+  footTargets: BotFootTargetMap,
+  footMotion: Record<FootName, BotFootMotionSample>,
+): Record<FootName, BotFootPose> => {
+  const crossoverDistance = feet.left.x - feet.right.x;
+  const isRightFootCrossingLeft = feet.right.panel === 'left' || footMotion.right.upcomingStep?.toPanel === 'left';
+  const isLeftFootCrossingRight = feet.left.panel === 'right' || footMotion.left.upcomingStep?.toPanel === 'right';
+
+  if (crossoverDistance <= 0 && !isRightFootCrossingLeft && !isLeftFootCrossingRight) {
+    return feet;
+  }
+
+  const crossingFoot: FootName | null = isRightFootCrossingLeft ? 'right' : isLeftFootCrossingRight ? 'left' : null;
+
+  if (!crossingFoot) {
+    return feet;
+  }
+
+  const supportFoot = getOtherFoot(crossingFoot);
+  const isFacingLeft = crossingFoot === 'right';
+  const bodyFacingAngle = isFacingLeft ? -92 : 92;
+  const leadFootOffset = isFacingLeft ? -8 : 8;
+  const trailingFootOffset = isFacingLeft ? 4 : -4;
+  const referenceStartX = isRightFootCrossingLeft
+    ? Math.max(footTargets.right.up.x, footTargets.right.down.x, footTargets.right.right.x)
+    : Math.min(footTargets.left.up.x, footTargets.left.down.x, footTargets.left.left.x);
+  const referenceEndX = isRightFootCrossingLeft
+    ? footTargets.right.left.x + 10
+    : footTargets.left.right.x - 10;
+  const travelRangeX = Math.max(Math.abs(referenceStartX - referenceEndX), 0.001);
+  const travelProgress = isRightFootCrossingLeft
+    ? clamp((referenceStartX - feet.right.x) / travelRangeX, 0, 1)
+    : isLeftFootCrossingRight
+      ? clamp((feet.left.x - referenceStartX) / travelRangeX, 0, 1)
+      : 0;
+  const geometricBlend = isRightFootCrossingLeft || isLeftFootCrossingRight
+    ? clamp(travelProgress, 0, 1)
+    : clamp(crossoverDistance / 32, 0.18, 1);
+  const supportUpcomingStep = footMotion[supportFoot].upcomingStep;
+  const supportCompletedStep = footMotion[supportFoot].completedStep;
+  const supportIsSteppingIntoBrace = supportUpcomingStep?.toPanel === 'down';
+  const supportJustBraced = supportCompletedStep?.toPanel === 'down';
+  const anticipatoryBlend = supportIsSteppingIntoBrace
+    ? footMotion[supportFoot].moveProgress
+    : supportJustBraced
+      ? 1
+      : 0;
+  const supportBlend = Math.max(geometricBlend, anticipatoryBlend);
+  const crossingUpcomingStep = footMotion[crossingFoot].upcomingStep;
+  const crossingStartedBlend =
+    crossingUpcomingStep && crossingUpcomingStep.toPanel === (isFacingLeft ? 'left' : 'right')
+      ? footMotion[crossingFoot].moveProgress
+      : footMotion[crossingFoot].completedStep?.toPanel === (isFacingLeft ? 'left' : 'right')
+        ? 1
+        : geometricBlend;
+  const crossingBlend = Math.max(geometricBlend, crossingStartedBlend);
+  const supportFootSpanX = isFacingLeft
+    ? Math.abs(footTargets.left.down.x - (footTargets.right.left.x + 10))
+    : Math.abs((footTargets.left.right.x - 10) - footTargets.right.down.x);
+  const supportFootSpanY = isFacingLeft
+    ? Math.abs(footTargets.left.down.y - (footTargets.right.left.y - 10))
+    : Math.abs((footTargets.left.right.y - 10) - footTargets.right.down.y);
+  const supportFootShiftX = (isFacingLeft ? 1 : -1) * clamp(supportFootSpanX * 0.38, 3, 8);
+  const supportFootShiftY = clamp(supportFootSpanY * 0.22, 3, 7);
+
+  const nextFeet = {
+    left: { ...feet.left },
+    right: { ...feet.right },
+  };
+
+  nextFeet[supportFoot] = {
+    ...nextFeet[supportFoot],
+    x: nextFeet[supportFoot].x + supportFootShiftX * supportBlend,
+    y: nextFeet[supportFoot].y + supportFootShiftY * supportBlend,
+    angle: lerp(nextFeet[supportFoot].angle, bodyFacingAngle + trailingFootOffset, 0.88 * supportBlend),
+  };
+
+  nextFeet[crossingFoot] = {
+    ...nextFeet[crossingFoot],
+    angle: lerp(nextFeet[crossingFoot].angle, bodyFacingAngle + leadFootOffset, 0.88 * crossingBlend),
+  };
+
+  return nextFeet;
+};
+
+const addFootswitchReleaseSteps = (stepsByFoot: Record<FootName, BotStep[]>): Record<FootName, BotStep[]> => {
+  const allSteps = footNames
+    .flatMap((footName) => stepsByFoot[footName].map((step) => ({ footName, step })))
+    .sort((left, right) => left.step.hitTimeSeconds - right.step.hitTimeSeconds);
+  const lastPanelPress = new Map<Panel, BotStep>();
+  const currentPanelByFoot: Record<FootName, Panel> = {
+    left: getHomePanel('left'),
+    right: getHomePanel('right'),
+  };
+
+  for (const { footName, step } of allSteps) {
+    if (step.activePanels.length !== 1) {
+      currentPanelByFoot[footName] = step.toPanel;
+
+      for (const panel of step.activePanels) {
+        lastPanelPress.set(panel, step);
+      }
+      continue;
+    }
+
+    const panel = step.activePanels[0];
+    const previousStep = lastPanelPress.get(panel) ?? null;
+    const previousFoot = previousStep?.foot ?? null;
+    const previousFootStillOccupiesPanel =
+      previousFoot !== null && currentPanelByFoot[previousFoot] === panel;
+
+    if (
+      previousStep &&
+      previousStep.foot !== footName &&
+      previousStep.activePanels.length === 1 &&
+      previousFootStillOccupiesPanel
+    ) {
+      stepsByFoot[previousStep.foot].push({
+        foot: previousStep.foot,
+        footPart: null,
+        fromPanel: panel,
+        toPanel: panel,
+        isLifted: true,
+        heelPanel: null,
+        toePanel: null,
+        activePanels: [],
+        hitBeat: step.hitBeat,
+        hitTimeSeconds: step.hitTimeSeconds,
+        moveStartTimeSeconds: step.moveStartTimeSeconds,
+        moveEndTimeSeconds: step.moveEndTimeSeconds,
+        holdUntilTimeSeconds: null,
+      });
+    }
+
+    currentPanelByFoot[footName] = step.toPanel;
+    lastPanelPress.set(panel, step);
+  }
+
+  for (const footName of footNames) {
+    stepsByFoot[footName].sort((left, right) => left.hitTimeSeconds - right.hitTimeSeconds);
+  }
+
+  return stepsByFoot;
+};
+
 const sampleBotState = (
   stepsByFoot: Record<FootName, BotStep[]>,
   panelTimeline: BotPanelTimeline,
@@ -645,7 +864,7 @@ const sampleBotState = (
   footAngles: BotFootAngleMap,
   currentTimeSeconds: number,
 ): BotViewState => {
-  const sampleFootPose = (footName: FootName): BotFootPose => {
+  const sampleFootPose = (footName: FootName): BotFootMotionSample => {
     const initialPanel: Panel = footName === 'left' ? 'left' : 'right';
     const steps = stepsByFoot[footName];
     let completedStep: BotStep | null = null;
@@ -675,6 +894,8 @@ const sampleBotState = (
     let angle = restingTarget.angle;
     let panel = restingTarget.panel;
     let scale = 1;
+    let isLifted = completedStep?.isLifted ?? false;
+    let moveProgress = 0;
     const isHolding =
       completedStep !== null &&
       completedStep.holdUntilTimeSeconds !== null &&
@@ -684,6 +905,7 @@ const sampleBotState = (
       : Number.NEGATIVE_INFINITY;
     const isPressing =
       completedStep !== null &&
+      completedStep.activePanels.length > 0 &&
       currentTimeSeconds >= completedStep.hitTimeSeconds &&
       currentTimeSeconds <= pressEndTimeSeconds;
 
@@ -698,18 +920,24 @@ const sampleBotState = (
           };
       const toTarget = getStepPoseTarget(upcomingStep, footTargets, footAngles);
       const moveDurationSeconds = Math.max(upcomingStep.moveEndTimeSeconds - upcomingStep.moveStartTimeSeconds, 0.001);
-      const moveProgress = clamp(
+      const nextMoveProgress = clamp(
         (currentTimeSeconds - upcomingStep.moveStartTimeSeconds) / moveDurationSeconds,
         0,
         1,
       );
       const liftStrength = clamp(moveDurationSeconds / botMoveLeadSeconds, 0.45, 1);
 
-      x = lerp(fromTarget.x, toTarget.x, moveProgress);
-      y = lerp(fromTarget.y, toTarget.y, moveProgress);
-      angle = lerp(fromTarget.angle, toTarget.angle, moveProgress);
+      x = lerp(fromTarget.x, toTarget.x, nextMoveProgress);
+      y = lerp(fromTarget.y, toTarget.y, nextMoveProgress);
+      angle = lerp(fromTarget.angle, toTarget.angle, nextMoveProgress);
       panel = toTarget.panel;
-      scale = Math.max(scale, 1 + Math.sin(moveProgress * Math.PI) * botTravelLiftScale * liftStrength);
+      isLifted = upcomingStep.isLifted;
+      moveProgress = nextMoveProgress;
+      scale = Math.max(scale, 1 + Math.sin(nextMoveProgress * Math.PI) * botTravelLiftScale * liftStrength);
+
+      if (upcomingStep.isLifted) {
+        y -= Math.sin(nextMoveProgress * Math.PI * 0.5) * botFootswitchLiftHeight;
+      }
     }
 
     if (isHolding) {
@@ -718,22 +946,41 @@ const sampleBotState = (
       scale = Math.max(scale, botPressScale);
     }
 
+    if (isLifted) {
+      y -= botFootswitchLiftHeight;
+      scale = Math.max(scale, 1.02);
+    }
+
+    if ((completedStep && isBracketStep(completedStep)) || (upcomingStep && isBracketStep(upcomingStep) && currentTimeSeconds >= upcomingStep.moveStartTimeSeconds)) {
+      scale = Math.max(scale, botPressScale + 0.06);
+    }
+
     return {
-      foot: footName,
-      panel,
-      x,
-      y,
-      angle,
-      scale,
-      isHolding,
-      isPressing,
-      lastStepBeat: completedStep?.hitBeat ?? Number.NEGATIVE_INFINITY,
+      pose: {
+        foot: footName,
+        panel,
+        x,
+        y,
+        angle,
+        scale,
+        isHolding,
+        isPressing,
+        isLifted,
+        lastStepBeat: completedStep?.hitBeat ?? Number.NEGATIVE_INFINITY,
+      },
+      completedStep,
+      upcomingStep,
+      moveProgress,
     };
   };
 
-  const feet: Record<FootName, BotFootPose> = {
+  const footMotion: Record<FootName, BotFootMotionSample> = {
     left: sampleFootPose('left'),
     right: sampleFootPose('right'),
+  };
+  const feet: Record<FootName, BotFootPose> = {
+    left: footMotion.left.pose,
+    right: footMotion.right.pose,
   };
   const activePanels: Record<Panel, boolean> = {
     left: false,
@@ -748,7 +995,7 @@ const sampleBotState = (
     );
   }
 
-  return { feet, activePanels };
+  return { feet: applyCrossoverTurn(feet, footTargets, footMotion), activePanels };
 };
 
 const getBotFootTransform = (foot: BotFootPose): string =>
@@ -930,8 +1177,10 @@ const buildGreedyBotTimeline = (
           footPart: null,
           fromPanel: foot.panel,
           toPanel: event.panel,
+          isLifted: false,
           heelPanel: null,
           toePanel: null,
+          activePanels: [event.panel],
           hitBeat: stepBeat,
           hitTimeSeconds,
           moveStartTimeSeconds,
@@ -1123,8 +1372,10 @@ const buildParityBotTimeline = (
         footPart: hit.footPart,
         fromPanel: foot.panel,
         toPanel: hit.toPanel,
+        isLifted: false,
         heelPanel: hit.heelPanel,
         toePanel: hit.toePanel,
+        activePanels: getUniquePanels(hit.heelPanel, hit.toePanel, hit.toPanel),
         hitBeat: hit.hitBeat,
         hitTimeSeconds: hit.hitTimeSeconds,
         moveStartTimeSeconds,
@@ -1143,7 +1394,7 @@ const buildParityBotTimeline = (
     }
   }
 
-  return stepsByFoot;
+  return addFootswitchReleaseSteps(stepsByFoot);
 };
 
 export const buildBotTimeline = (
@@ -1466,7 +1717,7 @@ export function DancingBotWindow({
               return (
                 <div
                   key={footName}
-                  className={`bot-foot bot-foot-${footName}${foot.isHolding ? ' is-holding' : ''}${foot.isPressing ? ' is-pressing' : ''}${isImageFoot ? ' is-image-foot' : ''}`}
+                  className={`bot-foot bot-foot-${footName}${foot.isHolding ? ' is-holding' : ''}${foot.isPressing ? ' is-pressing' : ''}${foot.isLifted ? ' is-lifted' : ''}${isImageFoot ? ' is-image-foot' : ''}`}
                   style={{
                     left: `${foot.x}%`,
                     top: `${foot.y}%`,
