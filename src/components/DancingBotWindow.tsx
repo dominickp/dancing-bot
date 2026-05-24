@@ -15,7 +15,7 @@ import type { PlaybackClock } from '../hooks/useChartPlayback';
 type FootName = 'left' | 'right';
 export type BotFootPart = ParityFootPart;
 export type BotFormStyleId = 'straight-wide' | 'straight-minimal' | 'heels-out' | 'toes-out' | 'slanted-right';
-export const defaultBotFormStyle: BotFormStyleId = 'straight-wide';
+export const defaultBotFormStyle: BotFormStyleId = 'straight-minimal';
 export type BotFootStyleId = 'default' | 'silhouette-white' | 'shoe';
 export const defaultBotFootStyle: BotFootStyleId = 'silhouette-white';
 export type BotPadStyleId = 'itg' | 'ddr';
@@ -1516,6 +1516,8 @@ interface DancingBotWindowProps {
   isCrossoverEnabled: boolean;
   isBracketEnabled: boolean;
   isFootswitchEnabled: boolean;
+  isAppearanceSectionOpen: boolean;
+  isBehaviorSectionOpen: boolean;
   onFormStyleChange: (nextStyle: BotFormStyleId) => void;
   onFootStyleCycle: () => void;
   onPadStyleToggle: () => void;
@@ -1524,6 +1526,8 @@ interface DancingBotWindowProps {
   onCrossoverToggle: () => void;
   onBracketToggle: () => void;
   onFootswitchToggle: () => void;
+  onAppearanceSectionOpenChange: (isOpen: boolean) => void;
+  onBehaviorSectionOpenChange: (isOpen: boolean) => void;
   beginBotWindowInteraction: (
     event: ReactPointerEvent<HTMLElement>,
     mode: BotWindowInteraction['mode'],
@@ -1546,6 +1550,8 @@ export function DancingBotWindow({
   isCrossoverEnabled,
   isBracketEnabled,
   isFootswitchEnabled,
+  isAppearanceSectionOpen,
+  isBehaviorSectionOpen,
   onFormStyleChange,
   onFootStyleCycle,
   onPadStyleToggle,
@@ -1554,6 +1560,8 @@ export function DancingBotWindow({
   onCrossoverToggle,
   onBracketToggle,
   onFootswitchToggle,
+  onAppearanceSectionOpenChange,
+  onBehaviorSectionOpenChange,
   beginBotWindowInteraction,
 }: DancingBotWindowProps) {
   const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
@@ -1655,7 +1663,11 @@ export function DancingBotWindow({
 
       <div className="bot-window-body">
         <section className="bot-settings-panel" aria-label="Dancing bot settings">
-          <details className="bot-settings-section" open>
+          <details
+            className="bot-settings-section"
+            open={isAppearanceSectionOpen}
+            onToggle={(event) => onAppearanceSectionOpenChange(event.currentTarget.open)}
+          >
             <summary className="bot-settings-section-summary">
               <span className="bot-settings-section-heading">Appearance</span>
             </summary>
@@ -1727,7 +1739,11 @@ export function DancingBotWindow({
             </div>
           </details>
 
-          <details className="bot-settings-section" open>
+          <details
+            className="bot-settings-section"
+            open={isBehaviorSectionOpen}
+            onToggle={(event) => onBehaviorSectionOpenChange(event.currentTarget.open)}
+          >
             <summary className="bot-settings-section-summary">
               <span className="bot-settings-section-heading">Behavior</span>
             </summary>

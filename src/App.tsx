@@ -34,6 +34,7 @@ const minVisibleBeats = 0.25;
 const maxVisibleBeats = 32;
 const defaultVisibleBeats = 10;
 const renderBufferBeats = 4;
+const settingsStorageKey = 'dancing-bot:ui-settings';
 const baseLaneWidth = 72;
 const baseLaneGap = 0;
 const baseSidePadding = 12;
@@ -71,6 +72,23 @@ interface PlayfieldInteraction {
   startOffsetX: number;
 }
 
+interface PersistedUiSettings {
+  selectedBotFormStyle: BotFormStyleId;
+  selectedBotFootStyle: BotFootStyleId;
+  selectedBotPadStyle: BotPadStyleId;
+  isBotPanelGlowEnabled: boolean;
+  isBotPanelLightsEnabled: boolean;
+  isBotCrossoverEnabled: boolean;
+  isBotBracketEnabled: boolean;
+  isBotFootswitchEnabled: boolean;
+  isParityHintOverlayEnabled: boolean;
+  visibleBeats: number;
+  playfieldOffsetX: number;
+  botWindowRect: BotWindowRect;
+  isAppearanceSectionOpen: boolean;
+  isBehaviorSectionOpen: boolean;
+}
+
 const bundledNoteskinOptions = getBundledNoteskinOptions();
 const genericArrowClipPath = 'polygon(50% 100%, 100% 50%, 72% 50%, 72% 0%, 28% 0%, 28% 50%, 0% 50%)';
 const emptyTimedChart: TimedChart = { events: [], lastBeat: 0, lastTimeSeconds: 0 };
@@ -90,8 +108,118 @@ const emptySimfileDocument: SimfileDocument = {
   charts: [],
 };
 
+const defaultBotWindowRect: BotWindowRect = {
+  x: 26,
+  y: 24,
+  width: 460,
+  height: 800,
+};
+
+const defaultUiSettings: PersistedUiSettings = {
+  selectedBotFormStyle: defaultBotFormStyle,
+  selectedBotFootStyle: defaultBotFootStyle,
+  selectedBotPadStyle: defaultBotPadStyle,
+  isBotPanelGlowEnabled: true,
+  isBotPanelLightsEnabled: true,
+  isBotCrossoverEnabled: true,
+  isBotBracketEnabled: true,
+  isBotFootswitchEnabled: true,
+  isParityHintOverlayEnabled: true,
+  visibleBeats: defaultVisibleBeats,
+  playfieldOffsetX: 0,
+  botWindowRect: defaultBotWindowRect,
+  isAppearanceSectionOpen: true,
+  isBehaviorSectionOpen: true,
+};
+
+const botFormStyleIds: readonly BotFormStyleId[] = ['straight-wide', 'straight-minimal', 'heels-out', 'toes-out', 'slanted-right'];
+const botFootStyleIds: readonly BotFootStyleId[] = ['default', 'silhouette-white', 'shoe'];
+const botPadStyleIds: readonly BotPadStyleId[] = ['itg', 'ddr'];
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const getHoldSegmentKey = (panel: PanelName, startBeat: number): string => `${panel}:${startBeat.toFixed(6)}`;
+
+const readPersistedUiSettings = (): PersistedUiSettings => {
+  if (typeof window === 'undefined') {
+    return defaultUiSettings;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(settingsStorageKey);
+
+    if (!rawValue) {
+      return defaultUiSettings;
+    }
+
+    const parsedValue: unknown = JSON.parse(rawValue);
+
+    if (!isRecord(parsedValue)) {
+      return defaultUiSettings;
+    }
+
+    const parsedBotWindowRect = isRecord(parsedValue.botWindowRect) ? parsedValue.botWindowRect : null;
+
+    return {
+      selectedBotFormStyle: botFormStyleIds.includes(parsedValue.selectedBotFormStyle as BotFormStyleId)
+        ? (parsedValue.selectedBotFormStyle as BotFormStyleId)
+        : defaultUiSettings.selectedBotFormStyle,
+      selectedBotFootStyle: botFootStyleIds.includes(parsedValue.selectedBotFootStyle as BotFootStyleId)
+        ? (parsedValue.selectedBotFootStyle as BotFootStyleId)
+        : defaultUiSettings.selectedBotFootStyle,
+      selectedBotPadStyle: botPadStyleIds.includes(parsedValue.selectedBotPadStyle as BotPadStyleId)
+        ? (parsedValue.selectedBotPadStyle as BotPadStyleId)
+        : defaultUiSettings.selectedBotPadStyle,
+      isBotPanelGlowEnabled:
+        typeof parsedValue.isBotPanelGlowEnabled === 'boolean'
+          ? parsedValue.isBotPanelGlowEnabled
+          : defaultUiSettings.isBotPanelGlowEnabled,
+      isBotPanelLightsEnabled:
+        typeof parsedValue.isBotPanelLightsEnabled === 'boolean'
+          ? parsedValue.isBotPanelLightsEnabled
+          : defaultUiSettings.isBotPanelLightsEnabled,
+      isBotCrossoverEnabled:
+        typeof parsedValue.isBotCrossoverEnabled === 'boolean'
+          ? parsedValue.isBotCrossoverEnabled
+          : defaultUiSettings.isBotCrossoverEnabled,
+      isBotBracketEnabled:
+        typeof parsedValue.isBotBracketEnabled === 'boolean'
+          ? parsedValue.isBotBracketEnabled
+          : defaultUiSettings.isBotBracketEnabled,
+      isBotFootswitchEnabled:
+        typeof parsedValue.isBotFootswitchEnabled === 'boolean'
+          ? parsedValue.isBotFootswitchEnabled
+          : defaultUiSettings.isBotFootswitchEnabled,
+      isParityHintOverlayEnabled:
+        typeof parsedValue.isParityHintOverlayEnabled === 'boolean'
+          ? parsedValue.isParityHintOverlayEnabled
+          : defaultUiSettings.isParityHintOverlayEnabled,
+      visibleBeats:
+        typeof parsedValue.visibleBeats === 'number'
+          ? clamp(parsedValue.visibleBeats, minVisibleBeats, maxVisibleBeats)
+          : defaultUiSettings.visibleBeats,
+      playfieldOffsetX:
+        typeof parsedValue.playfieldOffsetX === 'number' ? parsedValue.playfieldOffsetX : defaultUiSettings.playfieldOffsetX,
+      botWindowRect: {
+        x: typeof parsedBotWindowRect?.x === 'number' ? parsedBotWindowRect.x : defaultBotWindowRect.x,
+        y: typeof parsedBotWindowRect?.y === 'number' ? parsedBotWindowRect.y : defaultBotWindowRect.y,
+        width: typeof parsedBotWindowRect?.width === 'number' ? parsedBotWindowRect.width : defaultBotWindowRect.width,
+        height: typeof parsedBotWindowRect?.height === 'number' ? parsedBotWindowRect.height : defaultBotWindowRect.height,
+      },
+      isAppearanceSectionOpen:
+        typeof parsedValue.isAppearanceSectionOpen === 'boolean'
+          ? parsedValue.isAppearanceSectionOpen
+          : defaultUiSettings.isAppearanceSectionOpen,
+      isBehaviorSectionOpen:
+        typeof parsedValue.isBehaviorSectionOpen === 'boolean'
+          ? parsedValue.isBehaviorSectionOpen
+          : defaultUiSettings.isBehaviorSectionOpen,
+    };
+  } catch {
+    return defaultUiSettings;
+  }
+};
 
 const buildHoldEndBeatMap = (segments: HoldSegment[]): Map<string, number> => {
   const map = new Map<string, number>();
@@ -310,31 +438,29 @@ const buildHoldSegments = (events: TimedNoteEvent[]): HoldSegment[] => {
 }
 
 function App() {
+  const persistedUiSettings = useMemo(readPersistedUiSettings, []);
   const [isMobileUnsupported, setIsMobileUnsupported] = useState(false);
   const [selectedSongId, setSelectedSongId] = useState(bundledSongSources[0]?.id ?? '');
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
-  const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(defaultBotFormStyle);
-  const [selectedBotFootStyle, setSelectedBotFootStyle] = useState<BotFootStyleId>(defaultBotFootStyle);
-  const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(defaultBotPadStyle);
-  const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(true);
-  const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(true);
-  const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(true);
-  const [isBotBracketEnabled, setIsBotBracketEnabled] = useState(true);
-  const [isBotFootswitchEnabled, setIsBotFootswitchEnabled] = useState(true);
-  const [isParityHintOverlayEnabled, setIsParityHintOverlayEnabled] = useState(false);
+  const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(persistedUiSettings.selectedBotFormStyle);
+  const [selectedBotFootStyle, setSelectedBotFootStyle] = useState<BotFootStyleId>(persistedUiSettings.selectedBotFootStyle);
+  const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(persistedUiSettings.selectedBotPadStyle);
+  const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(persistedUiSettings.isBotPanelGlowEnabled);
+  const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(persistedUiSettings.isBotPanelLightsEnabled);
+  const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(persistedUiSettings.isBotCrossoverEnabled);
+  const [isBotBracketEnabled, setIsBotBracketEnabled] = useState(persistedUiSettings.isBotBracketEnabled);
+  const [isBotFootswitchEnabled, setIsBotFootswitchEnabled] = useState(persistedUiSettings.isBotFootswitchEnabled);
+  const [isParityHintOverlayEnabled, setIsParityHintOverlayEnabled] = useState(persistedUiSettings.isParityHintOverlayEnabled);
   const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
   const [songLoadError, setSongLoadError] = useState<string | null>(null);
-  const [visibleBeats, setVisibleBeats] = useState(defaultVisibleBeats);
+  const [visibleBeats, setVisibleBeats] = useState(persistedUiSettings.visibleBeats);
   const [frameWidth, setFrameWidth] = useState(0);
-  const [playfieldOffsetX, setPlayfieldOffsetX] = useState(0);
+  const [playfieldOffsetX, setPlayfieldOffsetX] = useState(persistedUiSettings.playfieldOffsetX);
   const [isPlayfieldDragging, setIsPlayfieldDragging] = useState(false);
-  const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>({
-    x: 26,
-    y: 24,
-    width: 460,
-    height: 800,
-  });
+  const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>(persistedUiSettings.botWindowRect);
+  const [isAppearanceSectionOpen, setIsAppearanceSectionOpen] = useState(persistedUiSettings.isAppearanceSectionOpen);
+  const [isBehaviorSectionOpen, setIsBehaviorSectionOpen] = useState(persistedUiSettings.isBehaviorSectionOpen);
   const songImportRef = useRef<HTMLInputElement | null>(null);
   const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
@@ -594,9 +720,10 @@ function App() {
 
     const syncBotWindowRect = () => {
       const bounds = frame.getBoundingClientRect();
+      const nextMaxPlayfieldOffsetX = Math.max(0, (bounds.width - totalPlayfieldWidth) / 2);
 
       setFrameWidth(bounds.width);
-      setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -maxPlayfieldOffsetX, maxPlayfieldOffsetX));
+      setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -nextMaxPlayfieldOffsetX, nextMaxPlayfieldOffsetX));
       setBotWindowRect((previousRect) => clampBotWindowRect(previousRect, bounds.width, bounds.height));
     };
 
@@ -606,11 +733,56 @@ function App() {
     return () => {
       window.removeEventListener('resize', syncBotWindowRect);
     };
-  }, [maxPlayfieldOffsetX]);
+  }, [totalPlayfieldWidth]);
 
   useEffect(() => {
+    if (frameWidth <= 0) {
+      return;
+    }
+
     setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -maxPlayfieldOffsetX, maxPlayfieldOffsetX));
-  }, [maxPlayfieldOffsetX]);
+  }, [frameWidth, maxPlayfieldOffsetX]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(
+      settingsStorageKey,
+      JSON.stringify({
+        selectedBotFormStyle,
+        selectedBotFootStyle,
+        selectedBotPadStyle,
+        isBotPanelGlowEnabled,
+        isBotPanelLightsEnabled,
+        isBotCrossoverEnabled,
+        isBotBracketEnabled,
+        isBotFootswitchEnabled,
+        isParityHintOverlayEnabled,
+        visibleBeats,
+        playfieldOffsetX,
+        botWindowRect,
+        isAppearanceSectionOpen,
+        isBehaviorSectionOpen,
+      } satisfies PersistedUiSettings),
+    );
+  }, [
+    botWindowRect,
+    isAppearanceSectionOpen,
+    isBehaviorSectionOpen,
+    isBotBracketEnabled,
+    isBotCrossoverEnabled,
+    isBotFootswitchEnabled,
+    isBotPanelGlowEnabled,
+    isBotPanelLightsEnabled,
+    isParityHintOverlayEnabled,
+    playfieldOffsetX,
+    selectedBotFootStyle,
+    selectedBotFormStyle,
+    selectedBotPadStyle,
+    visibleBeats,
+  ]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -784,6 +956,14 @@ function App() {
 
   const handleParityHintOverlayToggle = () => {
     setIsParityHintOverlayEnabled((currentValue) => !currentValue);
+  };
+
+  const handleAppearanceSectionOpenChange = (isOpen: boolean) => {
+    setIsAppearanceSectionOpen(isOpen);
+  };
+
+  const handleBehaviorSectionOpenChange = (isOpen: boolean) => {
+    setIsBehaviorSectionOpen(isOpen);
   };
 
   const handleImportSongFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1068,6 +1248,8 @@ function App() {
             isCrossoverEnabled={isBotCrossoverEnabled}
             isBracketEnabled={isBotBracketEnabled}
             isFootswitchEnabled={isBotFootswitchEnabled}
+            isAppearanceSectionOpen={isAppearanceSectionOpen}
+            isBehaviorSectionOpen={isBehaviorSectionOpen}
             onFormStyleChange={handleBotFormStyleChange}
             onFootStyleCycle={handleBotFootStyleCycle}
             onPadStyleToggle={handleBotPadStyleToggle}
@@ -1076,6 +1258,8 @@ function App() {
             onCrossoverToggle={handleBotCrossoverToggle}
             onBracketToggle={handleBotBracketToggle}
             onFootswitchToggle={handleBotFootswitchToggle}
+            onAppearanceSectionOpenChange={handleAppearanceSectionOpenChange}
+            onBehaviorSectionOpenChange={handleBehaviorSectionOpenChange}
             beginBotWindowInteraction={beginBotWindowInteraction}
           />
         }
