@@ -28,7 +28,7 @@ import type { LoadedSongSource } from './lib/songSource';
 import { buildParityAssignmentMap } from './lib/parity';
 
 const panelOrder = ['left', 'down', 'up', 'right'] as const;
-const receptorOffset = 72;
+const receptorTopInset = 20;
 const viewportHeight = 760;
 const minVisibleBeats = 0.25;
 const maxVisibleBeats = 32;
@@ -403,23 +403,28 @@ function App() {
   const visualScale = clamp(Math.sqrt(defaultVisibleBeats / visibleBeats), minVisualScale, maxVisualScale);
   const laneGap = Math.round(baseLaneGap * visualScale);
   const sidePadding = Math.round(baseSidePadding * visualScale);
+  const measureGuideGutter = Math.max(Math.round(64 * visualScale), 48);
   const playfieldWidth = Math.round(
     baseLaneWidth * visualScale * panelOrder.length + laneGap * (panelOrder.length - 1) + sidePadding * 2,
   );
+  const totalPlayfieldWidth = playfieldWidth + measureGuideGutter;
   const noteWidth = Math.max(Math.round(baseNoteWidth * visualScale), 28);
   const noteHeight = Math.max(Math.round(baseNoteHeight * visualScale), 12);
   const receptorHeight = Math.max(Math.round(baseReceptorHeight * visualScale), 28);
+  const receptorOffset = receptorTopInset + receptorHeight / 2;
   const holdWidth = receptorHeight;
   const receptorRadius = Math.max(Math.round(14 * visualScale), 10);
   const explosionSize = Math.round(receptorHeight * 1.28);
   const chartContentHeight = (selectedTimedChart.lastBeat + renderBufferBeats * 2) * pixelsPerBeat + receptorOffset;
   const totalChartBeats = Math.max(selectedTimedChart.lastBeat, 1);
-  const maxPlayfieldOffsetX = Math.max(0, (frameWidth - playfieldWidth) / 2);
+  const maxPlayfieldOffsetX = Math.max(0, (frameWidth - totalPlayfieldWidth) / 2);
   const playfieldStyle = {
-    '--playfield-width': `${playfieldWidth}px`,
+    '--playfield-width': `${totalPlayfieldWidth}px`,
+    '--lane-track-width': `${playfieldWidth}px`,
     '--playfield-offset-x': `${playfieldOffsetX}px`,
     '--lane-gap': `${laneGap}px`,
     '--playfield-gutter': `${sidePadding}px`,
+    '--measure-guide-gutter': `${measureGuideGutter}px`,
     '--note-width': `${noteWidth}px`,
     '--note-height': `${noteHeight}px`,
     '--hold-width': `${holdWidth}px`,
@@ -427,6 +432,7 @@ function App() {
     '--receptor-radius': `${receptorRadius}px`,
     '--explosion-size': `${explosionSize}px`,
     '--receptor-offset': `${receptorOffset}px`,
+    '--receptor-top': `${receptorTopInset}px`,
   } as CSSProperties;
 
   const {
@@ -526,7 +532,7 @@ function App() {
     [holdSegments, renderBeatAnchor, visibleBeats],
   );
 
-  const measureStart = Math.floor((renderBeatAnchor - renderBufferBeats) / 4) * 4;
+  const measureStart = Math.max(0, Math.floor((renderBeatAnchor - renderBufferBeats) / 4) * 4);
   const measureEnd = Math.ceil((renderBeatAnchor + visibleBeats + renderBufferBeats) / 4) * 4;
   const visibleBeatGuides = useMemo(() => {
     const beats: Array<{ beat: number; isMeasure: boolean }> = [];
