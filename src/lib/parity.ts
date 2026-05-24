@@ -132,6 +132,7 @@ const JACK = 30;
 const SLOW_BRACKET = 300;
 const TWISTED_FOOT = 100000;
 const BRACKETTAP = 400;
+const PREFERRED_BRACKET_BONUS = 5000;
 const HOLDSWITCH = 55;
 const MINE = 10000;
 const FOOTSWITCH = 325;
@@ -227,7 +228,7 @@ class StageLayout {
 
   bracketCheck(column1: number, column2: number): boolean {
     const distance = this.getDistance(column1, column2);
-    return distance * distance <= 2;
+    return distance <= Math.SQRT2 + EPSILON;
   }
 
   getDistance(leftIndex: number, rightIndex: number): number {
@@ -871,7 +872,12 @@ const getRowDiagnosticKinds = (
     kinds.push('footswitch');
   }
 
-  if (didDoubleStep(initialState, resultState, rows, rowIndex, movedLeft, jackedLeft, movedRight, jackedRight)) {
+  if (
+    movedLeft !== movedRight &&
+    resultState.holdingMask === 0 &&
+    !didJump &&
+    didDoubleStep(initialState, resultState, rows, rowIndex, movedLeft, jackedLeft, movedRight, jackedRight)
+  ) {
     kinds.push('double-step');
   }
 
@@ -908,6 +914,7 @@ class StepParityCostCalculator {
     cost += this.calcBracketTapCost(initialState, resultState, row, leftHeel, leftToe, rightHeel, rightToe, elapsedTime);
     cost += this.calcBracketJackCost(resultState, movedLeft, movedRight, jackedLeft, jackedRight, didJump);
     cost += this.calcDoubleStepCost(initialState, resultState, rows, rowIndex, movedLeft, movedRight, jackedLeft, jackedRight, didJump);
+    cost += this.calcPreferredBracketBonus(row, resultState);
     cost += this.calcSlowBracketCost(row, movedLeft, movedRight, elapsedTime);
     cost += this.calcTwistedFootCost(resultState);
     cost += this.calcFacingCosts(resultState);
@@ -1055,6 +1062,22 @@ class StepParityCostCalculator {
     return didDoubleStep(initialState, resultState, rows, rowIndex, movedLeft, jackedLeft, movedRight, jackedRight)
       ? DOUBLESTEP
       : 0;
+  }
+
+  private calcPreferredBracketBonus(row: Row, resultState: State): number {
+    if (this.config.favorJumpsOverBrackets || row.holdMask !== 0 || row.noteCount !== 2 || !isBracketState(resultState)) {
+      return 0;
+    }
+
+    const activeColumns = row.notes
+      .map((note, index) => (note.type !== 'empty' ? index : INVALID_COLUMN))
+      .filter((index) => index !== INVALID_COLUMN);
+
+    if (activeColumns.length !== 2 || !layout.bracketCheck(activeColumns[0] ?? INVALID_COLUMN, activeColumns[1] ?? INVALID_COLUMN)) {
+      return 0;
+    }
+
+    return -PREFERRED_BRACKET_BONUS;
   }
 
   private calcSlowBracketCost(row: Row, movedLeft: boolean, movedRight: boolean, elapsedTime: number): number {
@@ -1264,6 +1287,106 @@ const computeCheapestPath = (endNode: StepParityNode, startNode: StepParityNode)
   return path.reverse();
 };
 
+const getActiveNoteColumns = (row: Row): number[] =>
+  row.notes
+    .map((note, index) => (note.type !== 'empty' ? index : INVALID_COLUMN))
+    .filter((index) => index !== INVALID_COLUMN);
+
+const getBracketPartsForSideRow = (
+  sideColumn: number,
+  otherColumn: number,
+): { sidePart: FootValue; otherPart: FootValue } | null => {
+  const isLeftSide = sideColumn === panelIndexByName.left;
+  const isRightSide = sideColumn === panelIndexByName.right;
+
+  if (!isLeftSide && !isRightSide) {
+    return null;
+  }
+
+  const pairsDown = otherColumn === panelIndexByName.down;
+  const pairsUp = otherColumn === panelIndexByName.up;
+
+  if (!pairsDown && !pairsUp) {
+    return null;
+  }
+
+  if (isLeftSide) {
+    return pairsDown
+      ? { sidePart: FootValue.LeftToe, otherPart: FootValue.LeftHeel }
+      : { sidePart: FootValue.LeftHeel, otherPart: FootValue.LeftToe };
+  }
+
+  return pairsDown
+    ? { sidePart: FootValue.RightToe, otherPart: FootValue.RightHeel }
+    : { sidePart: FootValue.RightHeel, otherPart: FootValue.RightToe };
+};
+
+const applySimpleBracketOverrides = (
+  rows: Row[],
+  diagnostics: ParityRowDiagnostic[],
+  config: StepParityConfig,
+): ParityRowDiagnostic[] => {
+  if (!config.allowBrackets) {
+    return diagnostics;
+  }
+
+  const diagnosticsByRowIndex = new Map<number, ParityRowDiagnostic>(
+    diagnostics.map((diagnostic) => [diagnostic.rowIndex, diagnostic]),
+  );
+
+  for (const row of rows) {
+    if (row.noteCount !== 2 || row.holdMask !== 0 || row.mineMask !== 0) {
+      continue;
+    }
+
+    const activeColumns = getActiveNoteColumns(row);
+    if (activeColumns.length !== 2 || !layout.bracketCheck(activeColumns[0] ?? INVALID_COLUMN, activeColumns[1] ?? INVALID_COLUMN)) {
+      continue;
+    }
+
+    const includesLeft = activeColumns.includes(panelIndexByName.left);
+    const includesRight = activeColumns.includes(panelIndexByName.right);
+
+    if (includesLeft === includesRight) {
+      continue;
+    }
+
+    const sideColumn = includesLeft ? panelIndexByName.left : panelIndexByName.right;
+    const otherColumn = activeColumns.find((column) => column !== sideColumn);
+    if (otherColumn === undefined) {
+      continue;
+    }
+
+    const sideNote = row.notes[sideColumn];
+    const otherNote = row.notes[otherColumn];
+    const bracketParts = getBracketPartsForSideRow(sideColumn, otherColumn);
+
+    if (!sideNote || !otherNote || !bracketParts) {
+      continue;
+    }
+
+    sideNote.parity = bracketParts.sidePart;
+    otherNote.parity = bracketParts.otherPart;
+    row.columns[sideColumn] = bracketParts.sidePart;
+    row.columns[otherColumn] = bracketParts.otherPart;
+
+    const existingDiagnostic = diagnosticsByRowIndex.get(row.rowIndex);
+    if (existingDiagnostic) {
+      existingDiagnostic.kinds = ['bracket'];
+    } else {
+      const nextDiagnostic: ParityRowDiagnostic = {
+        beat: row.beat,
+        rowIndex: row.rowIndex,
+        kinds: ['bracket'],
+      };
+      diagnostics.push(nextDiagnostic);
+      diagnosticsByRowIndex.set(row.rowIndex, nextDiagnostic);
+    }
+  }
+
+  return diagnostics.sort((left, right) => left.rowIndex - right.rowIndex);
+};
+
 const analyzeRows = (rows: Row[], config: StepParityConfig): ParityRowDiagnostic[] | null => {
   if (rows.length === 0) {
     return null;
@@ -1364,7 +1487,7 @@ const analyzeRows = (rows: Row[], config: StepParityConfig): ParityRowDiagnostic
     }
   });
 
-  return diagnostics;
+  return applySimpleBracketOverrides(rows, diagnostics, config);
 };
 
 export const buildParityAssignmentMap = (

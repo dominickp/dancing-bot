@@ -677,6 +677,14 @@ const getCrossoverTarget = (
 
   return null;
 };
+
+const getBracketCenter = (heelTarget: BotPanelTarget, toeTarget: BotPanelTarget): BotPanelTarget => ({
+  // The rendered foot's heel sits below its center, so a simple midpoint leaves
+  // down-facing brackets too far off the side panel.
+  x: heelTarget.x + (toeTarget.x - heelTarget.x) * 0.36,
+  y: heelTarget.y + (toeTarget.y - heelTarget.y) * 0.36,
+});
+
 const getStepPoseTarget = (
   step: Pick<BotStep, 'foot' | 'fromPanel' | 'toPanel' | 'heelPanel' | 'toePanel'>,
   footTargets: BotFootTargetMap,
@@ -688,9 +696,11 @@ const getStepPoseTarget = (
   const toeAngle = step.toePanel ? footAngles[step.foot][step.toePanel] : null;
 
   if (heelTarget && toeTarget) {
+    const bracketCenter = getBracketCenter(heelTarget, toeTarget);
+
     return {
-      x: (heelTarget.x + toeTarget.x) / 2,
-      y: (heelTarget.y + toeTarget.y) / 2,
+      x: bracketCenter.x,
+      y: bracketCenter.y,
       angle: getBracketAngle(step.foot, heelTarget, toeTarget),
       panel: step.toPanel,
     };

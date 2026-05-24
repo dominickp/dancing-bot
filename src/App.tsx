@@ -371,6 +371,7 @@ function App() {
       allowCrossovers: isBotCrossoverEnabled,
       allowBrackets: isBotBracketEnabled,
       allowFootswitches: isBotFootswitchEnabled,
+      favorJumpsOverBrackets: !isBotBracketEnabled,
     }),
     [isBotBracketEnabled, isBotCrossoverEnabled, isBotFootswitchEnabled],
   );
