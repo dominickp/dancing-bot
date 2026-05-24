@@ -94,6 +94,32 @@ body {
   color: rgba(248, 244, 233, 0.72);
 }
 
+.toolbar-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.toolbar-metric-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: rgba(248, 244, 233, 0.85);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+.toolbar-metric-chip-highlight {
+  border-color: rgba(255, 177, 74, 0.3);
+  color: #ffd59c;
+  background: rgba(255, 177, 74, 0.1);
+}
+
 .toolbar-link {
   display: inline-flex;
   align-items: center;
@@ -128,6 +154,65 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
+}
+
+.thin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(10, 13, 20, 0.62);
+  backdrop-filter: blur(10px);
+}
+
+.thin-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.thin-toolbar-rate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: min(420px, 100%);
+  flex: 1;
+}
+
+.thin-toolbar-label {
+  color: #ffb14a;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.thin-toolbar-rate-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.thin-toolbar-slider {
+  flex: 1;
+  accent-color: #ffb14a;
+}
+
+.thin-toolbar-rate-value {
+  min-width: 3.5rem;
+  color: #f8f4e9;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.thin-toolbar-button {
+  min-width: 188px;
+  text-align: center;
 }
 
 .toolbar-control-row {
@@ -170,6 +255,10 @@ body {
   -moz-appearance: none;
   appearance: none;
   font: inherit;
+}
+
+.toolbar-field-compact select {
+  min-width: 120px;
 }
 
 .toolbar-field select option {
@@ -1342,9 +1431,26 @@ body {
   }
 
   .toolbar-controls,
-  .toolbar-control-row {
+  .toolbar-control-row,
+  .thin-toolbar {
     align-items: start;
     justify-content: flex-start;
+  }
+
+  .thin-toolbar {
+    flex-direction: column;
+    padding: 12px 14px;
+  }
+
+  .thin-toolbar-rate {
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .thin-toolbar-rate-control {
+    width: 100%;
   }
 
   .notefield-panel {

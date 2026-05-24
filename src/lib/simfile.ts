@@ -290,7 +290,7 @@ export const parseSimfile = (source: string): SimfileDocument => {
 
 export const parseSmSimfile = parseSimfile;
 
-const getBpmAtBeat = (beat: number, bpms: BpmSegment[]): number => {
+export const getBpmAtBeat = (beat: number, bpms: BpmSegment[]): number => {
   if (bpms.length === 0) {
     return 60;
   }

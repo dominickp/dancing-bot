@@ -1,0 +1,19 @@
+// Ignore the mines in this case
+MMMM
+// The below is a crossover. User starts on left foot, then step with right foot on up, then left foot on right. The user is now facing left, with feet facing left. The user then steps their right foot on up again. Then steps left foot on left arrow. The user is now facing forward again. They then do the reverse crossover, facing right with feet facing right.
+1000
+0010
+0001
+0010
+1000
+0100
+0001
+0100
+1000
+0000
+0000
+MMMM
+0000
+0000
+0000
+;

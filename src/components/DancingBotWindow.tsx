@@ -1591,7 +1591,9 @@ export function DancingBotWindow({
 
     const tick = (timestamp: number) => {
       const clock = playbackClockRef.current;
-      const timeSeconds = clock ? clock.audioTime + (timestamp - clock.perfTime) / 1000 : 0;
+      const timeSeconds = clock
+        ? clock.audioTime + ((timestamp - clock.perfTime) / 1000) * clock.playbackRate
+        : 0;
       const beat = secondsToBeat(timeSeconds, simfile.bpms, simfile.stops, simfile.metadata.offset);
 
       setPlaybackSnapshot({ beat, timeSeconds });

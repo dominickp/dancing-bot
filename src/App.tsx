@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ChangeEvent, FocusEvent } from 'react';
 import type { SimfileDocument, TimedChart, TimedNoteEvent } from './lib/simfile';
+import { getBpmAtBeat } from './lib/simfile';
 import {
   getBundledNoteskinOptions,
   getPanelRotation,
@@ -33,6 +34,9 @@ const viewportHeight = 760;
 const minVisibleBeats = 0.25;
 const maxVisibleBeats = 32;
 const defaultVisibleBeats = 10;
+const minPlaybackRate = 0.2;
+const maxPlaybackRate = 1.5;
+const playbackRateStep = 0.1;
 const renderBufferBeats = 4;
 const settingsStorageKey = 'dancing-bot:ui-settings';
 const baseLaneWidth = 72;
@@ -76,6 +80,7 @@ interface PersistedUiSettings {
   selectedBotFormStyle: BotFormStyleId;
   selectedBotFootStyle: BotFootStyleId;
   selectedBotPadStyle: BotPadStyleId;
+  playbackRate: number;
   isBotPanelGlowEnabled: boolean;
   isBotPanelLightsEnabled: boolean;
   isBotCrossoverEnabled: boolean;
@@ -119,6 +124,7 @@ const defaultUiSettings: PersistedUiSettings = {
   selectedBotFormStyle: defaultBotFormStyle,
   selectedBotFootStyle: defaultBotFootStyle,
   selectedBotPadStyle: defaultBotPadStyle,
+  playbackRate: 1,
   isBotPanelGlowEnabled: true,
   isBotPanelLightsEnabled: true,
   isBotCrossoverEnabled: true,
@@ -139,6 +145,8 @@ const botPadStyleIds: readonly BotPadStyleId[] = ['itg', 'ddr'];
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const clampPlaybackRate = (value: number): number =>
+  clamp(Math.round(value / playbackRateStep) * playbackRateStep, minPlaybackRate, maxPlaybackRate);
 const getHoldSegmentKey = (panel: PanelName, startBeat: number): string => `${panel}:${startBeat.toFixed(6)}`;
 
 const readPersistedUiSettings = (): PersistedUiSettings => {
@@ -171,6 +179,10 @@ const readPersistedUiSettings = (): PersistedUiSettings => {
       selectedBotPadStyle: botPadStyleIds.includes(parsedValue.selectedBotPadStyle as BotPadStyleId)
         ? (parsedValue.selectedBotPadStyle as BotPadStyleId)
         : defaultUiSettings.selectedBotPadStyle,
+      playbackRate:
+        typeof parsedValue.playbackRate === 'number'
+          ? clampPlaybackRate(parsedValue.playbackRate)
+          : defaultUiSettings.playbackRate,
       isBotPanelGlowEnabled:
         typeof parsedValue.isBotPanelGlowEnabled === 'boolean'
           ? parsedValue.isBotPanelGlowEnabled
@@ -445,6 +457,7 @@ function App() {
   const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(persistedUiSettings.selectedBotFormStyle);
   const [selectedBotFootStyle, setSelectedBotFootStyle] = useState<BotFootStyleId>(persistedUiSettings.selectedBotFootStyle);
   const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(persistedUiSettings.selectedBotPadStyle);
+  const [playbackRate, setPlaybackRate] = useState(persistedUiSettings.playbackRate);
   const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(persistedUiSettings.isBotPanelGlowEnabled);
   const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(persistedUiSettings.isBotPanelLightsEnabled);
   const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(persistedUiSettings.isBotCrossoverEnabled);
@@ -575,6 +588,7 @@ function App() {
     chartIndex: selectedChartIndex,
     events: selectedTimedChart.events,
     lastBeat: selectedTimedChart.lastBeat,
+    playbackRate,
     pixelsPerBeat,
     visibleBeats,
     minVisibleBeats,
@@ -615,6 +629,9 @@ function App() {
       );
     },
   });
+  const currentBpm = getBpmAtBeat(displayBeat, simfile.bpms);
+  const effectiveBpm = currentBpm * playbackRate;
+  const bpmPrecision = effectiveBpm >= 100 ? 0 : 1;
 
   const minimapMeasures = useMemo<MinimapMeasure[]>(() => {
     const byMeasure = new Map<number, number>();
@@ -754,6 +771,7 @@ function App() {
         selectedBotFormStyle,
         selectedBotFootStyle,
         selectedBotPadStyle,
+        playbackRate,
         isBotPanelGlowEnabled,
         isBotPanelLightsEnabled,
         isBotCrossoverEnabled,
@@ -777,6 +795,7 @@ function App() {
     isBotPanelGlowEnabled,
     isBotPanelLightsEnabled,
     isParityHintOverlayEnabled,
+    playbackRate,
     playfieldOffsetX,
     selectedBotFootStyle,
     selectedBotFormStyle,
@@ -902,6 +921,10 @@ function App() {
     setSelectedChartIndex(Number.parseInt(event.target.value, 10) || 0);
     event.currentTarget.blur();
     restoreNotefieldFocus();
+  };
+
+  const handlePlaybackRateChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setPlaybackRate(clampPlaybackRate(Number.parseFloat(event.target.value)));
   };
 
   const handleBotFormStyleChange = (nextStyle: BotFormStyleId) => {
@@ -1213,22 +1236,46 @@ function App() {
               />
             </label>
 
-            <label className="toolbar-field toolbar-field-action">
-              <span>Notefield</span>
-              <button
-                type="button"
-                className={`toolbar-button${isParityHintOverlayEnabled ? ' is-enabled' : ''}`}
-                aria-pressed={isParityHintOverlayEnabled}
-                onClick={handleParityHintOverlayToggle}
-              >
-                {isParityHintOverlayEnabled
-                  ? `Parity hints on (${parityHintDiagnostics.length})`
-                  : 'Parity hints off'}
-              </button>
-            </label>
           </div>
         </div>
       </header>
+
+      <section className="thin-toolbar" aria-label="Playback controls">
+        <div className="thin-toolbar-group" aria-label="Tempo metrics">
+          <span className="toolbar-metric-chip">BPM {currentBpm.toFixed(bpmPrecision)}</span>
+          <span className="toolbar-metric-chip toolbar-metric-chip-highlight">
+            Effective {effectiveBpm.toFixed(bpmPrecision)}
+          </span>
+        </div>
+
+        <label className="thin-toolbar-rate" htmlFor="playback-rate-slider">
+          <span className="thin-toolbar-label">Rate</span>
+          <div className="thin-toolbar-rate-control">
+            <input
+              id="playback-rate-slider"
+              className="thin-toolbar-slider"
+              type="range"
+              min={minPlaybackRate}
+              max={maxPlaybackRate}
+              step={playbackRateStep}
+              value={playbackRate}
+              onChange={handlePlaybackRateChange}
+            />
+            <span className="thin-toolbar-rate-value">{playbackRate.toFixed(1)}x</span>
+          </div>
+        </label>
+
+        <button
+          type="button"
+          className={`toolbar-button thin-toolbar-button${isParityHintOverlayEnabled ? ' is-enabled' : ''}`}
+          aria-pressed={isParityHintOverlayEnabled}
+          onClick={handleParityHintOverlayToggle}
+        >
+          {isParityHintOverlayEnabled
+            ? `Parity hints on (${parityHintDiagnostics.length})`
+            : 'Parity hints off'}
+        </button>
+      </section>
 
       <NotefieldPreview
         botWindow={
