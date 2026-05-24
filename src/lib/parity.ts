@@ -178,6 +178,18 @@ const createEmptyState = (): State => ({
   isTheFootHolding: new Array<boolean>(5).fill(false),
 });
 
+const createHomeState = (): State => {
+  const state = createEmptyState();
+
+  state.combinedColumns[panelIndexByName.left] = FootValue.LeftHeel;
+  state.combinedColumns[panelIndexByName.right] = FootValue.RightHeel;
+  state.whereTheFeetAre[FootValue.LeftHeel] = panelIndexByName.left;
+  state.whereTheFeetAre[FootValue.RightHeel] = panelIndexByName.right;
+  state.combinedMask = buildCombinedMask(state.combinedColumns);
+
+  return state;
+};
+
 const getTimedEventKey = (event: TimedNoteEvent): string =>
   `${event.panel}:${event.beat.toFixed(6)}:${event.kind}:${event.measureIndex}:${event.rowIndex}`;
 
@@ -1758,7 +1770,7 @@ const analyzeRows = (
     return node;
   };
 
-  const beginningState = createEmptyState();
+  const beginningState = createHomeState();
   const startNode = addNode(beginningState, rows[0].second - 1, -1);
   let previousNodes: StepParityNode[] = [startNode];
 

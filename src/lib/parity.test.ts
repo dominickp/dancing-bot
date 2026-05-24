@@ -105,4 +105,44 @@ describe("buildParityAssignmentMap", () => {
       ]),
     );
   });
+
+  it("starts simple crossover charts from a left-right home stance", () => {
+    const source = createSimfile([
+      "1000",
+      "0010",
+      "0001",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+    ]);
+    const simfile = parseSimfile(source);
+    const chart = simfile.charts[0];
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const result = buildParityAssignmentMap(
+      timedChart.events,
+      new Map(),
+      simfile,
+      {
+        allowBrackets: true,
+        allowCrossovers: true,
+        allowFootswitches: true,
+        favorJumpsOverBrackets: false,
+      },
+    );
+
+    expect(result.assignments.get(getAssignmentKey("left", 0, 0))).toBe(
+      "left-heel",
+    );
+    expect(result.assignments.get(getAssignmentKey("up", 0.5, 1))).toMatch(
+      /^right-/,
+    );
+    expect(result.assignments.get(getAssignmentKey("right", 1, 2))).toMatch(
+      /^left-/,
+    );
+  });
 });

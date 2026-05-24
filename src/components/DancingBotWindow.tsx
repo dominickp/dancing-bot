@@ -658,8 +658,8 @@ const getCrossoverTarget = (
     const baseTarget = footTargets.right.left;
 
     return {
-      x: baseTarget.x + 10,
-      y: baseTarget.y - 10,
+      x: baseTarget.x,
+      y: baseTarget.y,
       angle: footAngles.right.left,
       panel: 'left',
     };
@@ -669,8 +669,8 @@ const getCrossoverTarget = (
     const baseTarget = footTargets.left.right;
 
     return {
-      x: baseTarget.x - 10,
-      y: baseTarget.y - 10,
+      x: baseTarget.x,
+      y: baseTarget.y,
       angle: footAngles.left.right,
       panel: 'right',
     };
@@ -728,20 +728,40 @@ const applyCrossoverTurn = (
   footMotion: Record<FootName, BotFootMotionSample>,
 ): Record<FootName, BotFootPose> => {
   const crossoverDistance = feet.left.x - feet.right.x;
-  const isRightFootCrossingLeft =
-    feet.right.panel === 'left' ||
-    footMotion.right.completedStep?.toPanel === 'left' ||
-    footMotion.right.upcomingStep?.toPanel === 'left';
-  const isLeftFootCrossingRight =
-    feet.left.panel === 'right' ||
-    footMotion.left.completedStep?.toPanel === 'right' ||
-    footMotion.left.upcomingStep?.toPanel === 'right';
+  const getCrossoverStrength = (foot: FootName, targetSidePanel: Panel): number => {
+    const motion = footMotion[foot];
+    const poseOnTarget = feet[foot].panel === targetSidePanel ? 1.2 : 0;
+    const movingToTarget = motion.upcomingStep?.toPanel === targetSidePanel ? 0.8 + motion.moveProgress : 0;
+    const plantedOnTarget = motion.completedStep?.toPanel === targetSidePanel ? 0.72 : 0;
+    const exitingTarget =
+      motion.completedStep?.toPanel === targetSidePanel &&
+      motion.upcomingStep !== null &&
+      motion.upcomingStep.toPanel !== targetSidePanel
+        ? 0.7 * (1 - motion.moveProgress)
+        : 0;
+
+    return Math.max(poseOnTarget, movingToTarget, plantedOnTarget, exitingTarget);
+  };
+
+  const rightCrossStrength = getCrossoverStrength('right', 'left');
+  const leftCrossStrength = getCrossoverStrength('left', 'right');
+  const isRightFootCrossingLeft = rightCrossStrength > 0.001;
+  const isLeftFootCrossingRight = leftCrossStrength > 0.001;
 
   if (crossoverDistance <= 0 && !isRightFootCrossingLeft && !isLeftFootCrossingRight) {
     return feet;
   }
 
-  const crossingFoot: FootName | null = isRightFootCrossingLeft ? 'right' : isLeftFootCrossingRight ? 'left' : null;
+  const crossingFoot: FootName | null =
+    rightCrossStrength > leftCrossStrength
+      ? 'right'
+      : leftCrossStrength > rightCrossStrength
+        ? 'left'
+        : isRightFootCrossingLeft
+          ? 'right'
+          : isLeftFootCrossingRight
+            ? 'left'
+            : null;
 
   if (!crossingFoot) {
     return feet;
@@ -753,11 +773,16 @@ const applyCrossoverTurn = (
   const crossingUpcomingStep = footMotion[crossingFoot].upcomingStep;
   const crossingCompletedStep = footMotion[crossingFoot].completedStep;
   const crossingHasReachedSide = crossingCompletedStep?.toPanel === targetSidePanel;
-  const supportReferencePanel = crossingHasReachedSide
-    ? footMotion[supportFoot].completedStep?.toPanel ?? feet[supportFoot].panel
-    : footMotion[supportFoot].upcomingStep?.toPanel ??
-      footMotion[supportFoot].completedStep?.toPanel ??
-      feet[supportFoot].panel;
+  const supportUpcomingStep = footMotion[supportFoot].upcomingStep;
+  const supportCompletedStep = footMotion[supportFoot].completedStep;
+  const completedSupportPanel = supportCompletedStep?.toPanel ?? feet[supportFoot].panel;
+  const upcomingSupportPanel = supportUpcomingStep?.toPanel ?? null;
+  const supportReferencePanel =
+    !crossingHasReachedSide &&
+    upcomingSupportPanel !== null &&
+    footMotion[supportFoot].moveProgress >= 0.58
+      ? upcomingSupportPanel
+      : completedSupportPanel;
   const alignedBodyFacingAngle = isCrossingLeft ? -92 : 92;
   const bodyFacingAngle = supportReferencePanel === 'up' ? -alignedBodyFacingAngle : alignedBodyFacingAngle;
   const leadFootOffset = bodyFacingAngle > 0 ? 8 : -8;
@@ -788,8 +813,6 @@ const applyCrossoverTurn = (
       : crossoverDistance > 0
         ? clamp(crossedTravelProgress, 0.18, 1)
         : 0;
-  const supportUpcomingStep = footMotion[supportFoot].upcomingStep;
-  const supportCompletedStep = footMotion[supportFoot].completedStep;
   const supportSetupSteps = [supportCompletedStep, supportUpcomingStep].filter(
     (step): step is BotStep => step !== null,
   );
@@ -820,14 +843,9 @@ const applyCrossoverTurn = (
         ? 1
         : geometricBlend;
   const crossingBlend = Math.max(geometricBlend, crossingStartedBlend);
-  const supportFootSpanX = isCrossingLeft
-    ? Math.abs(footTargets.left.down.x - (footTargets.right.left.x + 10))
-    : Math.abs((footTargets.left.right.x - 10) - footTargets.right.down.x);
-  const supportFootSpanY = isCrossingLeft
-    ? Math.abs(footTargets.left.down.y - (footTargets.right.left.y - 10))
-    : Math.abs((footTargets.left.right.y - 10) - footTargets.right.down.y);
-  const supportFootShiftX = (isCrossingLeft ? 1 : -1) * clamp(supportFootSpanX * 0.38, 3, 8);
-  const supportFootShiftY = clamp(supportFootSpanY * 0.22, 3, 7);
+  const exitBlend = crossingIsExitingSide ? 1 - footMotion[crossingFoot].moveProgress : 1;
+  const stabilizedSupportAngleBlend = supportAngleBlend * exitBlend;
+  const stabilizedCrossingBlend = crossingBlend * exitBlend;
 
   const nextFeet = {
     left: { ...feet.left },
@@ -836,14 +854,12 @@ const applyCrossoverTurn = (
 
   nextFeet[supportFoot] = {
     ...nextFeet[supportFoot],
-    x: nextFeet[supportFoot].x + supportFootShiftX * supportBlend,
-    y: nextFeet[supportFoot].y + supportFootShiftY * supportBlend,
-    angle: lerp(nextFeet[supportFoot].angle, bodyFacingAngle + trailingFootOffset, 0.88 * supportAngleBlend),
+    angle: lerp(nextFeet[supportFoot].angle, bodyFacingAngle + trailingFootOffset, 0.88 * stabilizedSupportAngleBlend),
   };
 
   nextFeet[crossingFoot] = {
     ...nextFeet[crossingFoot],
-    angle: lerp(nextFeet[crossingFoot].angle, bodyFacingAngle + leadFootOffset, 0.88 * crossingBlend),
+    angle: lerp(nextFeet[crossingFoot].angle, bodyFacingAngle + leadFootOffset, 0.88 * stabilizedCrossingBlend),
   };
 
   return nextFeet;

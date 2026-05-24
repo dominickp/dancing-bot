@@ -27,7 +27,63 @@ const getFeetDistance = (
   right: { x: number; y: number },
 ): number => Math.hypot(right.x - left.x, right.y - left.y);
 
+const getAngleDelta = (fromAngle: number, toAngle: number): number => {
+  let delta = toAngle - fromAngle;
+
+  while (delta > 180) {
+    delta -= 360;
+  }
+
+  while (delta < -180) {
+    delta += 360;
+  }
+
+  return delta;
+};
+
 describe("DancingBotWindow animation sampling", () => {
+  it("keeps the first crossover entry on left-up-right instead of spinning into right-left-right", () => {
+    const { simfile, botTimeline } = buildAnimationSnapshot([
+      "1000",
+      "0010",
+      "0001",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+    ]);
+
+    const sweepBeats = [0.84, 0.92, 1.0];
+    const snapshots = sweepBeats.map((beat) =>
+      sampleBotStateAtBeat(botTimeline, simfile, beat),
+    );
+
+    expect(botTimeline.left.map((step) => step.toPanel)).toEqual([
+      "left",
+      "right",
+    ]);
+    expect(botTimeline.right.map((step) => step.toPanel)).toEqual(["up"]);
+
+    for (const snapshot of snapshots) {
+      expect(snapshot.feet.left.panel).toBe("right");
+      expect(snapshot.feet.right.panel).toBe("up");
+      expect(snapshot.feet.left.x).toBeGreaterThanOrEqual(62);
+      expect(snapshot.feet.right.y).toBeLessThanOrEqual(42);
+      expect(
+        getFeetDistance(snapshot.feet.left, snapshot.feet.right),
+      ).toBeGreaterThanOrEqual(18);
+    }
+  });
+
   it("keeps the left-facing crossover posed left with separated feet", () => {
     const { simfile, botTimeline } = buildAnimationSnapshot([
       "1000",
@@ -123,5 +179,62 @@ describe("DancingBotWindow animation sampling", () => {
     expect(exited.feet.left.angle).toBeLessThan(0);
     expect(exited.feet.right.panel).toBe("down");
     expect(exited.feet.right.angle).toBeLessThan(30);
+  });
+
+  it("keeps alternating crossovers stable through the crossover entry and exit window", () => {
+    const { simfile, botTimeline } = buildAnimationSnapshot([
+      "1000",
+      "0010",
+      "0001",
+      "0010",
+      "1000",
+      "0100",
+      "0001",
+      "0100",
+      "1000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+      "0000",
+    ]);
+
+    const sampleBeats = [1.95, 2.02, 2.08, 2.16, 2.24];
+    const snapshots = sampleBeats.map((beat) =>
+      sampleBotStateAtBeat(botTimeline, simfile, beat),
+    );
+
+    for (const snapshot of snapshots) {
+      expect(
+        getFeetDistance(snapshot.feet.left, snapshot.feet.right),
+      ).toBeGreaterThanOrEqual(14);
+      expect(snapshot.feet.left.x).toBeLessThan(snapshot.feet.right.x);
+    }
+
+    const rightFootAngleDeltas = snapshots
+      .slice(1)
+      .map((snapshot, index) =>
+        Math.abs(
+          getAngleDelta(
+            snapshots[index].feet.right.angle,
+            snapshot.feet.right.angle,
+          ),
+        ),
+      );
+    const leftFootAngleDeltas = snapshots
+      .slice(1)
+      .map((snapshot, index) =>
+        Math.abs(
+          getAngleDelta(
+            snapshots[index].feet.left.angle,
+            snapshot.feet.left.angle,
+          ),
+        ),
+      );
+
+    expect(Math.max(...rightFootAngleDeltas)).toBeLessThan(65);
+    expect(Math.max(...leftFootAngleDeltas)).toBeLessThan(65);
   });
 });
