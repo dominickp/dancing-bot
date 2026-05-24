@@ -20,6 +20,7 @@ Controls are based on ArrowVortex:
 - Crossing over and turning not yet supported
 - Brackets not yet supported
 - Hands not yet supported
+- Speed changes not yet supported
 
 For some of the above reasons, a lot of tech charts don't work well right now. What does work well are stamina songs/streams.
 

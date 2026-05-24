@@ -2,13 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { getPanelRotation } from '../lib/noteskin';
 import type { ResolvedDanceNoteskin, ResolvedSpriteAsset } from '../lib/noteskin';
+import {
+  buildParityAssignmentMap,
+  getFootSideFromFootPart,
+  getTimedEventKey,
+} from '../lib/parity';
+import type { ParityFootPart, StepParityConfig } from '../lib/parity';
 import { beatToSeconds, secondsToBeat } from '../lib/simfile';
 import type { Panel, SimfileDocument, TimedNoteEvent } from '../lib/simfile';
 import type { PlaybackClock } from '../hooks/useChartPlayback';
 
 type FootName = 'left' | 'right';
+export type BotFootPart = ParityFootPart;
 export type BotFormStyleId = 'straight-wide' | 'straight-minimal' | 'heels-out' | 'toes-out' | 'slanted-right';
-export const defaultBotFormStyle: BotFormStyleId = 'straight-wide';
+export const defaultBotFormStyle: BotFormStyleId = 'straight-minimal';
 export type BotFootStyleId = 'default' | 'silhouette-white' | 'shoe';
 export const defaultBotFootStyle: BotFootStyleId = 'silhouette-white';
 export type BotPadStyleId = 'itg' | 'ddr';
@@ -32,8 +39,13 @@ interface BotFootState {
 
 export interface BotStep {
   foot: FootName;
+  footPart: BotFootPart | null;
   fromPanel: Panel;
   toPanel: Panel;
+  isLifted: boolean;
+  heelPanel: Panel | null;
+  toePanel: Panel | null;
+  activePanels: Panel[];
   hitBeat: number;
   hitTimeSeconds: number;
   moveStartTimeSeconds: number;
@@ -57,12 +69,20 @@ interface BotFootPose {
   scale: number;
   isHolding: boolean;
   isPressing: boolean;
+  isLifted: boolean;
   lastStepBeat: number;
 }
 
-interface BotViewState {
+export interface BotViewState {
   feet: Record<FootName, BotFootPose>;
   activePanels: Record<Panel, boolean>;
+}
+
+interface BotFootMotionSample {
+  pose: BotFootPose;
+  completedStep: BotStep | null;
+  upcomingStep: BotStep | null;
+  moveProgress: number;
 }
 
 interface BotPlaybackSnapshot {
@@ -193,6 +213,7 @@ const botRollRetriggerBeats = 0.5;
 const botHoldScale = 1.06;
 const botPressScale = 1.12;
 const botTravelLiftScale = 0.08;
+const botFootswitchLiftHeight = 9;
 const botPadArrowColorsByStyle: Record<BotPadStyleId, Record<Panel, string>> = {
   itg: {
     left: '#51a8ff',
@@ -308,9 +329,25 @@ const botPanelToggleOptions = [
   },
 ] as const;
 
+const botParityToggleOptions = [
+  {
+    key: 'crossovers',
+    label: 'Crossover',
+  },
+  {
+    key: 'brackets',
+    label: 'Bracket',
+  },
+  {
+    key: 'footswitches',
+    label: 'Footswitch',
+  },
+] as const;
+
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const lerp = (start: number, end: number, amount: number): number => start + (end - start) * amount;
 const getOtherFoot = (foot: FootName): FootName => (foot === 'left' ? 'right' : 'left');
+const botFootMinSeparation = 18;
 const getBotPadArrowColor = (panel: Panel, padStyle: BotPadStyleId): string =>
   botPadArrowColorsByStyle[padStyle][panel];
 const getBotFootTargets = (formStyle: BotFormStyleId): BotFootTargetMap =>
@@ -320,6 +357,16 @@ const getBotFootAngles = (formStyle: BotFormStyleId): BotFootAngleMap =>
 const getBotPanelEffectStyle = (panel: Panel, padStyle: BotPadStyleId): CSSProperties => ({
   ['--bot-panel-accent' as string]: getBotPadArrowColor(panel, padStyle),
 });
+
+const getUniquePanels = (...panels: Array<Panel | null>): Panel[] => {
+  const values = panels.filter((panel): panel is Panel => panel !== null);
+  return [...new Set(values)];
+};
+
+const isBracketStep = (step: Pick<BotStep, 'heelPanel' | 'toePanel'>): boolean =>
+  step.heelPanel !== null && step.toePanel !== null && step.heelPanel !== step.toePanel;
+
+const getHomePanel = (foot: FootName): Panel => (foot === 'left' ? 'left' : 'right');
 
 const buildBotPanelTimeline = (stepsByFoot: Record<FootName, BotStep[]>): BotPanelTimeline => {
   const stepsByPanel: Record<Panel, BotStep[]> = {
@@ -331,7 +378,11 @@ const buildBotPanelTimeline = (stepsByFoot: Record<FootName, BotStep[]>): BotPan
 
   for (const footName of footNames) {
     for (const step of stepsByFoot[footName]) {
-      stepsByPanel[step.toPanel].push(step);
+      const activePanels = step.activePanels.length > 0 ? step.activePanels : [];
+
+      for (const panel of activePanels) {
+        stepsByPanel[panel].push(step);
+      }
     }
   }
 
@@ -577,6 +628,331 @@ const buildRollStepBeats = (startBeat: number, endBeat: number): number[] => {
   return stepBeats;
 };
 
+const getAnchorPanel = (foot: FootName, heelPanel: Panel | null, toePanel: Panel | null): Panel => {
+  if (foot === 'left') {
+    return heelPanel ?? toePanel ?? 'left';
+  }
+
+  return toePanel ?? heelPanel ?? 'right';
+};
+
+const getBracketAngle = (foot: FootName, heelTarget: BotPanelTarget, toeTarget: BotPanelTarget): number => {
+  const deltaX = toeTarget.x - heelTarget.x;
+  const deltaY = toeTarget.y - heelTarget.y;
+  const baseAngle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI + 90;
+
+  if (foot === 'left') {
+    return Math.min(152, Math.max(-72, baseAngle));
+  }
+
+  return Math.min(72, Math.max(-152, baseAngle));
+};
+
+
+const getCrossoverTarget = (
+  step: Pick<BotStep, 'foot' | 'fromPanel' | 'toPanel'>,
+  footTargets: BotFootTargetMap,
+  footAngles: BotFootAngleMap,
+): { x: number; y: number; angle: number; panel: Panel } | null => {
+  if (step.foot === 'right' && step.toPanel === 'left') {
+    const baseTarget = footTargets.right.left;
+
+    return {
+      x: baseTarget.x,
+      y: baseTarget.y,
+      angle: footAngles.right.left,
+      panel: 'left',
+    };
+  }
+
+  if (step.foot === 'left' && step.toPanel === 'right') {
+    const baseTarget = footTargets.left.right;
+
+    return {
+      x: baseTarget.x,
+      y: baseTarget.y,
+      angle: footAngles.left.right,
+      panel: 'right',
+    };
+  }
+
+  return null;
+};
+
+const getBracketCenter = (heelTarget: BotPanelTarget, toeTarget: BotPanelTarget): BotPanelTarget => ({
+  // The rendered foot's heel sits below its center, so a simple midpoint leaves
+  // down-facing brackets too far off the side panel.
+  x: heelTarget.x + (toeTarget.x - heelTarget.x) * 0.36,
+  y: heelTarget.y + (toeTarget.y - heelTarget.y) * 0.36,
+});
+
+const getStepPoseTarget = (
+  step: Pick<BotStep, 'foot' | 'fromPanel' | 'toPanel' | 'heelPanel' | 'toePanel'>,
+  footTargets: BotFootTargetMap,
+  footAngles: BotFootAngleMap,
+): { x: number; y: number; angle: number; panel: Panel } => {
+  const heelTarget = step.heelPanel ? footTargets[step.foot][step.heelPanel] : null;
+  const toeTarget = step.toePanel ? footTargets[step.foot][step.toePanel] : null;
+  const heelAngle = step.heelPanel ? footAngles[step.foot][step.heelPanel] : null;
+  const toeAngle = step.toePanel ? footAngles[step.foot][step.toePanel] : null;
+
+  if (heelTarget && toeTarget) {
+    const bracketCenter = getBracketCenter(heelTarget, toeTarget);
+
+    return {
+      x: bracketCenter.x,
+      y: bracketCenter.y,
+      angle: getBracketAngle(step.foot, heelTarget, toeTarget),
+      panel: step.toPanel,
+    };
+  }
+
+  const crossoverTarget = getCrossoverTarget(step, footTargets, footAngles);
+
+  if (crossoverTarget) {
+    return crossoverTarget;
+  }
+
+  const fallbackPanel = step.heelPanel ?? step.toePanel ?? step.toPanel;
+  return {
+    x: footTargets[step.foot][fallbackPanel].x,
+    y: footTargets[step.foot][fallbackPanel].y,
+    angle: footAngles[step.foot][fallbackPanel],
+    panel: fallbackPanel,
+  };
+};
+
+const applyCrossoverTurn = (
+  feet: Record<FootName, BotFootPose>,
+  footTargets: BotFootTargetMap,
+  footMotion: Record<FootName, BotFootMotionSample>,
+): Record<FootName, BotFootPose> => {
+  const crossoverDistance = feet.left.x - feet.right.x;
+  const getCrossoverStrength = (foot: FootName, targetSidePanel: Panel): number => {
+    const motion = footMotion[foot];
+    const poseOnTarget = feet[foot].panel === targetSidePanel ? 1.2 : 0;
+    const movingToTarget = motion.upcomingStep?.toPanel === targetSidePanel ? 0.8 + motion.moveProgress : 0;
+    const plantedOnTarget = motion.completedStep?.toPanel === targetSidePanel ? 0.72 : 0;
+    const exitingTarget =
+      motion.completedStep?.toPanel === targetSidePanel &&
+      motion.upcomingStep !== null &&
+      motion.upcomingStep.toPanel !== targetSidePanel
+        ? 0.7 * (1 - motion.moveProgress)
+        : 0;
+
+    return Math.max(poseOnTarget, movingToTarget, plantedOnTarget, exitingTarget);
+  };
+
+  const rightCrossStrength = getCrossoverStrength('right', 'left');
+  const leftCrossStrength = getCrossoverStrength('left', 'right');
+  const isRightFootCrossingLeft = rightCrossStrength > 0.001;
+  const isLeftFootCrossingRight = leftCrossStrength > 0.001;
+
+  if (crossoverDistance <= 0 && !isRightFootCrossingLeft && !isLeftFootCrossingRight) {
+    return feet;
+  }
+
+  const crossingFoot: FootName | null =
+    rightCrossStrength > leftCrossStrength
+      ? 'right'
+      : leftCrossStrength > rightCrossStrength
+        ? 'left'
+        : isRightFootCrossingLeft
+          ? 'right'
+          : isLeftFootCrossingRight
+            ? 'left'
+            : null;
+
+  if (!crossingFoot) {
+    return feet;
+  }
+
+  const supportFoot = getOtherFoot(crossingFoot);
+  const isCrossingLeft = crossingFoot === 'right';
+  const targetSidePanel: Panel = isCrossingLeft ? 'left' : 'right';
+  const crossingUpcomingStep = footMotion[crossingFoot].upcomingStep;
+  const crossingCompletedStep = footMotion[crossingFoot].completedStep;
+  const crossingHasReachedSide = crossingCompletedStep?.toPanel === targetSidePanel;
+  const supportUpcomingStep = footMotion[supportFoot].upcomingStep;
+  const supportCompletedStep = footMotion[supportFoot].completedStep;
+  const completedSupportPanel = supportCompletedStep?.toPanel ?? feet[supportFoot].panel;
+  const upcomingSupportPanel = supportUpcomingStep?.toPanel ?? null;
+  const supportReferencePanel =
+    !crossingHasReachedSide &&
+    upcomingSupportPanel !== null &&
+    footMotion[supportFoot].moveProgress >= 0.58
+      ? upcomingSupportPanel
+      : completedSupportPanel;
+  const alignedBodyFacingAngle = isCrossingLeft ? -92 : 92;
+  const bodyFacingAngle = supportReferencePanel === 'up' ? -alignedBodyFacingAngle : alignedBodyFacingAngle;
+  const leadFootOffset = bodyFacingAngle > 0 ? 8 : -8;
+  const trailingFootOffset = bodyFacingAngle > 0 ? -4 : 4;
+  const crossingIsMovingToSide = crossingUpcomingStep?.toPanel === targetSidePanel;
+  const crossingIsExitingSide =
+    crossingCompletedStep?.toPanel === targetSidePanel &&
+    crossingUpcomingStep !== null &&
+    crossingUpcomingStep.toPanel !== targetSidePanel;
+  const referenceStartX = isRightFootCrossingLeft
+    ? Math.max(footTargets.right.up.x, footTargets.right.down.x, footTargets.right.right.x)
+    : Math.min(footTargets.left.up.x, footTargets.left.down.x, footTargets.left.left.x);
+  const referenceEndX = isRightFootCrossingLeft
+    ? footTargets.right.left.x + 10
+    : footTargets.left.right.x - 10;
+  const travelRangeX = Math.max(Math.abs(referenceStartX - referenceEndX), 0.001);
+  const crossedTravelProgress = isRightFootCrossingLeft
+    ? clamp((referenceStartX - feet.right.x) / travelRangeX, 0, 1)
+    : isLeftFootCrossingRight
+      ? clamp((feet.left.x - referenceStartX) / travelRangeX, 0, 1)
+      : 0;
+  const geometricBlend = crossingIsMovingToSide
+    ? footMotion[crossingFoot].moveProgress
+    : crossingIsExitingSide
+      ? 1 - footMotion[crossingFoot].moveProgress
+    : crossingHasReachedSide
+      ? 1
+      : crossoverDistance > 0
+        ? clamp(crossedTravelProgress, 0.18, 1)
+        : 0;
+  const supportSetupSteps = [supportCompletedStep, supportUpcomingStep].filter(
+    (step): step is BotStep => step !== null,
+  );
+  const supportIsSteppingIntoBrace = supportUpcomingStep?.toPanel === 'down';
+  const supportJustBraced = supportCompletedStep?.toPanel === 'down';
+  const anticipatesUpcomingCrossover =
+    crossingUpcomingStep?.toPanel === targetSidePanel &&
+    !crossingHasReachedSide &&
+    supportSetupSteps.some(
+      (step) =>
+        crossingUpcomingStep.hitTimeSeconds >= step.hitTimeSeconds &&
+        crossingUpcomingStep.hitTimeSeconds - step.hitTimeSeconds <= botMoveLeadSeconds * 2.6,
+    );
+  const anticipatoryBlend = supportIsSteppingIntoBrace
+    ? footMotion[supportFoot].moveProgress
+    : supportJustBraced
+      ? 1
+      : 0;
+  const supportBlend = Math.max(geometricBlend, anticipatoryBlend);
+  const supportAngleBlend = Math.max(
+    supportBlend,
+    anticipatesUpcomingCrossover ? 0.68 : 0,
+  );
+  const crossingStartedBlend =
+    crossingUpcomingStep && crossingUpcomingStep.toPanel === targetSidePanel
+      ? footMotion[crossingFoot].moveProgress
+      : footMotion[crossingFoot].completedStep?.toPanel === targetSidePanel
+        ? 1
+        : geometricBlend;
+  const crossingBlend = Math.max(geometricBlend, crossingStartedBlend);
+  const exitBlend = crossingIsExitingSide ? 1 - footMotion[crossingFoot].moveProgress : 1;
+  const stabilizedSupportAngleBlend = supportAngleBlend * exitBlend;
+  const stabilizedCrossingBlend = crossingBlend * exitBlend;
+
+  const nextFeet = {
+    left: { ...feet.left },
+    right: { ...feet.right },
+  };
+
+  nextFeet[supportFoot] = {
+    ...nextFeet[supportFoot],
+    angle: lerp(nextFeet[supportFoot].angle, bodyFacingAngle + trailingFootOffset, 0.88 * stabilizedSupportAngleBlend),
+  };
+
+  nextFeet[crossingFoot] = {
+    ...nextFeet[crossingFoot],
+    angle: lerp(nextFeet[crossingFoot].angle, bodyFacingAngle + leadFootOffset, 0.88 * stabilizedCrossingBlend),
+  };
+
+  return nextFeet;
+};
+
+const separateFeet = (feet: Record<FootName, BotFootPose>): Record<FootName, BotFootPose> => {
+  const deltaX = feet.right.x - feet.left.x;
+  const deltaY = feet.right.y - feet.left.y;
+  const distance = Math.hypot(deltaX, deltaY);
+
+  if (distance >= botFootMinSeparation) {
+    return feet;
+  }
+
+  const overlap = (botFootMinSeparation - distance) / 2;
+  const safeDistance = distance > 0.001 ? distance : 1;
+  const axisX = distance > 0.001 ? deltaX / safeDistance : 1;
+  const axisY = distance > 0.001 ? deltaY / safeDistance : 0;
+
+  return {
+    left: {
+      ...feet.left,
+      x: feet.left.x - axisX * overlap,
+      y: feet.left.y - axisY * overlap,
+    },
+    right: {
+      ...feet.right,
+      x: feet.right.x + axisX * overlap,
+      y: feet.right.y + axisY * overlap,
+    },
+  };
+};
+
+const addFootswitchReleaseSteps = (stepsByFoot: Record<FootName, BotStep[]>): Record<FootName, BotStep[]> => {
+  const allSteps = footNames
+    .flatMap((footName) => stepsByFoot[footName].map((step) => ({ footName, step })))
+    .sort((left, right) => left.step.hitTimeSeconds - right.step.hitTimeSeconds);
+  const lastPanelPress = new Map<Panel, BotStep>();
+  const currentPanelByFoot: Record<FootName, Panel> = {
+    left: getHomePanel('left'),
+    right: getHomePanel('right'),
+  };
+
+  for (const { footName, step } of allSteps) {
+    if (step.activePanels.length !== 1) {
+      currentPanelByFoot[footName] = step.toPanel;
+
+      for (const panel of step.activePanels) {
+        lastPanelPress.set(panel, step);
+      }
+      continue;
+    }
+
+    const panel = step.activePanels[0];
+    const previousStep = lastPanelPress.get(panel) ?? null;
+    const previousFoot = previousStep?.foot ?? null;
+    const previousFootStillOccupiesPanel =
+      previousFoot !== null && currentPanelByFoot[previousFoot] === panel;
+
+    if (
+      previousStep &&
+      previousStep.foot !== footName &&
+      previousStep.activePanels.length === 1 &&
+      previousFootStillOccupiesPanel
+    ) {
+      stepsByFoot[previousStep.foot].push({
+        foot: previousStep.foot,
+        footPart: null,
+        fromPanel: panel,
+        toPanel: panel,
+        isLifted: true,
+        heelPanel: null,
+        toePanel: null,
+        activePanels: [],
+        hitBeat: step.hitBeat,
+        hitTimeSeconds: step.hitTimeSeconds,
+        moveStartTimeSeconds: step.moveStartTimeSeconds,
+        moveEndTimeSeconds: step.moveEndTimeSeconds,
+        holdUntilTimeSeconds: null,
+      });
+    }
+
+    currentPanelByFoot[footName] = step.toPanel;
+    lastPanelPress.set(panel, step);
+  }
+
+  for (const footName of footNames) {
+    stepsByFoot[footName].sort((left, right) => left.hitTimeSeconds - right.hitTimeSeconds);
+  }
+
+  return stepsByFoot;
+};
+
 const sampleBotState = (
   stepsByFoot: Record<FootName, BotStep[]>,
   panelTimeline: BotPanelTimeline,
@@ -584,7 +960,7 @@ const sampleBotState = (
   footAngles: BotFootAngleMap,
   currentTimeSeconds: number,
 ): BotViewState => {
-  const sampleFootPose = (footName: FootName): BotFootPose => {
+  const sampleFootPose = (footName: FootName): BotFootMotionSample => {
     const initialPanel: Panel = footName === 'left' ? 'left' : 'right';
     const steps = stepsByFoot[footName];
     let completedStep: BotStep | null = null;
@@ -601,12 +977,21 @@ const sampleBotState = (
     }
 
     const restingPanel = completedStep?.toPanel ?? initialPanel;
-    const restingPosition = footTargets[footName][restingPanel];
-    let x = restingPosition.x;
-    let y = restingPosition.y;
-    let angle = footAngles[footName][restingPanel];
-    let panel = restingPanel;
+    const restingTarget = completedStep
+      ? getStepPoseTarget(completedStep, footTargets, footAngles)
+      : {
+          x: footTargets[footName][restingPanel].x,
+          y: footTargets[footName][restingPanel].y,
+          angle: footAngles[footName][restingPanel],
+          panel: restingPanel,
+        };
+    let x = restingTarget.x;
+    let y = restingTarget.y;
+    let angle = restingTarget.angle;
+    let panel = restingTarget.panel;
     let scale = 1;
+    let isLifted = completedStep?.isLifted ?? false;
+    let moveProgress = 0;
     const isHolding =
       completedStep !== null &&
       completedStep.holdUntilTimeSeconds !== null &&
@@ -616,27 +1001,39 @@ const sampleBotState = (
       : Number.NEGATIVE_INFINITY;
     const isPressing =
       completedStep !== null &&
+      completedStep.activePanels.length > 0 &&
       currentTimeSeconds >= completedStep.hitTimeSeconds &&
       currentTimeSeconds <= pressEndTimeSeconds;
 
     if (upcomingStep && currentTimeSeconds >= upcomingStep.moveStartTimeSeconds) {
-      const fromPosition = footTargets[footName][upcomingStep.fromPanel];
-      const toPosition = footTargets[footName][upcomingStep.toPanel];
-      const fromAngle = footAngles[footName][upcomingStep.fromPanel];
-      const toAngle = footAngles[footName][upcomingStep.toPanel];
+      const fromTarget = completedStep
+        ? getStepPoseTarget(completedStep, footTargets, footAngles)
+        : {
+            x: footTargets[footName][upcomingStep.fromPanel].x,
+            y: footTargets[footName][upcomingStep.fromPanel].y,
+            angle: footAngles[footName][upcomingStep.fromPanel],
+            panel: upcomingStep.fromPanel,
+          };
+      const toTarget = getStepPoseTarget(upcomingStep, footTargets, footAngles);
       const moveDurationSeconds = Math.max(upcomingStep.moveEndTimeSeconds - upcomingStep.moveStartTimeSeconds, 0.001);
-      const moveProgress = clamp(
+      const nextMoveProgress = clamp(
         (currentTimeSeconds - upcomingStep.moveStartTimeSeconds) / moveDurationSeconds,
         0,
         1,
       );
       const liftStrength = clamp(moveDurationSeconds / botMoveLeadSeconds, 0.45, 1);
 
-      x = lerp(fromPosition.x, toPosition.x, moveProgress);
-      y = lerp(fromPosition.y, toPosition.y, moveProgress);
-      angle = lerp(fromAngle, toAngle, moveProgress);
-      panel = upcomingStep.toPanel;
-      scale = Math.max(scale, 1 + Math.sin(moveProgress * Math.PI) * botTravelLiftScale * liftStrength);
+      x = lerp(fromTarget.x, toTarget.x, nextMoveProgress);
+      y = lerp(fromTarget.y, toTarget.y, nextMoveProgress);
+      angle = lerp(fromTarget.angle, toTarget.angle, nextMoveProgress);
+      panel = toTarget.panel;
+      isLifted = upcomingStep.isLifted;
+      moveProgress = nextMoveProgress;
+      scale = Math.max(scale, 1 + Math.sin(nextMoveProgress * Math.PI) * botTravelLiftScale * liftStrength);
+
+      if (upcomingStep.isLifted) {
+        y -= Math.sin(nextMoveProgress * Math.PI * 0.5) * botFootswitchLiftHeight;
+      }
     }
 
     if (isHolding) {
@@ -645,22 +1042,41 @@ const sampleBotState = (
       scale = Math.max(scale, botPressScale);
     }
 
+    if (isLifted) {
+      y -= botFootswitchLiftHeight;
+      scale = Math.max(scale, 1.02);
+    }
+
+    if ((completedStep && isBracketStep(completedStep)) || (upcomingStep && isBracketStep(upcomingStep) && currentTimeSeconds >= upcomingStep.moveStartTimeSeconds)) {
+      scale = Math.max(scale, botPressScale + 0.06);
+    }
+
     return {
-      foot: footName,
-      panel,
-      x,
-      y,
-      angle,
-      scale,
-      isHolding,
-      isPressing,
-      lastStepBeat: completedStep?.hitBeat ?? Number.NEGATIVE_INFINITY,
+      pose: {
+        foot: footName,
+        panel,
+        x,
+        y,
+        angle,
+        scale,
+        isHolding,
+        isPressing,
+        isLifted,
+        lastStepBeat: completedStep?.hitBeat ?? Number.NEGATIVE_INFINITY,
+      },
+      completedStep,
+      upcomingStep,
+      moveProgress,
     };
   };
 
-  const feet: Record<FootName, BotFootPose> = {
+  const footMotion: Record<FootName, BotFootMotionSample> = {
     left: sampleFootPose('left'),
     right: sampleFootPose('right'),
+  };
+  const feet: Record<FootName, BotFootPose> = {
+    left: footMotion.left.pose,
+    right: footMotion.right.pose,
   };
   const activePanels: Record<Panel, boolean> = {
     left: false,
@@ -675,7 +1091,7 @@ const sampleBotState = (
     );
   }
 
-  return { feet, activePanels };
+  return { feet: separateFeet(applyCrossoverTurn(feet, footTargets, footMotion)), activePanels };
 };
 
 const getBotFootTransform = (foot: BotFootPose): string =>
@@ -764,7 +1180,7 @@ export const clampBotWindowRect = (rect: BotWindowRect, width: number, height: n
   };
 };
 
-export const buildBotTimeline = (
+const buildGreedyBotTimeline = (
   events: TimedNoteEvent[],
   holdEndBeatMap: Map<string, number>,
   simfile: SimfileDocument,
@@ -854,8 +1270,13 @@ export const buildBotTimeline = (
 
         stepsByFoot[footName].push({
           foot: footName,
+          footPart: null,
           fromPanel: foot.panel,
           toPanel: event.panel,
+          isLifted: false,
+          heelPanel: null,
+          toePanel: null,
+          activePanels: [event.panel],
           hitBeat: stepBeat,
           hitTimeSeconds,
           moveStartTimeSeconds,
@@ -887,6 +1308,214 @@ export const buildBotTimeline = (
   return stepsByFoot;
 };
 
+interface PlannedBotHit {
+  foot: FootName;
+  footPart: BotFootPart | null;
+  heelPanel: Panel | null;
+  toePanel: Panel | null;
+  toPanel: Panel;
+  hitBeat: number;
+  hitTimeSeconds: number;
+  holdUntilBeat: number | null;
+  holdUntilTimeSeconds: number | null;
+}
+
+const buildParityBotTimeline = (
+  events: TimedNoteEvent[],
+  holdEndBeatMap: Map<string, number>,
+  simfile: SimfileDocument,
+  parityConfig: Partial<StepParityConfig> = {},
+): Record<FootName, BotStep[]> | null => {
+  const parityResult = buildParityAssignmentMap(events, holdEndBeatMap, simfile, parityConfig);
+  const playableEvents = events.filter((event) => event.kind !== 'hold-tail' && event.kind !== 'mine');
+
+  if (playableEvents.length === 0 || parityResult.assignments.size < playableEvents.length) {
+    return null;
+  }
+
+  const plannedHitsByFoot: Record<FootName, PlannedBotHit[]> = {
+    left: [],
+    right: [],
+  };
+
+  for (let index = 0; index < events.length;) {
+    const beat = events[index]?.beat ?? 0;
+    const stepEvents: TimedNoteEvent[] = [];
+
+    while (index < events.length && events[index]?.beat === beat) {
+      const nextEvent = events[index];
+      if (nextEvent && nextEvent.kind !== 'hold-tail' && nextEvent.kind !== 'mine') {
+        stepEvents.push(nextEvent);
+      }
+      index += 1;
+    }
+
+    if (stepEvents.length === 0) {
+      continue;
+    }
+
+    const perBeatHits = new Map<string, PlannedBotHit>();
+
+    for (const event of stepEvents) {
+      const footPart = parityResult.assignments.get(getTimedEventKey(event)) ?? null;
+      if (!footPart) {
+        return null;
+      }
+
+      const foot = getFootSideFromFootPart(footPart);
+      const sustainUntilBeat =
+        event.kind === 'hold-head' || event.kind === 'roll-head'
+          ? holdEndBeatMap.get(`${event.panel}:${event.beat.toFixed(6)}`) ?? event.beat
+          : null;
+      const stepBeats =
+        event.kind === 'roll-head' && sustainUntilBeat !== null
+          ? buildRollStepBeats(event.beat, sustainUntilBeat)
+          : [event.beat];
+
+      for (const stepBeat of stepBeats) {
+        const hitTimeSeconds = beatToSeconds(stepBeat, simfile.bpms, simfile.stops, simfile.metadata.offset);
+        const holdUntilTimeSeconds =
+          event.kind === 'hold-head' && sustainUntilBeat !== null
+            ? beatToSeconds(sustainUntilBeat, simfile.bpms, simfile.stops, simfile.metadata.offset)
+            : null;
+        const key = `${foot}:${stepBeat.toFixed(6)}`;
+        const existingHit = perBeatHits.get(key) ?? {
+          foot,
+          footPart,
+          heelPanel: null,
+          toePanel: null,
+          toPanel: event.panel,
+          hitBeat: stepBeat,
+          hitTimeSeconds,
+          holdUntilBeat: sustainUntilBeat,
+          holdUntilTimeSeconds,
+        };
+
+        if (footPart.endsWith('heel')) {
+          existingHit.heelPanel = event.panel;
+        } else {
+          existingHit.toePanel = event.panel;
+        }
+
+        existingHit.toPanel = getAnchorPanel(foot, existingHit.heelPanel, existingHit.toePanel);
+        existingHit.holdUntilBeat = Math.max(existingHit.holdUntilBeat ?? Number.NEGATIVE_INFINITY, sustainUntilBeat ?? Number.NEGATIVE_INFINITY);
+        if (!Number.isFinite(existingHit.holdUntilBeat)) {
+          existingHit.holdUntilBeat = null;
+        }
+
+        if ((existingHit.holdUntilTimeSeconds ?? Number.NEGATIVE_INFINITY) < (holdUntilTimeSeconds ?? Number.NEGATIVE_INFINITY)) {
+          existingHit.holdUntilTimeSeconds = holdUntilTimeSeconds;
+        }
+
+        perBeatHits.set(key, existingHit);
+      }
+    }
+
+    for (const hit of perBeatHits.values()) {
+      plannedHitsByFoot[hit.foot].push(hit);
+    }
+  }
+
+  const stepsByFoot: Record<FootName, BotStep[]> = {
+    left: [],
+    right: [],
+  };
+  const feet: Record<FootName, BotFootState & { availableTimeSeconds: number }> = {
+    left: {
+      foot: 'left',
+      panel: 'left',
+      lastStepBeat: Number.NEGATIVE_INFINITY,
+      holdUntilBeat: null,
+      lastEventKind: null,
+      availableTimeSeconds: Number.NEGATIVE_INFINITY,
+    },
+    right: {
+      foot: 'right',
+      panel: 'right',
+      lastStepBeat: Number.NEGATIVE_INFINITY,
+      holdUntilBeat: null,
+      lastEventKind: null,
+      availableTimeSeconds: Number.NEGATIVE_INFINITY,
+    },
+  };
+
+  for (const footName of footNames) {
+    plannedHitsByFoot[footName].sort((left, right) => left.hitTimeSeconds - right.hitTimeSeconds);
+
+    for (const hit of plannedHitsByFoot[footName]) {
+      const foot = feet[footName];
+      const preferredLeadSeconds = foot.panel === hit.toPanel ? botSamePanelLeadSeconds : botMoveLeadSeconds;
+      const secondsSinceLastStep = Number.isFinite(foot.availableTimeSeconds)
+        ? Math.max(hit.hitTimeSeconds - foot.availableTimeSeconds, 0)
+        : Number.POSITIVE_INFINITY;
+      const adaptiveLeadSeconds = Number.isFinite(secondsSinceLastStep)
+        ? clamp(secondsSinceLastStep * botAdaptiveLeadRatio, botMinMoveLeadSeconds, preferredLeadSeconds)
+        : preferredLeadSeconds;
+      const moveStartTimeSeconds = Math.max(hit.hitTimeSeconds - adaptiveLeadSeconds, foot.availableTimeSeconds);
+      const availableMoveWindowSeconds = Math.max(hit.hitTimeSeconds - moveStartTimeSeconds, 0.001);
+      const compressedMoveRatio =
+        foot.panel === hit.toPanel || preferredLeadSeconds <= 0
+          ? 0
+          : clamp(1 - adaptiveLeadSeconds / preferredLeadSeconds, 0, 1);
+      const moveDurationScale = lerp(1, botFastMoveDurationScale, compressedMoveRatio);
+      const moveEndTimeSeconds = Math.min(
+        hit.hitTimeSeconds,
+        moveStartTimeSeconds + availableMoveWindowSeconds * moveDurationScale,
+      );
+
+      stepsByFoot[footName].push({
+        foot: footName,
+        footPart: hit.footPart,
+        fromPanel: foot.panel,
+        toPanel: hit.toPanel,
+        isLifted: false,
+        heelPanel: hit.heelPanel,
+        toePanel: hit.toePanel,
+        activePanels: getUniquePanels(hit.heelPanel, hit.toePanel, hit.toPanel),
+        hitBeat: hit.hitBeat,
+        hitTimeSeconds: hit.hitTimeSeconds,
+        moveStartTimeSeconds,
+        moveEndTimeSeconds,
+        holdUntilTimeSeconds: hit.holdUntilTimeSeconds,
+      });
+
+      feet[footName] = {
+        ...foot,
+        panel: hit.toPanel,
+        lastStepBeat: hit.hitBeat,
+        holdUntilBeat: hit.holdUntilBeat ?? null,
+        lastEventKind: hit.holdUntilBeat !== null ? 'hold-head' : 'tap',
+        availableTimeSeconds: hit.hitTimeSeconds,
+      };
+    }
+  }
+
+  return addFootswitchReleaseSteps(stepsByFoot);
+};
+
+export const buildBotTimeline = (
+  events: TimedNoteEvent[],
+  holdEndBeatMap: Map<string, number>,
+  simfile: SimfileDocument,
+  parityConfig: Partial<StepParityConfig> = {},
+): Record<FootName, BotStep[]> => {
+  return buildParityBotTimeline(events, holdEndBeatMap, simfile, parityConfig) ?? buildGreedyBotTimeline(events, holdEndBeatMap, simfile);
+};
+
+export const sampleBotStateAtBeat = (
+  botTimeline: Record<'left' | 'right', BotStep[]>,
+  simfile: SimfileDocument,
+  beat: number,
+  formStyle: BotFormStyleId = defaultBotFormStyle,
+): BotViewState => {
+  const botPanelTimeline = buildBotPanelTimeline(botTimeline);
+  const botFootTargets = getBotFootTargets(formStyle);
+  const botFootAngles = getBotFootAngles(formStyle);
+  const timeSeconds = beatToSeconds(beat, simfile.bpms, simfile.stops, simfile.metadata.offset);
+
+  return sampleBotState(botTimeline, botPanelTimeline, botFootTargets, botFootAngles, timeSeconds);
+};
+
 interface DancingBotWindowProps {
   botTimeline: Record<FootName, BotStep[]>;
   botWindowRect: BotWindowRect;
@@ -900,11 +1529,21 @@ interface DancingBotWindowProps {
   selectedPadStyle: BotPadStyleId;
   isPanelGlowEnabled: boolean;
   isPanelLightsEnabled: boolean;
+  isCrossoverEnabled: boolean;
+  isBracketEnabled: boolean;
+  isFootswitchEnabled: boolean;
+  isAppearanceSectionOpen: boolean;
+  isBehaviorSectionOpen: boolean;
   onFormStyleChange: (nextStyle: BotFormStyleId) => void;
   onFootStyleCycle: () => void;
   onPadStyleToggle: () => void;
   onPanelGlowToggle: () => void;
   onPanelLightsToggle: () => void;
+  onCrossoverToggle: () => void;
+  onBracketToggle: () => void;
+  onFootswitchToggle: () => void;
+  onAppearanceSectionOpenChange: (isOpen: boolean) => void;
+  onBehaviorSectionOpenChange: (isOpen: boolean) => void;
   beginBotWindowInteraction: (
     event: ReactPointerEvent<HTMLElement>,
     mode: BotWindowInteraction['mode'],
@@ -924,11 +1563,21 @@ export function DancingBotWindow({
   selectedPadStyle,
   isPanelGlowEnabled,
   isPanelLightsEnabled,
+  isCrossoverEnabled,
+  isBracketEnabled,
+  isFootswitchEnabled,
+  isAppearanceSectionOpen,
+  isBehaviorSectionOpen,
   onFormStyleChange,
   onFootStyleCycle,
   onPadStyleToggle,
   onPanelGlowToggle,
   onPanelLightsToggle,
+  onCrossoverToggle,
+  onBracketToggle,
+  onFootswitchToggle,
+  onAppearanceSectionOpenChange,
+  onBehaviorSectionOpenChange,
   beginBotWindowInteraction,
 }: DancingBotWindowProps) {
   const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
@@ -958,7 +1607,9 @@ export function DancingBotWindow({
 
     const tick = (timestamp: number) => {
       const clock = playbackClockRef.current;
-      const timeSeconds = clock ? clock.audioTime + (timestamp - clock.perfTime) / 1000 : 0;
+      const timeSeconds = clock
+        ? clock.audioTime + ((timestamp - clock.perfTime) / 1000) * clock.playbackRate
+        : 0;
       const beat = secondsToBeat(timeSeconds, simfile.bpms, simfile.stops, simfile.metadata.offset);
 
       setPlaybackSnapshot({ beat, timeSeconds });
@@ -1030,73 +1681,125 @@ export function DancingBotWindow({
 
       <div className="bot-window-body">
         <section className="bot-settings-panel" aria-label="Dancing bot settings">
-          <div className="bot-settings-group">
-            <div className="bot-icon-toggle-grid" role="radiogroup" aria-label="Bot form style">
-              {botFormIconOptions.map((option) => {
-                const isSelected = option.id === selectedFormStyle;
+          <details
+            className="bot-settings-section"
+            open={isAppearanceSectionOpen}
+            onToggle={(event) => onAppearanceSectionOpenChange(event.currentTarget.open)}
+          >
+            <summary className="bot-settings-section-summary">
+              <span className="bot-settings-section-heading">Appearance</span>
+            </summary>
 
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    aria-label={option.tooltip}
-                    className={`bot-icon-toggle${isSelected ? ' is-selected' : ''}`}
-                    data-tooltip={option.tooltip}
-                    onClick={() => onFormStyleChange(option.id)}
-                    style={{ ['--bot-toggle-accent' as string]: option.accent } as CSSProperties}
-                  >
-                    <span className="bot-icon-toggle-swatch" aria-hidden="true">
-                      <img src={option.image} alt="" className="bot-icon-toggle-image" />
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="bot-settings-group">
+              <div className="bot-icon-toggle-grid" role="radiogroup" aria-label="Bot form style">
+                {botFormIconOptions.map((option) => {
+                  const isSelected = option.id === selectedFormStyle;
+
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      aria-label={option.tooltip}
+                      className={`bot-icon-toggle${isSelected ? ' is-selected' : ''}`}
+                      data-tooltip={option.tooltip}
+                      onClick={() => onFormStyleChange(option.id)}
+                      style={{ ['--bot-toggle-accent' as string]: option.accent } as CSSProperties}
+                    >
+                      <span className="bot-icon-toggle-swatch" aria-hidden="true">
+                        <img src={option.image} alt="" className="bot-icon-toggle-image" />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="bot-future-control-grid bot-future-control-grid-appearance" aria-label="Appearance controls">
+                <button
+                  type="button"
+                  className={`bot-future-control-slot bot-future-control-toggle${selectedPadStyle === 'ddr' ? ' is-enabled' : ''}`}
+                  onClick={onPadStyleToggle}
+                >
+                  <span className="bot-future-control-label">{botPanelToggleOptions[0].label}</span>
+                  <span className="bot-future-control-value">{selectedPadStyle === 'ddr' ? 'DDR' : 'ITG'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`bot-future-control-slot bot-future-control-toggle${isPanelGlowEnabled ? ' is-enabled' : ''}`}
+                  aria-pressed={isPanelGlowEnabled}
+                  onClick={onPanelGlowToggle}
+                >
+                  <span className="bot-future-control-label">{botPanelToggleOptions[1].label}</span>
+                  <span className="bot-future-control-value">{isPanelGlowEnabled ? 'On' : 'Off'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`bot-future-control-slot bot-future-control-toggle${isPanelLightsEnabled ? ' is-enabled' : ''}`}
+                  aria-pressed={isPanelLightsEnabled}
+                  onClick={onPanelLightsToggle}
+                >
+                  <span className="bot-future-control-label">{botPanelToggleOptions[2].label}</span>
+                  <span className="bot-future-control-value">{isPanelLightsEnabled ? 'On' : 'Off'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`bot-future-control-slot bot-future-control-toggle${selectedFootStyle !== 'default' ? ' is-enabled' : ''}`}
+                  onClick={onFootStyleCycle}
+                >
+                  <span className="bot-future-control-label">Feet</span>
+                  <span className="bot-future-control-value">{selectedFootStyleOption.label}</span>
+                </button>
+              </div>
             </div>
-          </div>
+          </details>
 
-          <div className="bot-settings-group">
-            <div className="bot-future-control-grid" aria-label="Upcoming controls">
-              <button
-                type="button"
-                className={`bot-future-control-slot bot-future-control-toggle${selectedPadStyle === 'ddr' ? ' is-enabled' : ''}`}
-                onClick={onPadStyleToggle}
-              >
-                <span className="bot-future-control-label">{botPanelToggleOptions[0].label}</span>
-                <span className="bot-future-control-value">{selectedPadStyle === 'ddr' ? 'DDR' : 'ITG'}</span>
-              </button>
+          <details
+            className="bot-settings-section"
+            open={isBehaviorSectionOpen}
+            onToggle={(event) => onBehaviorSectionOpenChange(event.currentTarget.open)}
+          >
+            <summary className="bot-settings-section-summary">
+              <span className="bot-settings-section-heading">Behavior</span>
+            </summary>
 
-              <button
-                type="button"
-                className={`bot-future-control-slot bot-future-control-toggle${isPanelGlowEnabled ? ' is-enabled' : ''}`}
-                aria-pressed={isPanelGlowEnabled}
-                onClick={onPanelGlowToggle}
-              >
-                <span className="bot-future-control-label">{botPanelToggleOptions[1].label}</span>
-                <span className="bot-future-control-value">{isPanelGlowEnabled ? 'On' : 'Off'}</span>
-              </button>
+            <div className="bot-settings-group">
+              <div className="bot-future-control-grid bot-future-control-grid-behavior" aria-label="Behavior controls">
+                <button
+                  type="button"
+                  className={`bot-future-control-slot bot-future-control-toggle${isCrossoverEnabled ? ' is-enabled' : ''}`}
+                  aria-pressed={isCrossoverEnabled}
+                  onClick={onCrossoverToggle}
+                >
+                  <span className="bot-future-control-label">{botParityToggleOptions[0].label}</span>
+                  <span className="bot-future-control-value">{isCrossoverEnabled ? 'On' : 'Off'}</span>
+                </button>
 
-              <button
-                type="button"
-                className={`bot-future-control-slot bot-future-control-toggle${isPanelLightsEnabled ? ' is-enabled' : ''}`}
-                aria-pressed={isPanelLightsEnabled}
-                onClick={onPanelLightsToggle}
-              >
-                <span className="bot-future-control-label">{botPanelToggleOptions[2].label}</span>
-                <span className="bot-future-control-value">{isPanelLightsEnabled ? 'On' : 'Off'}</span>
-              </button>
+                <button
+                  type="button"
+                  className={`bot-future-control-slot bot-future-control-toggle${isBracketEnabled ? ' is-enabled' : ''}`}
+                  aria-pressed={isBracketEnabled}
+                  onClick={onBracketToggle}
+                >
+                  <span className="bot-future-control-label">{botParityToggleOptions[1].label}</span>
+                  <span className="bot-future-control-value">{isBracketEnabled ? 'On' : 'Off'}</span>
+                </button>
 
-              <button
-                type="button"
-                className={`bot-future-control-slot bot-future-control-toggle${selectedFootStyle !== 'default' ? ' is-enabled' : ''}`}
-                onClick={onFootStyleCycle}
-              >
-                <span className="bot-future-control-label">Feet</span>
-                <span className="bot-future-control-value">{selectedFootStyleOption.label}</span>
-              </button>
+                <button
+                  type="button"
+                  className={`bot-future-control-slot bot-future-control-toggle${isFootswitchEnabled ? ' is-enabled' : ''}`}
+                  aria-pressed={isFootswitchEnabled}
+                  onClick={onFootswitchToggle}
+                >
+                  <span className="bot-future-control-label">{botParityToggleOptions[2].label}</span>
+                  <span className="bot-future-control-value">{isFootswitchEnabled ? 'On' : 'Off'}</span>
+                </button>
+              </div>
             </div>
-          </div>
+          </details>
         </section>
 
         <div className="bot-pad-stage">
@@ -1142,7 +1845,7 @@ export function DancingBotWindow({
               return (
                 <div
                   key={footName}
-                  className={`bot-foot bot-foot-${footName}${foot.isHolding ? ' is-holding' : ''}${foot.isPressing ? ' is-pressing' : ''}${isImageFoot ? ' is-image-foot' : ''}`}
+                  className={`bot-foot bot-foot-${footName}${foot.isHolding ? ' is-holding' : ''}${foot.isPressing ? ' is-pressing' : ''}${foot.isLifted ? ' is-lifted' : ''}${isImageFoot ? ' is-image-foot' : ''}`}
                   style={{
                     left: `${foot.x}%`,
                     top: `${foot.y}%`,

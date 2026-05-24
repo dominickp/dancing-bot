@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ChangeEvent, FocusEvent } from 'react';
 import type { SimfileDocument, TimedChart, TimedNoteEvent } from './lib/simfile';
+import { getBpmAtBeat } from './lib/simfile';
 import {
   getBundledNoteskinOptions,
   getPanelRotation,
@@ -22,16 +23,22 @@ import type { BotStep } from './components/DancingBotWindow';
 import { NotefieldPreview } from './components/NotefieldPreview';
 import { useChartPlayback } from './hooks/useChartPlayback';
 import type { PlaybackClock } from './hooks/useChartPlayback';
+import type { StepParityConfig } from './lib/parity';
 import { bundledSongSources, loadLocalSongSource, releaseLoadedSongSource } from './lib/songSource';
 import type { LoadedSongSource } from './lib/songSource';
+import { buildParityAssignmentMap } from './lib/parity';
 
 const panelOrder = ['left', 'down', 'up', 'right'] as const;
-const receptorOffset = 72;
+const receptorTopInset = 20;
 const viewportHeight = 760;
 const minVisibleBeats = 0.25;
 const maxVisibleBeats = 32;
 const defaultVisibleBeats = 10;
+const minPlaybackRate = 0.2;
+const maxPlaybackRate = 1.5;
+const playbackRateStep = 0.1;
 const renderBufferBeats = 4;
+const settingsStorageKey = 'dancing-bot:ui-settings';
 const baseLaneWidth = 72;
 const baseLaneGap = 0;
 const baseSidePadding = 12;
@@ -57,10 +64,34 @@ interface MinimapMeasure {
   density: number;
 }
 
+interface NotefieldParityHint {
+  beat: number;
+  rowIndex: number;
+  labels: string[];
+}
+
 interface PlayfieldInteraction {
   pointerId: number;
   originX: number;
   startOffsetX: number;
+}
+
+interface PersistedUiSettings {
+  selectedBotFormStyle: BotFormStyleId;
+  selectedBotFootStyle: BotFootStyleId;
+  selectedBotPadStyle: BotPadStyleId;
+  playbackRate: number;
+  isBotPanelGlowEnabled: boolean;
+  isBotPanelLightsEnabled: boolean;
+  isBotCrossoverEnabled: boolean;
+  isBotBracketEnabled: boolean;
+  isBotFootswitchEnabled: boolean;
+  isParityHintOverlayEnabled: boolean;
+  visibleBeats: number;
+  playfieldOffsetX: number;
+  botWindowRect: BotWindowRect;
+  isAppearanceSectionOpen: boolean;
+  isBehaviorSectionOpen: boolean;
 }
 
 const bundledNoteskinOptions = getBundledNoteskinOptions();
@@ -82,8 +113,125 @@ const emptySimfileDocument: SimfileDocument = {
   charts: [],
 };
 
+const defaultBotWindowRect: BotWindowRect = {
+  x: 26,
+  y: 24,
+  width: 460,
+  height: 800,
+};
+
+const defaultUiSettings: PersistedUiSettings = {
+  selectedBotFormStyle: defaultBotFormStyle,
+  selectedBotFootStyle: defaultBotFootStyle,
+  selectedBotPadStyle: defaultBotPadStyle,
+  playbackRate: 1,
+  isBotPanelGlowEnabled: true,
+  isBotPanelLightsEnabled: true,
+  isBotCrossoverEnabled: true,
+  isBotBracketEnabled: true,
+  isBotFootswitchEnabled: true,
+  isParityHintOverlayEnabled: true,
+  visibleBeats: defaultVisibleBeats,
+  playfieldOffsetX: 0,
+  botWindowRect: defaultBotWindowRect,
+  isAppearanceSectionOpen: true,
+  isBehaviorSectionOpen: true,
+};
+
+const botFormStyleIds: readonly BotFormStyleId[] = ['straight-wide', 'straight-minimal', 'heels-out', 'toes-out', 'slanted-right'];
+const botFootStyleIds: readonly BotFootStyleId[] = ['default', 'silhouette-white', 'shoe'];
+const botPadStyleIds: readonly BotPadStyleId[] = ['itg', 'ddr'];
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const clampPlaybackRate = (value: number): number =>
+  clamp(Math.round(value / playbackRateStep) * playbackRateStep, minPlaybackRate, maxPlaybackRate);
 const getHoldSegmentKey = (panel: PanelName, startBeat: number): string => `${panel}:${startBeat.toFixed(6)}`;
+
+const readPersistedUiSettings = (): PersistedUiSettings => {
+  if (typeof window === 'undefined') {
+    return defaultUiSettings;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(settingsStorageKey);
+
+    if (!rawValue) {
+      return defaultUiSettings;
+    }
+
+    const parsedValue: unknown = JSON.parse(rawValue);
+
+    if (!isRecord(parsedValue)) {
+      return defaultUiSettings;
+    }
+
+    const parsedBotWindowRect = isRecord(parsedValue.botWindowRect) ? parsedValue.botWindowRect : null;
+
+    return {
+      selectedBotFormStyle: botFormStyleIds.includes(parsedValue.selectedBotFormStyle as BotFormStyleId)
+        ? (parsedValue.selectedBotFormStyle as BotFormStyleId)
+        : defaultUiSettings.selectedBotFormStyle,
+      selectedBotFootStyle: botFootStyleIds.includes(parsedValue.selectedBotFootStyle as BotFootStyleId)
+        ? (parsedValue.selectedBotFootStyle as BotFootStyleId)
+        : defaultUiSettings.selectedBotFootStyle,
+      selectedBotPadStyle: botPadStyleIds.includes(parsedValue.selectedBotPadStyle as BotPadStyleId)
+        ? (parsedValue.selectedBotPadStyle as BotPadStyleId)
+        : defaultUiSettings.selectedBotPadStyle,
+      playbackRate:
+        typeof parsedValue.playbackRate === 'number'
+          ? clampPlaybackRate(parsedValue.playbackRate)
+          : defaultUiSettings.playbackRate,
+      isBotPanelGlowEnabled:
+        typeof parsedValue.isBotPanelGlowEnabled === 'boolean'
+          ? parsedValue.isBotPanelGlowEnabled
+          : defaultUiSettings.isBotPanelGlowEnabled,
+      isBotPanelLightsEnabled:
+        typeof parsedValue.isBotPanelLightsEnabled === 'boolean'
+          ? parsedValue.isBotPanelLightsEnabled
+          : defaultUiSettings.isBotPanelLightsEnabled,
+      isBotCrossoverEnabled:
+        typeof parsedValue.isBotCrossoverEnabled === 'boolean'
+          ? parsedValue.isBotCrossoverEnabled
+          : defaultUiSettings.isBotCrossoverEnabled,
+      isBotBracketEnabled:
+        typeof parsedValue.isBotBracketEnabled === 'boolean'
+          ? parsedValue.isBotBracketEnabled
+          : defaultUiSettings.isBotBracketEnabled,
+      isBotFootswitchEnabled:
+        typeof parsedValue.isBotFootswitchEnabled === 'boolean'
+          ? parsedValue.isBotFootswitchEnabled
+          : defaultUiSettings.isBotFootswitchEnabled,
+      isParityHintOverlayEnabled:
+        typeof parsedValue.isParityHintOverlayEnabled === 'boolean'
+          ? parsedValue.isParityHintOverlayEnabled
+          : defaultUiSettings.isParityHintOverlayEnabled,
+      visibleBeats:
+        typeof parsedValue.visibleBeats === 'number'
+          ? clamp(parsedValue.visibleBeats, minVisibleBeats, maxVisibleBeats)
+          : defaultUiSettings.visibleBeats,
+      playfieldOffsetX:
+        typeof parsedValue.playfieldOffsetX === 'number' ? parsedValue.playfieldOffsetX : defaultUiSettings.playfieldOffsetX,
+      botWindowRect: {
+        x: typeof parsedBotWindowRect?.x === 'number' ? parsedBotWindowRect.x : defaultBotWindowRect.x,
+        y: typeof parsedBotWindowRect?.y === 'number' ? parsedBotWindowRect.y : defaultBotWindowRect.y,
+        width: typeof parsedBotWindowRect?.width === 'number' ? parsedBotWindowRect.width : defaultBotWindowRect.width,
+        height: typeof parsedBotWindowRect?.height === 'number' ? parsedBotWindowRect.height : defaultBotWindowRect.height,
+      },
+      isAppearanceSectionOpen:
+        typeof parsedValue.isAppearanceSectionOpen === 'boolean'
+          ? parsedValue.isAppearanceSectionOpen
+          : defaultUiSettings.isAppearanceSectionOpen,
+      isBehaviorSectionOpen:
+        typeof parsedValue.isBehaviorSectionOpen === 'boolean'
+          ? parsedValue.isBehaviorSectionOpen
+          : defaultUiSettings.isBehaviorSectionOpen,
+    };
+  } catch {
+    return defaultUiSettings;
+  }
+};
 
 const buildHoldEndBeatMap = (segments: HoldSegment[]): Map<string, number> => {
   const map = new Map<string, number>();
@@ -302,27 +450,30 @@ const buildHoldSegments = (events: TimedNoteEvent[]): HoldSegment[] => {
 }
 
 function App() {
+  const persistedUiSettings = useMemo(readPersistedUiSettings, []);
   const [isMobileUnsupported, setIsMobileUnsupported] = useState(false);
   const [selectedSongId, setSelectedSongId] = useState(bundledSongSources[0]?.id ?? '');
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
-  const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(defaultBotFormStyle);
-  const [selectedBotFootStyle, setSelectedBotFootStyle] = useState<BotFootStyleId>(defaultBotFootStyle);
-  const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(defaultBotPadStyle);
-  const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(true);
-  const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(true);
+  const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(persistedUiSettings.selectedBotFormStyle);
+  const [selectedBotFootStyle, setSelectedBotFootStyle] = useState<BotFootStyleId>(persistedUiSettings.selectedBotFootStyle);
+  const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(persistedUiSettings.selectedBotPadStyle);
+  const [playbackRate, setPlaybackRate] = useState(persistedUiSettings.playbackRate);
+  const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(persistedUiSettings.isBotPanelGlowEnabled);
+  const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(persistedUiSettings.isBotPanelLightsEnabled);
+  const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(persistedUiSettings.isBotCrossoverEnabled);
+  const [isBotBracketEnabled, setIsBotBracketEnabled] = useState(persistedUiSettings.isBotBracketEnabled);
+  const [isBotFootswitchEnabled, setIsBotFootswitchEnabled] = useState(persistedUiSettings.isBotFootswitchEnabled);
+  const [isParityHintOverlayEnabled, setIsParityHintOverlayEnabled] = useState(persistedUiSettings.isParityHintOverlayEnabled);
   const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
   const [songLoadError, setSongLoadError] = useState<string | null>(null);
-  const [visibleBeats, setVisibleBeats] = useState(defaultVisibleBeats);
+  const [visibleBeats, setVisibleBeats] = useState(persistedUiSettings.visibleBeats);
   const [frameWidth, setFrameWidth] = useState(0);
-  const [playfieldOffsetX, setPlayfieldOffsetX] = useState(0);
+  const [playfieldOffsetX, setPlayfieldOffsetX] = useState(persistedUiSettings.playfieldOffsetX);
   const [isPlayfieldDragging, setIsPlayfieldDragging] = useState(false);
-  const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>({
-    x: 26,
-    y: 24,
-    width: 460,
-    height: 800,
-  });
+  const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>(persistedUiSettings.botWindowRect);
+  const [isAppearanceSectionOpen, setIsAppearanceSectionOpen] = useState(persistedUiSettings.isAppearanceSectionOpen);
+  const [isBehaviorSectionOpen, setIsBehaviorSectionOpen] = useState(persistedUiSettings.isBehaviorSectionOpen);
   const songImportRef = useRef<HTMLInputElement | null>(null);
   const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
@@ -354,31 +505,65 @@ function App() {
   const selectedNoteskinOption = bundledNoteskinOptions[0] ?? null;
   const holdSegments = useMemo(() => buildHoldSegments(selectedTimedChart.events), [selectedTimedChart.events]);
   const holdEndBeatMap = useMemo(() => buildHoldEndBeatMap(holdSegments), [holdSegments]);
-  const botTimeline = useMemo(
-    () => buildBotTimeline(selectedTimedChart.events, holdEndBeatMap, simfile),
-    [holdEndBeatMap, selectedTimedChart.events, simfile],
+  const botParityConfig = useMemo<Partial<StepParityConfig>>(
+    () => ({
+      allowCrossovers: isBotCrossoverEnabled,
+      allowBrackets: isBotBracketEnabled,
+      allowFootswitches: isBotFootswitchEnabled,
+      favorJumpsOverBrackets: !isBotBracketEnabled,
+    }),
+    [isBotBracketEnabled, isBotCrossoverEnabled, isBotFootswitchEnabled],
   );
+  const botTimeline = useMemo(
+    () => buildBotTimeline(selectedTimedChart.events, holdEndBeatMap, simfile, botParityConfig),
+    [botParityConfig, holdEndBeatMap, selectedTimedChart.events, simfile],
+  );
+  const parityHintDiagnostics = useMemo<NotefieldParityHint[]>(() => {
+    if (!isParityHintOverlayEnabled) {
+      return [];
+    }
+
+    const result = buildParityAssignmentMap(selectedTimedChart.events, holdEndBeatMap, simfile, botParityConfig);
+    const labelByKind: Record<string, string> = {
+      bracket: 'Bracket',
+      crossover: 'Crossover',
+      'double-step': 'Double-step',
+      footswitch: 'Footswitch',
+      spin: 'Spin',
+    };
+
+    return result.diagnostics.map((diagnostic) => ({
+      beat: diagnostic.beat,
+      rowIndex: diagnostic.rowIndex,
+      labels: diagnostic.kinds.map((kind) => labelByKind[kind] ?? kind),
+    }));
+  }, [botParityConfig, holdEndBeatMap, isParityHintOverlayEnabled, selectedTimedChart.events, simfile]);
   const pixelsPerBeat = viewportHeight / visibleBeats;
   const visualScale = clamp(Math.sqrt(defaultVisibleBeats / visibleBeats), minVisualScale, maxVisualScale);
   const laneGap = Math.round(baseLaneGap * visualScale);
   const sidePadding = Math.round(baseSidePadding * visualScale);
+  const measureGuideGutter = Math.max(Math.round(64 * visualScale), 48);
   const playfieldWidth = Math.round(
     baseLaneWidth * visualScale * panelOrder.length + laneGap * (panelOrder.length - 1) + sidePadding * 2,
   );
+  const totalPlayfieldWidth = playfieldWidth + measureGuideGutter;
   const noteWidth = Math.max(Math.round(baseNoteWidth * visualScale), 28);
   const noteHeight = Math.max(Math.round(baseNoteHeight * visualScale), 12);
   const receptorHeight = Math.max(Math.round(baseReceptorHeight * visualScale), 28);
+  const receptorOffset = receptorTopInset + receptorHeight / 2;
   const holdWidth = receptorHeight;
   const receptorRadius = Math.max(Math.round(14 * visualScale), 10);
   const explosionSize = Math.round(receptorHeight * 1.28);
   const chartContentHeight = (selectedTimedChart.lastBeat + renderBufferBeats * 2) * pixelsPerBeat + receptorOffset;
   const totalChartBeats = Math.max(selectedTimedChart.lastBeat, 1);
-  const maxPlayfieldOffsetX = Math.max(0, (frameWidth - playfieldWidth) / 2);
+  const maxPlayfieldOffsetX = Math.max(0, (frameWidth - totalPlayfieldWidth) / 2);
   const playfieldStyle = {
-    '--playfield-width': `${playfieldWidth}px`,
+    '--playfield-width': `${totalPlayfieldWidth}px`,
+    '--lane-track-width': `${playfieldWidth}px`,
     '--playfield-offset-x': `${playfieldOffsetX}px`,
     '--lane-gap': `${laneGap}px`,
     '--playfield-gutter': `${sidePadding}px`,
+    '--measure-guide-gutter': `${measureGuideGutter}px`,
     '--note-width': `${noteWidth}px`,
     '--note-height': `${noteHeight}px`,
     '--hold-width': `${holdWidth}px`,
@@ -386,6 +571,7 @@ function App() {
     '--receptor-radius': `${receptorRadius}px`,
     '--explosion-size': `${explosionSize}px`,
     '--receptor-offset': `${receptorOffset}px`,
+    '--receptor-top': `${receptorTopInset}px`,
   } as CSSProperties;
 
   const {
@@ -402,6 +588,7 @@ function App() {
     chartIndex: selectedChartIndex,
     events: selectedTimedChart.events,
     lastBeat: selectedTimedChart.lastBeat,
+    playbackRate,
     pixelsPerBeat,
     visibleBeats,
     minVisibleBeats,
@@ -442,6 +629,9 @@ function App() {
       );
     },
   });
+  const currentBpm = getBpmAtBeat(displayBeat, simfile.bpms);
+  const effectiveBpm = currentBpm * playbackRate;
+  const bpmPrecision = effectiveBpm >= 100 ? 0 : 1;
 
   const minimapMeasures = useMemo<MinimapMeasure[]>(() => {
     const byMeasure = new Map<number, number>();
@@ -485,7 +675,7 @@ function App() {
     [holdSegments, renderBeatAnchor, visibleBeats],
   );
 
-  const measureStart = Math.floor((renderBeatAnchor - renderBufferBeats) / 4) * 4;
+  const measureStart = Math.max(0, Math.floor((renderBeatAnchor - renderBufferBeats) / 4) * 4);
   const measureEnd = Math.ceil((renderBeatAnchor + visibleBeats + renderBufferBeats) / 4) * 4;
   const visibleBeatGuides = useMemo(() => {
     const beats: Array<{ beat: number; isMeasure: boolean }> = [];
@@ -496,6 +686,13 @@ function App() {
 
     return beats;
   }, [measureEnd, measureStart]);
+  const visibleParityHints = useMemo(
+    () =>
+      parityHintDiagnostics.filter(
+        (hint) => hint.beat >= renderBeatAnchor - renderBufferBeats && hint.beat <= renderBeatAnchor + visibleBeats + renderBufferBeats,
+      ),
+    [parityHintDiagnostics, renderBeatAnchor, visibleBeats],
+  );
 
   useEffect(() => {
     const updateUnsupportedState = () => {
@@ -540,9 +737,10 @@ function App() {
 
     const syncBotWindowRect = () => {
       const bounds = frame.getBoundingClientRect();
+      const nextMaxPlayfieldOffsetX = Math.max(0, (bounds.width - totalPlayfieldWidth) / 2);
 
       setFrameWidth(bounds.width);
-      setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -maxPlayfieldOffsetX, maxPlayfieldOffsetX));
+      setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -nextMaxPlayfieldOffsetX, nextMaxPlayfieldOffsetX));
       setBotWindowRect((previousRect) => clampBotWindowRect(previousRect, bounds.width, bounds.height));
     };
 
@@ -552,11 +750,58 @@ function App() {
     return () => {
       window.removeEventListener('resize', syncBotWindowRect);
     };
-  }, [maxPlayfieldOffsetX]);
+  }, [totalPlayfieldWidth]);
 
   useEffect(() => {
+    if (frameWidth <= 0) {
+      return;
+    }
+
     setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -maxPlayfieldOffsetX, maxPlayfieldOffsetX));
-  }, [maxPlayfieldOffsetX]);
+  }, [frameWidth, maxPlayfieldOffsetX]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(
+      settingsStorageKey,
+      JSON.stringify({
+        selectedBotFormStyle,
+        selectedBotFootStyle,
+        selectedBotPadStyle,
+        playbackRate,
+        isBotPanelGlowEnabled,
+        isBotPanelLightsEnabled,
+        isBotCrossoverEnabled,
+        isBotBracketEnabled,
+        isBotFootswitchEnabled,
+        isParityHintOverlayEnabled,
+        visibleBeats,
+        playfieldOffsetX,
+        botWindowRect,
+        isAppearanceSectionOpen,
+        isBehaviorSectionOpen,
+      } satisfies PersistedUiSettings),
+    );
+  }, [
+    botWindowRect,
+    isAppearanceSectionOpen,
+    isBehaviorSectionOpen,
+    isBotBracketEnabled,
+    isBotCrossoverEnabled,
+    isBotFootswitchEnabled,
+    isBotPanelGlowEnabled,
+    isBotPanelLightsEnabled,
+    isParityHintOverlayEnabled,
+    playbackRate,
+    playfieldOffsetX,
+    selectedBotFootStyle,
+    selectedBotFormStyle,
+    selectedBotPadStyle,
+    visibleBeats,
+  ]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -678,6 +923,10 @@ function App() {
     restoreNotefieldFocus();
   };
 
+  const handlePlaybackRateChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setPlaybackRate(clampPlaybackRate(Number.parseFloat(event.target.value)));
+  };
+
   const handleBotFormStyleChange = (nextStyle: BotFormStyleId) => {
     setSelectedBotFormStyle(nextStyle);
     restoreNotefieldFocus();
@@ -711,6 +960,33 @@ function App() {
   const handleBotPanelLightsToggle = () => {
     setIsBotPanelLightsEnabled((currentValue) => !currentValue);
     restoreNotefieldFocus();
+  };
+
+  const handleBotCrossoverToggle = () => {
+    setIsBotCrossoverEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
+  const handleBotBracketToggle = () => {
+    setIsBotBracketEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
+  const handleBotFootswitchToggle = () => {
+    setIsBotFootswitchEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
+  const handleParityHintOverlayToggle = () => {
+    setIsParityHintOverlayEnabled((currentValue) => !currentValue);
+  };
+
+  const handleAppearanceSectionOpenChange = (isOpen: boolean) => {
+    setIsAppearanceSectionOpen(isOpen);
+  };
+
+  const handleBehaviorSectionOpenChange = (isOpen: boolean) => {
+    setIsBehaviorSectionOpen(isOpen);
   };
 
   const handleImportSongFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -959,9 +1235,47 @@ function App() {
                 onChange={handleImportSongFolder}
               />
             </label>
+
           </div>
         </div>
       </header>
+
+      <section className="thin-toolbar" aria-label="Playback controls">
+        <div className="thin-toolbar-group" aria-label="Tempo metrics">
+          <span className="toolbar-metric-chip">BPM {currentBpm.toFixed(bpmPrecision)}</span>
+          <span className="toolbar-metric-chip toolbar-metric-chip-highlight">
+            Effective {effectiveBpm.toFixed(bpmPrecision)}
+          </span>
+        </div>
+
+        <label className="thin-toolbar-rate" htmlFor="playback-rate-slider">
+          <span className="thin-toolbar-label">Rate</span>
+          <div className="thin-toolbar-rate-control">
+            <input
+              id="playback-rate-slider"
+              className="thin-toolbar-slider"
+              type="range"
+              min={minPlaybackRate}
+              max={maxPlaybackRate}
+              step={playbackRateStep}
+              value={playbackRate}
+              onChange={handlePlaybackRateChange}
+            />
+            <span className="thin-toolbar-rate-value">{playbackRate.toFixed(1)}x</span>
+          </div>
+        </label>
+
+        <button
+          type="button"
+          className={`toolbar-button thin-toolbar-button${isParityHintOverlayEnabled ? ' is-enabled' : ''}`}
+          aria-pressed={isParityHintOverlayEnabled}
+          onClick={handleParityHintOverlayToggle}
+        >
+          {isParityHintOverlayEnabled
+            ? `Parity hints on (${parityHintDiagnostics.length})`
+            : 'Parity hints off'}
+        </button>
+      </section>
 
       <NotefieldPreview
         botWindow={
@@ -978,11 +1292,21 @@ function App() {
             selectedPadStyle={selectedBotPadStyle}
             isPanelGlowEnabled={isBotPanelGlowEnabled}
             isPanelLightsEnabled={isBotPanelLightsEnabled}
+            isCrossoverEnabled={isBotCrossoverEnabled}
+            isBracketEnabled={isBotBracketEnabled}
+            isFootswitchEnabled={isBotFootswitchEnabled}
+            isAppearanceSectionOpen={isAppearanceSectionOpen}
+            isBehaviorSectionOpen={isBehaviorSectionOpen}
             onFormStyleChange={handleBotFormStyleChange}
             onFootStyleCycle={handleBotFootStyleCycle}
             onPadStyleToggle={handleBotPadStyleToggle}
             onPanelGlowToggle={handleBotPanelGlowToggle}
             onPanelLightsToggle={handleBotPanelLightsToggle}
+            onCrossoverToggle={handleBotCrossoverToggle}
+            onBracketToggle={handleBotBracketToggle}
+            onFootswitchToggle={handleBotFootswitchToggle}
+            onAppearanceSectionOpenChange={handleAppearanceSectionOpenChange}
+            onBehaviorSectionOpenChange={handleBehaviorSectionOpenChange}
             beginBotWindowInteraction={beginBotWindowInteraction}
           />
         }
@@ -1013,6 +1337,7 @@ function App() {
         totalChartBeats={totalChartBeats}
         viewportHeight={viewportHeight}
         visibleBeatGuides={visibleBeatGuides}
+        visibleParityHints={visibleParityHints}
         visibleEvents={visibleEvents}
         visibleHolds={visibleHolds}
       />

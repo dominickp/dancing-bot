@@ -94,6 +94,32 @@ body {
   color: rgba(248, 244, 233, 0.72);
 }
 
+.toolbar-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.toolbar-metric-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: rgba(248, 244, 233, 0.85);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+.toolbar-metric-chip-highlight {
+  border-color: rgba(255, 177, 74, 0.3);
+  color: #ffd59c;
+  background: rgba(255, 177, 74, 0.1);
+}
+
 .toolbar-link {
   display: inline-flex;
   align-items: center;
@@ -128,6 +154,65 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
+}
+
+.thin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(10, 13, 20, 0.62);
+  backdrop-filter: blur(10px);
+}
+
+.thin-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.thin-toolbar-rate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: min(420px, 100%);
+  flex: 1;
+}
+
+.thin-toolbar-label {
+  color: #ffb14a;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.thin-toolbar-rate-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.thin-toolbar-slider {
+  flex: 1;
+  accent-color: #ffb14a;
+}
+
+.thin-toolbar-rate-value {
+  min-width: 3.5rem;
+  color: #f8f4e9;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.thin-toolbar-button {
+  min-width: 188px;
+  text-align: center;
 }
 
 .toolbar-control-row {
@@ -172,6 +257,10 @@ body {
   font: inherit;
 }
 
+.toolbar-field-compact select {
+  min-width: 120px;
+}
+
 .toolbar-field select option {
   color: #f8f4e9;
   background: #11151d;
@@ -200,6 +289,18 @@ body {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.toolbar-button.is-enabled {
+  border-color: rgba(255, 177, 74, 0.34);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 177, 74, 0.12),
+      rgba(255, 255, 255, 0.03)
+    ),
+    rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 177, 74, 0.14);
 }
 
 .toolbar-button:focus-visible {
@@ -292,9 +393,52 @@ body {
   gap: 12px;
 }
 
+.bot-settings-section {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.bot-settings-section[open] {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.bot-settings-section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.bot-settings-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.bot-settings-section-summary::after {
+  content: "+";
+  color: rgba(248, 244, 233, 0.52);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.bot-settings-section[open] .bot-settings-section-summary::after {
+  content: "-";
+}
+
+.bot-settings-section-heading {
+  color: rgba(248, 244, 233, 0.84);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
 .bot-settings-group {
   display: grid;
   gap: 10px;
+  padding: 0 14px 14px;
 }
 
 .bot-settings-group-header {
@@ -429,6 +573,10 @@ body {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.bot-future-control-grid-behavior {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .bot-future-control-slot {
@@ -777,10 +925,6 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.28);
   transform-origin: 50% 78%;
-  transition:
-    left 140ms ease,
-    top 140ms ease,
-    filter 140ms ease;
 }
 
 .bot-foot.is-image-foot {
@@ -944,6 +1088,13 @@ body {
   touch-action: none;
 }
 
+.playfield-track {
+  position: relative;
+  width: var(--lane-track-width);
+  height: 100%;
+  margin-left: var(--measure-guide-gutter);
+}
+
 .notefield-playfield.is-dragging {
   cursor: grabbing;
 }
@@ -958,7 +1109,7 @@ body {
 
 .receptor-row {
   position: absolute;
-  top: 20px;
+  top: var(--receptor-top, 20px);
   left: 0;
   right: 0;
   z-index: 4;
@@ -1059,7 +1210,7 @@ body {
   z-index: 1;
   overflow: visible;
   contain: layout style;
-  clip-path: inset(var(--receptor-offset) -64px 0 0);
+  clip-path: inset(var(--receptor-offset) -320px 0 calc((var(--measure-guide-gutter) + 32px) * -1));
 }
 
 .chart-scroll-layer {
@@ -1068,7 +1219,7 @@ body {
   grid-template-columns: repeat(4, 1fr);
   gap: var(--lane-gap);
   contain: layout paint style;
-  clip-path: inset(var(--receptor-offset) 0 0 0);
+  clip-path: inset(calc(var(--receptor-offset) - var(--note-height) - 4px) 0 0 0);
 }
 
 .lane-column {
@@ -1095,15 +1246,36 @@ body {
 
 .measure-guide span {
   position: absolute;
-  right: 0;
+  right: calc(100% + 10px);
   top: 0;
   padding: 2px 8px;
   border-radius: 999px;
   background: rgba(9, 12, 18, 0.9);
   color: rgba(248, 244, 233, 0.58);
   font-size: 0.7rem;
-  transform: translate(calc(100% + 10px), -50%);
+  transform: translateY(-50%);
   white-space: nowrap;
+}
+
+.parity-hint {
+  position: absolute;
+  right: 0;
+  display: inline-flex;
+  gap: 6px;
+  transform: translate(calc(100% + 12px), -50%);
+  pointer-events: none;
+  white-space: nowrap;
+  justify-content: flex-start;
+}
+
+.parity-hint-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(9, 12, 18, 0.9);
+  border: 1px solid rgba(255, 177, 74, 0.18);
+  color: rgba(255, 210, 140, 0.92);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
 }
 
 .lane-note {
@@ -1259,9 +1431,26 @@ body {
   }
 
   .toolbar-controls,
-  .toolbar-control-row {
+  .toolbar-control-row,
+  .thin-toolbar {
     align-items: start;
     justify-content: flex-start;
+  }
+
+  .thin-toolbar {
+    flex-direction: column;
+    padding: 12px 14px;
+  }
+
+  .thin-toolbar-rate {
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .thin-toolbar-rate-control {
+    width: 100%;
   }
 
   .notefield-panel {

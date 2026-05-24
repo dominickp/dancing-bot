@@ -19,6 +19,12 @@ interface BeatGuide {
   isMeasure: boolean;
 }
 
+interface ParityHintView {
+  beat: number;
+  rowIndex: number;
+  labels: string[];
+}
+
 interface NotefieldPreviewProps {
   chartContentHeight: number;
   displayBeat: number;
@@ -47,6 +53,7 @@ interface NotefieldPreviewProps {
   totalChartBeats: number;
   viewportHeight: number;
   visibleBeatGuides: BeatGuide[];
+  visibleParityHints: ParityHintView[];
   visibleEvents: TimedNoteEvent[];
   visibleHolds: HoldSegmentView[];
   botWindow: ReactNode;
@@ -80,6 +87,7 @@ export function NotefieldPreview({
   totalChartBeats,
   viewportHeight,
   visibleBeatGuides,
+  visibleParityHints,
   visibleEvents,
   visibleHolds,
   botWindow,
@@ -93,77 +101,89 @@ export function NotefieldPreview({
             style={playfieldStyle}
             onPointerDown={handlePlayfieldPointerDown}
           >
-            <div className="receptor-row" aria-hidden="true">
-              {panelOrder.map((panel) => (
-                <div
-                  key={panel}
-                  className={`receptor receptor-${panel}`}
-                  ref={(element) => {
-                    receptorRefs.current[panel] = element;
-                  }}
-                >
-                  <div className="receptor-sprite" style={getReceptorStyle(panel)} />
+            <div className="playfield-track">
+              <div className="receptor-row" aria-hidden="true">
+                {panelOrder.map((panel) => (
                   <div
-                    className={`receptor-explosion receptor-explosion-${panel}`}
+                    key={panel}
+                    className={`receptor receptor-${panel}`}
                     ref={(element) => {
-                      explosionRefs.current[panel] = element;
+                      receptorRefs.current[panel] = element;
                     }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="lane-grid" style={{ height: receptorOffset + viewportHeight }}>
-              <div className="measure-guide-layer" ref={measureGuideLayerRef} style={{ height: chartContentHeight }}>
-                {visibleBeatGuides.map(({ beat, isMeasure }) => (
-                  <div
-                    key={beat}
-                    className={`measure-guide${isMeasure ? ' measure-guide-major' : ' measure-guide-minor'}`}
-                    style={{ top: beat * pixelsPerBeat }}
                   >
-                    {isMeasure ? <span>M {beat / 4 + 1}</span> : null}
+                    <div className="receptor-sprite" style={getReceptorStyle(panel)} />
+                    <div
+                      className={`receptor-explosion receptor-explosion-${panel}`}
+                      ref={(element) => {
+                        explosionRefs.current[panel] = element;
+                      }}
+                    />
                   </div>
                 ))}
               </div>
 
-              <div className="chart-scroll-layer" ref={scrollLayerRef} style={{ height: chartContentHeight }}>
-                {panelOrder.map((panel) => (
-                  <div key={panel} className="lane-column" data-panel={panel} style={{ height: chartContentHeight }}>
-                    {visibleHolds
-                      .filter((segment) => segment.panel === panel)
-                      .flatMap((segment) => {
-                        const segmentKey = `${segment.panel}-${segment.startBeat}-${segment.endBeat}-${segment.kind}`;
+              <div className="lane-grid" style={{ height: receptorOffset + viewportHeight }}>
+                <div className="measure-guide-layer" ref={measureGuideLayerRef} style={{ height: chartContentHeight }}>
+                  {visibleBeatGuides.map(({ beat, isMeasure }) => (
+                    <div
+                      key={beat}
+                      className={`measure-guide${isMeasure ? ' measure-guide-major' : ' measure-guide-minor'}`}
+                      style={{ top: beat * pixelsPerBeat }}
+                    >
+                      {isMeasure ? <span>M {beat / 4}</span> : null}
+                    </div>
+                  ))}
 
-                        return [
-                          <div key={`${segmentKey}-body`} className="hold-body" style={getHoldStyle(segment)} />,
-                          <div key={`${segmentKey}-cap`} className="hold-cap" style={getHoldCapStyle(segment)} />,
-                        ];
-                      })}
+                  {visibleParityHints.map((hint) => (
+                    <div key={`${hint.rowIndex}-${hint.beat}`} className="parity-hint" style={{ top: hint.beat * pixelsPerBeat }}>
+                      {hint.labels.map((label) => (
+                        <span key={label} className="parity-hint-chip">
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
 
-                    {visibleEvents
-                      .filter((event) => event.panel === panel)
-                      .map((event) => {
-                        const detailStyle = getNoteDetailStyle(event);
-                        const underlayStyle = getNoteUnderlayStyle(event);
+                <div className="chart-scroll-layer" ref={scrollLayerRef} style={{ height: chartContentHeight }}>
+                  {panelOrder.map((panel) => (
+                    <div key={panel} className="lane-column" data-panel={panel} style={{ height: chartContentHeight }}>
+                      {visibleHolds
+                        .filter((segment) => segment.panel === panel)
+                        .flatMap((segment) => {
+                          const segmentKey = `${segment.panel}-${segment.startBeat}-${segment.endBeat}-${segment.kind}`;
 
-                        return (
-                          <div
-                            key={`${event.panel}-${event.measureIndex}-${event.rowIndex}-${event.kind}`}
-                            className={`lane-note ${event.kind}`}
-                            style={getNoteFrameStyle(event)}
-                            title={`${event.panel} ${event.kind} @ beat ${event.beat.toFixed(3)}`}
-                          >
-                            {underlayStyle ? <div className="lane-note-underlay" style={underlayStyle} /> : null}
+                          return [
+                            <div key={`${segmentKey}-body`} className="hold-body" style={getHoldStyle(segment)} />,
+                            <div key={`${segmentKey}-cap`} className="hold-cap" style={getHoldCapStyle(segment)} />,
+                          ];
+                        })}
+
+                      {visibleEvents
+                        .filter((event) => event.panel === panel)
+                        .map((event) => {
+                          const detailStyle = getNoteDetailStyle(event);
+                          const underlayStyle = getNoteUnderlayStyle(event);
+
+                          return (
                             <div
-                              className={`lane-note-overlay${underlayStyle ? ' lane-note-overlay-blended' : ''}`}
-                              style={getNoteStyle(event)}
-                            />
-                            {detailStyle ? <div className="lane-note-detail" style={detailStyle} /> : null}
-                          </div>
-                        );
-                      })}
-                  </div>
-                ))}
+                              key={`${event.panel}-${event.measureIndex}-${event.rowIndex}-${event.kind}`}
+                              className={`lane-note ${event.kind}`}
+                              style={getNoteFrameStyle(event)}
+                              title={`${event.panel} ${event.kind} @ beat ${event.beat.toFixed(3)}`}
+                            >
+                              {underlayStyle ? <div className="lane-note-underlay" style={underlayStyle} /> : null}
+                              <div
+                                className={`lane-note-overlay${underlayStyle ? ' lane-note-overlay-blended' : ''}`}
+                                style={getNoteStyle(event)}
+                              />
+                              {detailStyle ? <div className="lane-note-detail" style={detailStyle} /> : null}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
