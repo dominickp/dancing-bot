@@ -1,8 +1,12 @@
-import { beatToSeconds } from './simfile';
-import type { Panel, SimfileDocument, TimedNoteEvent } from './simfile';
+import { beatToSeconds } from "./simfile";
+import type { Panel, SimfileDocument, TimedNoteEvent } from "./simfile";
 
-export type ParityFootPart = 'left-heel' | 'left-toe' | 'right-heel' | 'right-toe';
-export type ParityFootName = 'left' | 'right';
+export type ParityFootPart =
+  | "left-heel"
+  | "left-toe"
+  | "right-heel"
+  | "right-toe";
+export type ParityFootName = "left" | "right";
 
 export interface StepParityConfig {
   allowBrackets: boolean;
@@ -24,7 +28,12 @@ export interface ParityAssignmentResult {
   rowCount: number;
 }
 
-export type ParityDiagnosticKind = 'bracket' | 'crossover' | 'double-step' | 'footswitch' | 'spin';
+export type ParityDiagnosticKind =
+  | "bracket"
+  | "crossover"
+  | "double-step"
+  | "footswitch"
+  | "spin";
 
 export interface ParityRowDiagnostic {
   beat: number;
@@ -32,7 +41,7 @@ export interface ParityRowDiagnostic {
   kinds: ParityDiagnosticKind[];
 }
 
-type RowNoteType = 'empty' | 'tap' | 'hold-head' | 'roll-head';
+type RowNoteType = "empty" | "tap" | "hold-head" | "roll-head";
 
 interface StagePoint {
   x: number;
@@ -92,7 +101,7 @@ interface StepParityNode {
   previousNode: StepParityNode | null;
 }
 
-const panelOrder: readonly Panel[] = ['left', 'down', 'up', 'right'] as const;
+const panelOrder: readonly Panel[] = ["left", "down", "up", "right"] as const;
 const panelIndexByName: Record<Panel, number> = {
   left: 0,
   down: 1,
@@ -149,7 +158,7 @@ const EPSILON = 0.000001;
 const HARD_DISABLE_PENALTY = 1_000_000;
 
 const createEmptyNote = (): RowNote => ({
-  type: 'empty',
+  type: "empty",
   beat: 0,
   second: 0,
   holdLength: -1,
@@ -162,7 +171,7 @@ const createEmptyState = (): State => ({
   combinedColumns: new Array<FootValue>(COLUMN_COUNT).fill(FootValue.None),
   movedMask: 0,
   holdingMask: 0,
-  combinedMask: '0,0,0,0',
+  combinedMask: "0,0,0,0",
   whereTheFeetAre: new Array<number>(5).fill(INVALID_COLUMN),
   whatNoteTheFootIsHitting: new Array<number>(5).fill(INVALID_COLUMN),
   didTheFootMove: new Array<boolean>(5).fill(false),
@@ -174,19 +183,20 @@ const getTimedEventKey = (event: TimedNoteEvent): string =>
 
 export { getTimedEventKey };
 
-export const getFootSideFromFootPart = (footPart: ParityFootPart): ParityFootName =>
-  footPart.startsWith('left') ? 'left' : 'right';
+export const getFootSideFromFootPart = (
+  footPart: ParityFootPart,
+): ParityFootName => (footPart.startsWith("left") ? "left" : "right");
 
 const toFootPart = (value: FootValue): ParityFootPart | null => {
   switch (value) {
     case FootValue.LeftHeel:
-      return 'left-heel';
+      return "left-heel";
     case FootValue.LeftToe:
-      return 'left-toe';
+      return "left-toe";
     case FootValue.RightHeel:
-      return 'right-heel';
+      return "right-heel";
     case FootValue.RightToe:
-      return 'right-toe';
+      return "right-toe";
     default:
       return null;
   }
@@ -244,7 +254,9 @@ class StageLayout {
       return 0;
     }
 
-    return this.facingXPenalties[leftIndex * this.columnCount + rightIndex] ?? 0;
+    return (
+      this.facingXPenalties[leftIndex * this.columnCount + rightIndex] ?? 0
+    );
   }
 
   getYFacingPenalty(leftIndex: number, rightIndex: number): number {
@@ -252,7 +264,9 @@ class StageLayout {
       return 0;
     }
 
-    return this.facingYPenalties[leftIndex * this.columnCount + rightIndex] ?? 0;
+    return (
+      this.facingYPenalties[leftIndex * this.columnCount + rightIndex] ?? 0
+    );
   }
 
   averagePoint(leftIndex: number, rightIndex: number): StagePoint {
@@ -268,7 +282,12 @@ class StageLayout {
       return this.columns[leftIndex] ?? { x: 0, y: 0 };
     }
 
-    return this.avgPoints[leftIndex * this.columnCount + rightIndex] ?? { x: 0, y: 0 };
+    return (
+      this.avgPoints[leftIndex * this.columnCount + rightIndex] ?? {
+        x: 0,
+        y: 0,
+      }
+    );
   }
 
   private getDistanceSq(point1: StagePoint, point2: StagePoint): number {
@@ -314,7 +333,10 @@ class StageLayout {
         };
         this.avgPoints[left * this.columnCount + right] = averagePoint;
 
-        const distanceSquared = this.getDistanceSq(this.columns[left], this.columns[right]);
+        const distanceSquared = this.getDistanceSq(
+          this.columns[left],
+          this.columns[right],
+        );
         const distance = Math.sqrt(distanceSquared);
         this.distances[left * this.columnCount + right] = distance;
 
@@ -329,8 +351,14 @@ class StageLayout {
           return Math.pow(base, 1.8) * 100;
         };
 
-        this.facingXPenalties[left * this.columnCount + right] = Math.max(0, facingPenalty(this.getXDifference(left, right)));
-        this.facingYPenalties[left * this.columnCount + right] = Math.max(0, facingPenalty(this.getYDifference(left, right)));
+        this.facingXPenalties[left * this.columnCount + right] = Math.max(
+          0,
+          facingPenalty(this.getXDifference(left, right)),
+        );
+        this.facingYPenalties[left * this.columnCount + right] = Math.max(
+          0,
+          facingPenalty(this.getYDifference(left, right)),
+        );
       }
     }
   }
@@ -344,14 +372,22 @@ class StageLayout {
         continue;
       }
 
-      const placements = this.permuteFootPlacements(mask, new Array<FootValue>(this.columnCount).fill(FootValue.None), 0);
+      const placements = this.permuteFootPlacements(
+        mask,
+        new Array<FootValue>(this.columnCount).fill(FootValue.None),
+        0,
+      );
       if (placements.length > 0) {
         this.permuteCache.set(mask, placements);
       }
     }
   }
 
-  private permuteFootPlacements(mask: number, testColumns: FootValue[], column: number): FootValue[][] {
+  private permuteFootPlacements(
+    mask: number,
+    testColumns: FootValue[],
+    column: number,
+  ): FootValue[][] {
     if (column >= testColumns.length) {
       let leftHeelIndex = INVALID_COLUMN;
       let leftToeIndex = INVALID_COLUMN;
@@ -380,11 +416,19 @@ class StageLayout {
         return [];
       }
 
-      if (leftHeelIndex !== INVALID_COLUMN && leftToeIndex !== INVALID_COLUMN && !this.bracketCheck(leftHeelIndex, leftToeIndex)) {
+      if (
+        leftHeelIndex !== INVALID_COLUMN &&
+        leftToeIndex !== INVALID_COLUMN &&
+        !this.bracketCheck(leftHeelIndex, leftToeIndex)
+      ) {
         return [];
       }
 
-      if (rightHeelIndex !== INVALID_COLUMN && rightToeIndex !== INVALID_COLUMN && !this.bracketCheck(rightHeelIndex, rightToeIndex)) {
+      if (
+        rightHeelIndex !== INVALID_COLUMN &&
+        rightToeIndex !== INVALID_COLUMN &&
+        !this.bracketCheck(rightHeelIndex, rightToeIndex)
+      ) {
         return [];
       }
 
@@ -404,7 +448,9 @@ class StageLayout {
 
       const nextColumns = [...testColumns];
       nextColumns[column] = foot;
-      permutations.push(...this.permuteFootPlacements(mask, nextColumns, column + 1));
+      permutations.push(
+        ...this.permuteFootPlacements(mask, nextColumns, column + 1),
+      );
     }
 
     return permutations;
@@ -443,10 +489,17 @@ const buildRows = (
 
   for (const beatKey of beats) {
     const beatEvents = groups.get(beatKey) ?? [];
-    const playableEvents = beatEvents.filter((event) => event.kind !== 'hold-tail' && event.kind !== 'mine');
-    const mineEvents = beatEvents.filter((event) => event.kind === 'mine');
+    const playableEvents = beatEvents.filter(
+      (event) => event.kind !== "hold-tail" && event.kind !== "mine",
+    );
+    const mineEvents = beatEvents.filter((event) => event.kind === "mine");
     const beat = playableEvents[0]?.beat ?? beatEvents[0]?.beat ?? beatKey;
-    const second = beatToSeconds(beat, simfile.bpms, simfile.stops, simfile.metadata.offset);
+    const second = beatToSeconds(
+      beat,
+      simfile.bpms,
+      simfile.stops,
+      simfile.metadata.offset,
+    );
 
     for (const [column, hold] of [...activeHolds.entries()]) {
       if (hold.endBeat + EPSILON < beat) {
@@ -455,8 +508,12 @@ const buildRows = (
     }
 
     if (playableEvents.length > 0) {
-      const notes = Array.from({ length: COLUMN_COUNT }, () => createEmptyNote());
-      const holds = Array.from({ length: COLUMN_COUNT }, () => createEmptyNote());
+      const notes = Array.from({ length: COLUMN_COUNT }, () =>
+        createEmptyNote(),
+      );
+      const holds = Array.from({ length: COLUMN_COUNT }, () =>
+        createEmptyNote(),
+      );
       const mines = [...pendingMines];
       let noteMask = 0;
       let holdMask = 0;
@@ -487,14 +544,17 @@ const buildRows = (
       for (const playableEvent of playableEvents) {
         const column = panelIndexByName[playableEvent.panel];
         const type: RowNoteType =
-          playableEvent.kind === 'tap'
-            ? 'tap'
-            : playableEvent.kind === 'hold-head'
-              ? 'hold-head'
-              : 'roll-head';
+          playableEvent.kind === "tap"
+            ? "tap"
+            : playableEvent.kind === "hold-head"
+              ? "hold-head"
+              : "roll-head";
         const holdEndBeat =
-          playableEvent.kind === 'hold-head' || playableEvent.kind === 'roll-head'
-            ? holdEndBeatMap.get(`${playableEvent.panel}:${playableEvent.beat.toFixed(6)}`) ?? playableEvent.beat
+          playableEvent.kind === "hold-head" ||
+          playableEvent.kind === "roll-head"
+            ? (holdEndBeatMap.get(
+                `${playableEvent.panel}:${playableEvent.beat.toFixed(6)}`,
+              ) ?? playableEvent.beat)
             : playableEvent.beat;
 
         notes[column] = {
@@ -545,12 +605,18 @@ const buildRows = (
     }
 
     for (const playableEvent of playableEvents) {
-      if (playableEvent.kind !== 'hold-head' && playableEvent.kind !== 'roll-head') {
+      if (
+        playableEvent.kind !== "hold-head" &&
+        playableEvent.kind !== "roll-head"
+      ) {
         continue;
       }
 
       const column = panelIndexByName[playableEvent.panel];
-      const holdEndBeat = holdEndBeatMap.get(`${playableEvent.panel}:${playableEvent.beat.toFixed(6)}`) ?? playableEvent.beat;
+      const holdEndBeat =
+        holdEndBeatMap.get(
+          `${playableEvent.panel}:${playableEvent.beat.toFixed(6)}`,
+        ) ?? playableEvent.beat;
       activeHolds.set(column, {
         startBeat: playableEvent.beat,
         endBeat: holdEndBeat,
@@ -563,11 +629,17 @@ const buildRows = (
   return rows;
 };
 
-const getStateKey = (state: State): string => `${state.combinedMask}|${state.movedMask}|${state.holdingMask}`;
+const getStateKey = (state: State): string =>
+  `${state.combinedMask}|${state.movedMask}|${state.holdingMask}`;
 
-const buildCombinedMask = (combinedColumns: FootValue[]): string => combinedColumns.join(',');
+const buildCombinedMask = (combinedColumns: FootValue[]): string =>
+  combinedColumns.join(",");
 
-const initResultState = (initialState: State, row: Row, columns: FootValue[]): State => {
+const initResultState = (
+  initialState: State,
+  row: Row,
+  columns: FootValue[],
+): State => {
   const resultState = createEmptyState();
 
   for (let column = 0; column < columns.length; column += 1) {
@@ -578,7 +650,7 @@ const initResultState = (initialState: State, row: Row, columns: FootValue[]): S
 
     resultState.whatNoteTheFootIsHitting[foot] = column;
 
-    if (row.holds[column].type === 'empty') {
+    if (row.holds[column].type === "empty") {
       resultState.didTheFootMove[foot] = true;
       continue;
     }
@@ -594,7 +666,7 @@ const initResultState = (initialState: State, row: Row, columns: FootValue[]): S
       continue;
     }
 
-    if (row.holds[column].type !== 'empty') {
+    if (row.holds[column].type !== "empty") {
       resultState.isTheFootHolding[foot] = true;
     }
 
@@ -603,7 +675,10 @@ const initResultState = (initialState: State, row: Row, columns: FootValue[]): S
     if ((row.holdMask & bit) !== 0) {
       resultState.holdingMask |= footMask;
     }
-    if ((row.holdMask & bit) === 0 || initialState.combinedColumns[column] !== foot) {
+    if (
+      (row.holdMask & bit) === 0 ||
+      initialState.combinedColumns[column] !== foot
+    ) {
       resultState.movedMask |= footMask;
     }
   }
@@ -616,7 +691,10 @@ const initResultState = (initialState: State, row: Row, columns: FootValue[]): S
     }
 
     const initialFoot = initialState.combinedColumns[column];
-    if (initialFoot === FootValue.LeftHeel || initialFoot === FootValue.RightHeel) {
+    if (
+      initialFoot === FootValue.LeftHeel ||
+      initialFoot === FootValue.RightHeel
+    ) {
       if (!resultState.didTheFootMove[initialFoot]) {
         resultState.combinedColumns[column] = initialFoot;
       }
@@ -624,14 +702,20 @@ const initResultState = (initialState: State, row: Row, columns: FootValue[]): S
     }
 
     if (initialFoot === FootValue.LeftToe) {
-      if (!resultState.didTheFootMove[FootValue.LeftToe] && !resultState.didTheFootMove[FootValue.LeftHeel]) {
+      if (
+        !resultState.didTheFootMove[FootValue.LeftToe] &&
+        !resultState.didTheFootMove[FootValue.LeftHeel]
+      ) {
         resultState.combinedColumns[column] = initialFoot;
       }
       continue;
     }
 
     if (initialFoot === FootValue.RightToe) {
-      if (!resultState.didTheFootMove[FootValue.RightToe] && !resultState.didTheFootMove[FootValue.RightHeel]) {
+      if (
+        !resultState.didTheFootMove[FootValue.RightToe] &&
+        !resultState.didTheFootMove[FootValue.RightHeel]
+      ) {
         resultState.combinedColumns[column] = initialFoot;
       }
     }
@@ -650,7 +734,7 @@ const initResultState = (initialState: State, row: Row, columns: FootValue[]): S
 
 const setFootPlacement = (row: Row, state: State): void => {
   for (let column = 0; column < row.columnCount; column += 1) {
-    if (row.notes[column].type === 'empty') {
+    if (row.notes[column].type === "empty") {
       continue;
     }
 
@@ -690,8 +774,10 @@ const didJackLeft = (
       leftHeel > INVALID_COLUMN &&
       initialState.combinedColumns[leftHeel] === FootValue.LeftHeel &&
       !resultState.isTheFootHolding[FootValue.LeftHeel] &&
-      ((initialState.didTheFootMove[FootValue.LeftHeel] && !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
-        (initialState.didTheFootMove[FootValue.LeftToe] && !initialState.isTheFootHolding[FootValue.LeftToe]))
+      ((initialState.didTheFootMove[FootValue.LeftHeel] &&
+        !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
+        (initialState.didTheFootMove[FootValue.LeftToe] &&
+          !initialState.isTheFootHolding[FootValue.LeftToe]))
     ) {
       jackedLeft = true;
     }
@@ -700,8 +786,10 @@ const didJackLeft = (
       leftToe > INVALID_COLUMN &&
       initialState.combinedColumns[leftToe] === FootValue.LeftToe &&
       !resultState.isTheFootHolding[FootValue.LeftToe] &&
-      ((initialState.didTheFootMove[FootValue.LeftHeel] && !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
-        (initialState.didTheFootMove[FootValue.LeftToe] && !initialState.isTheFootHolding[FootValue.LeftToe]))
+      ((initialState.didTheFootMove[FootValue.LeftHeel] &&
+        !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
+        (initialState.didTheFootMove[FootValue.LeftToe] &&
+          !initialState.isTheFootHolding[FootValue.LeftToe]))
     ) {
       jackedLeft = true;
     }
@@ -725,8 +813,10 @@ const didJackRight = (
       rightHeel > INVALID_COLUMN &&
       initialState.combinedColumns[rightHeel] === FootValue.RightHeel &&
       !resultState.isTheFootHolding[FootValue.RightHeel] &&
-      ((initialState.didTheFootMove[FootValue.RightHeel] && !initialState.isTheFootHolding[FootValue.RightHeel]) ||
-        (initialState.didTheFootMove[FootValue.RightToe] && !initialState.isTheFootHolding[FootValue.RightToe]))
+      ((initialState.didTheFootMove[FootValue.RightHeel] &&
+        !initialState.isTheFootHolding[FootValue.RightHeel]) ||
+        (initialState.didTheFootMove[FootValue.RightToe] &&
+          !initialState.isTheFootHolding[FootValue.RightToe]))
     ) {
       jackedRight = true;
     }
@@ -735,8 +825,10 @@ const didJackRight = (
       rightToe > INVALID_COLUMN &&
       initialState.combinedColumns[rightToe] === FootValue.RightToe &&
       !resultState.isTheFootHolding[FootValue.RightToe] &&
-      ((initialState.didTheFootMove[FootValue.RightHeel] && !initialState.isTheFootHolding[FootValue.RightHeel]) ||
-        (initialState.didTheFootMove[FootValue.RightToe] && !initialState.isTheFootHolding[FootValue.RightToe]))
+      ((initialState.didTheFootMove[FootValue.RightHeel] &&
+        !initialState.isTheFootHolding[FootValue.RightHeel]) ||
+        (initialState.didTheFootMove[FootValue.RightToe] &&
+          !initialState.isTheFootHolding[FootValue.RightToe]))
     ) {
       jackedRight = true;
     }
@@ -761,8 +853,10 @@ const didDoubleStep = (
   if (
     movedLeft &&
     !jackedLeft &&
-    ((initialState.didTheFootMove[FootValue.LeftHeel] && !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
-      (initialState.didTheFootMove[FootValue.LeftToe] && !initialState.isTheFootHolding[FootValue.LeftToe]))
+    ((initialState.didTheFootMove[FootValue.LeftHeel] &&
+      !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
+      (initialState.didTheFootMove[FootValue.LeftToe] &&
+        !initialState.isTheFootHolding[FootValue.LeftToe]))
   ) {
     doubleStepped = true;
   }
@@ -770,8 +864,10 @@ const didDoubleStep = (
   if (
     movedRight &&
     !jackedRight &&
-    ((initialState.didTheFootMove[FootValue.RightHeel] && !initialState.isTheFootHolding[FootValue.RightHeel]) ||
-      (initialState.didTheFootMove[FootValue.RightToe] && !initialState.isTheFootHolding[FootValue.RightToe]))
+    ((initialState.didTheFootMove[FootValue.RightHeel] &&
+      !initialState.isTheFootHolding[FootValue.RightHeel]) ||
+      (initialState.didTheFootMove[FootValue.RightToe] &&
+        !initialState.isTheFootHolding[FootValue.RightToe]))
   ) {
     doubleStepped = true;
   }
@@ -779,13 +875,16 @@ const didDoubleStep = (
   if (rowIndex - 1 > -1) {
     const lastRow = rows[rowIndex - 1];
     for (const hold of lastRow.holds) {
-      if (hold.type === 'empty') {
+      if (hold.type === "empty") {
         continue;
       }
 
       const endBeat = row.beat;
       const startBeat = lastRow.beat;
-      if (hold.beat + hold.holdLength > startBeat && hold.beat + hold.holdLength < endBeat) {
+      if (
+        hold.beat + hold.holdLength > startBeat &&
+        hold.beat + hold.holdLength < endBeat
+      ) {
         doubleStepped = false;
       }
       if (hold.beat + hold.holdLength >= endBeat) {
@@ -802,7 +901,10 @@ const isBracketState = (resultState: State): boolean => {
   const leftToe = resultState.whatNoteTheFootIsHitting[FootValue.LeftToe];
   const rightHeel = resultState.whatNoteTheFootIsHitting[FootValue.RightHeel];
   const rightToe = resultState.whatNoteTheFootIsHitting[FootValue.RightToe];
-  return (leftHeel !== INVALID_COLUMN && leftToe !== INVALID_COLUMN) || (rightHeel !== INVALID_COLUMN && rightToe !== INVALID_COLUMN);
+  return (
+    (leftHeel !== INVALID_COLUMN && leftToe !== INVALID_COLUMN) ||
+    (rightHeel !== INVALID_COLUMN && rightToe !== INVALID_COLUMN)
+  );
 };
 
 const isCrossoverState = (resultState: State): boolean => {
@@ -817,9 +919,13 @@ const isCrossoverState = (resultState: State): boolean => {
   return rightPosition.x < leftPosition.x;
 };
 
-const didFootswitch = (initialState: State, resultState: State, row: Row): boolean => {
+const didFootswitch = (
+  initialState: State,
+  resultState: State,
+  row: Row,
+): boolean => {
   for (let column = 0; column < row.columnCount; column += 1) {
-    if (row.notes[column].type === 'empty') {
+    if (row.notes[column].type === "empty") {
       continue;
     }
 
@@ -849,41 +955,76 @@ const getRowDiagnosticKinds = (
   const leftToe = resultState.whatNoteTheFootIsHitting[FootValue.LeftToe];
   const rightHeel = resultState.whatNoteTheFootIsHitting[FootValue.RightHeel];
   const rightToe = resultState.whatNoteTheFootIsHitting[FootValue.RightToe];
-  const movedLeft = resultState.didTheFootMove[FootValue.LeftHeel] || resultState.didTheFootMove[FootValue.LeftToe];
-  const movedRight = resultState.didTheFootMove[FootValue.RightHeel] || resultState.didTheFootMove[FootValue.RightToe];
+  const movedLeft =
+    resultState.didTheFootMove[FootValue.LeftHeel] ||
+    resultState.didTheFootMove[FootValue.LeftToe];
+  const movedRight =
+    resultState.didTheFootMove[FootValue.RightHeel] ||
+    resultState.didTheFootMove[FootValue.RightToe];
   const didJump =
-    ((initialState.didTheFootMove[FootValue.LeftHeel] && !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
-      (initialState.didTheFootMove[FootValue.LeftToe] && !initialState.isTheFootHolding[FootValue.LeftToe])) &&
-    ((initialState.didTheFootMove[FootValue.RightHeel] && !initialState.isTheFootHolding[FootValue.RightHeel]) ||
-      (initialState.didTheFootMove[FootValue.RightToe] && !initialState.isTheFootHolding[FootValue.RightToe]));
-  const jackedLeft = didJackLeft(initialState, resultState, leftHeel, leftToe, movedLeft, didJump);
-  const jackedRight = didJackRight(initialState, resultState, rightHeel, rightToe, movedRight, didJump);
+    ((initialState.didTheFootMove[FootValue.LeftHeel] &&
+      !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
+      (initialState.didTheFootMove[FootValue.LeftToe] &&
+        !initialState.isTheFootHolding[FootValue.LeftToe])) &&
+    ((initialState.didTheFootMove[FootValue.RightHeel] &&
+      !initialState.isTheFootHolding[FootValue.RightHeel]) ||
+      (initialState.didTheFootMove[FootValue.RightToe] &&
+        !initialState.isTheFootHolding[FootValue.RightToe]));
+  const jackedLeft = didJackLeft(
+    initialState,
+    resultState,
+    leftHeel,
+    leftToe,
+    movedLeft,
+    didJump,
+  );
+  const jackedRight = didJackRight(
+    initialState,
+    resultState,
+    rightHeel,
+    rightToe,
+    movedRight,
+    didJump,
+  );
   const kinds: ParityDiagnosticKind[] = [];
 
   if (isCrossoverState(resultState)) {
-    kinds.push('crossover');
+    kinds.push("crossover");
   }
 
   if (isBracketState(resultState)) {
-    kinds.push('bracket');
+    kinds.push("bracket");
   }
 
   if (didFootswitch(initialState, resultState, row)) {
-    kinds.push('footswitch');
+    kinds.push("footswitch");
   }
 
   if (
     movedLeft !== movedRight &&
     resultState.holdingMask === 0 &&
     !didJump &&
-    didDoubleStep(initialState, resultState, rows, rowIndex, movedLeft, jackedLeft, movedRight, jackedRight)
+    didDoubleStep(
+      initialState,
+      resultState,
+      rows,
+      rowIndex,
+      movedLeft,
+      jackedLeft,
+      movedRight,
+      jackedRight,
+    )
   ) {
-    kinds.push('double-step');
+    kinds.push("double-step");
   }
 
-  const diagnosticCostCalculator = new StepParityCostCalculator(defaultStepParityConfig);
-  if (diagnosticCostCalculator['calcSpinCosts'](initialState, resultState) > 0) {
-    kinds.push('spin');
+  const diagnosticCostCalculator = new StepParityCostCalculator(
+    defaultStepParityConfig,
+  );
+  if (
+    diagnosticCostCalculator["calcSpinCosts"](initialState, resultState) > 0
+  ) {
+    kinds.push("spin");
   }
 
   return kinds;
@@ -892,28 +1033,83 @@ const getRowDiagnosticKinds = (
 class StepParityCostCalculator {
   constructor(private readonly config: StepParityConfig) {}
 
-  getActionCost(initialState: State, resultState: State, rows: Row[], columns: FootValue[], rowIndex: number, elapsedTime: number): number {
+  getActionCost(
+    initialState: State,
+    resultState: State,
+    rows: Row[],
+    columns: FootValue[],
+    rowIndex: number,
+    elapsedTime: number,
+  ): number {
     const row = rows[rowIndex];
     const leftHeel = resultState.whatNoteTheFootIsHitting[FootValue.LeftHeel];
     const leftToe = resultState.whatNoteTheFootIsHitting[FootValue.LeftToe];
     const rightHeel = resultState.whatNoteTheFootIsHitting[FootValue.RightHeel];
     const rightToe = resultState.whatNoteTheFootIsHitting[FootValue.RightToe];
-    const movedLeft = resultState.didTheFootMove[FootValue.LeftHeel] || resultState.didTheFootMove[FootValue.LeftToe];
-    const movedRight = resultState.didTheFootMove[FootValue.RightHeel] || resultState.didTheFootMove[FootValue.RightToe];
+    const movedLeft =
+      resultState.didTheFootMove[FootValue.LeftHeel] ||
+      resultState.didTheFootMove[FootValue.LeftToe];
+    const movedRight =
+      resultState.didTheFootMove[FootValue.RightHeel] ||
+      resultState.didTheFootMove[FootValue.RightToe];
     const didJump =
-      ((initialState.didTheFootMove[FootValue.LeftHeel] && !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
-        (initialState.didTheFootMove[FootValue.LeftToe] && !initialState.isTheFootHolding[FootValue.LeftToe])) &&
-      ((initialState.didTheFootMove[FootValue.RightHeel] && !initialState.isTheFootHolding[FootValue.RightHeel]) ||
-        (initialState.didTheFootMove[FootValue.RightToe] && !initialState.isTheFootHolding[FootValue.RightToe]));
-    const jackedLeft = didJackLeft(initialState, resultState, leftHeel, leftToe, movedLeft, didJump);
-    const jackedRight = didJackRight(initialState, resultState, rightHeel, rightToe, movedRight, didJump);
+      ((initialState.didTheFootMove[FootValue.LeftHeel] &&
+        !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
+        (initialState.didTheFootMove[FootValue.LeftToe] &&
+          !initialState.isTheFootHolding[FootValue.LeftToe])) &&
+      ((initialState.didTheFootMove[FootValue.RightHeel] &&
+        !initialState.isTheFootHolding[FootValue.RightHeel]) ||
+        (initialState.didTheFootMove[FootValue.RightToe] &&
+          !initialState.isTheFootHolding[FootValue.RightToe]));
+    const jackedLeft = didJackLeft(
+      initialState,
+      resultState,
+      leftHeel,
+      leftToe,
+      movedLeft,
+      didJump,
+    );
+    const jackedRight = didJackRight(
+      initialState,
+      resultState,
+      rightHeel,
+      rightToe,
+      movedRight,
+      didJump,
+    );
 
     let cost = 0;
     cost += this.calcMineCost(resultState, row);
     cost += this.calcHoldSwitchCost(initialState, resultState, row);
-    cost += this.calcBracketTapCost(initialState, resultState, row, leftHeel, leftToe, rightHeel, rightToe, elapsedTime);
-    cost += this.calcBracketJackCost(resultState, movedLeft, movedRight, jackedLeft, jackedRight, didJump);
-    cost += this.calcDoubleStepCost(initialState, resultState, rows, rowIndex, movedLeft, movedRight, jackedLeft, jackedRight, didJump);
+    cost += this.calcBracketTapCost(
+      initialState,
+      resultState,
+      row,
+      leftHeel,
+      leftToe,
+      rightHeel,
+      rightToe,
+      elapsedTime,
+    );
+    cost += this.calcBracketJackCost(
+      resultState,
+      movedLeft,
+      movedRight,
+      jackedLeft,
+      jackedRight,
+      didJump,
+    );
+    cost += this.calcDoubleStepCost(
+      initialState,
+      resultState,
+      rows,
+      rowIndex,
+      movedLeft,
+      movedRight,
+      jackedLeft,
+      jackedRight,
+      didJump,
+    );
     cost += this.calcPreferredBracketBonus(row, resultState);
     cost += this.calcSlowBracketCost(row, movedLeft, movedRight, elapsedTime);
     cost += this.calcTwistedFootCost(resultState);
@@ -922,8 +1118,18 @@ class StepParityCostCalculator {
     cost += this.calcFootswitchCost(initialState, columns, row, elapsedTime);
     cost += this.calcSideSwitchCost(initialState, resultState, columns);
     cost += this.calcMissedFootswitchCost(row, jackedLeft, jackedRight);
-    cost += this.calcJackCost(movedLeft, movedRight, jackedLeft, jackedRight, elapsedTime);
-    cost += this.calcBigMovementsQuicklyCost(initialState, resultState, elapsedTime);
+    cost += this.calcJackCost(
+      movedLeft,
+      movedRight,
+      jackedLeft,
+      jackedRight,
+      elapsedTime,
+    );
+    cost += this.calcBigMovementsQuicklyCost(
+      initialState,
+      resultState,
+      elapsedTime,
+    );
 
     if (!this.config.allowBrackets && isBracketState(resultState)) {
       cost += HARD_DISABLE_PENALTY;
@@ -942,7 +1148,10 @@ class StepParityCostCalculator {
     }
 
     for (let column = 0; column < row.columnCount; column += 1) {
-      if (resultState.combinedColumns[column] !== FootValue.None && row.mines[column] !== 0) {
+      if (
+        resultState.combinedColumns[column] !== FootValue.None &&
+        row.mines[column] !== 0
+      ) {
         return MINE;
       }
     }
@@ -950,7 +1159,11 @@ class StepParityCostCalculator {
     return 0;
   }
 
-  private calcHoldSwitchCost(initialState: State, resultState: State, row: Row): number {
+  private calcHoldSwitchCost(
+    initialState: State,
+    resultState: State,
+    row: Row,
+  ): number {
     if (row.holdMask === 0) {
       return 0;
     }
@@ -958,17 +1171,19 @@ class StepParityCostCalculator {
     let cost = 0;
 
     for (let column = 0; column < row.columnCount; column += 1) {
-      if (row.holds[column].type === 'empty') {
+      if (row.holds[column].type === "empty") {
         continue;
       }
 
       const currentFoot = resultState.combinedColumns[column];
       const switchedLeft =
-        (currentFoot === FootValue.LeftHeel || currentFoot === FootValue.LeftToe) &&
+        (currentFoot === FootValue.LeftHeel ||
+          currentFoot === FootValue.LeftToe) &&
         initialState.combinedColumns[column] !== FootValue.LeftHeel &&
         initialState.combinedColumns[column] !== FootValue.LeftToe;
       const switchedRight =
-        (currentFoot === FootValue.RightHeel || currentFoot === FootValue.RightToe) &&
+        (currentFoot === FootValue.RightHeel ||
+          currentFoot === FootValue.RightToe) &&
         initialState.combinedColumns[column] !== FootValue.RightHeel &&
         initialState.combinedColumns[column] !== FootValue.RightToe;
 
@@ -977,7 +1192,10 @@ class StepParityCostCalculator {
       }
 
       const previousFoot = initialState.whereTheFeetAre[currentFoot];
-      const distanceMultiplier = previousFoot === INVALID_COLUMN ? 1 : Math.sqrt(layout.getDistance(previousFoot, column));
+      const distanceMultiplier =
+        previousFoot === INVALID_COLUMN
+          ? 1
+          : Math.sqrt(layout.getDistance(previousFoot, column));
       cost += HOLDSWITCH * distanceMultiplier;
     }
 
@@ -1002,26 +1220,44 @@ class StepParityCostCalculator {
 
     if (leftHeel !== INVALID_COLUMN && leftToe !== INVALID_COLUMN) {
       let jackPenalty = 1;
-      if (initialState.didTheFootMove[FootValue.LeftHeel] || initialState.didTheFootMove[FootValue.LeftToe]) {
+      if (
+        initialState.didTheFootMove[FootValue.LeftHeel] ||
+        initialState.didTheFootMove[FootValue.LeftToe]
+      ) {
         jackPenalty = 1 / Math.max(elapsedTime, EPSILON);
       }
-      if (row.holds[leftHeel].type !== 'empty' && row.holds[leftToe].type === 'empty') {
+      if (
+        row.holds[leftHeel].type !== "empty" &&
+        row.holds[leftToe].type === "empty"
+      ) {
         cost += BRACKETTAP * jackPenalty;
       }
-      if (row.holds[leftToe].type !== 'empty' && row.holds[leftHeel].type === 'empty') {
+      if (
+        row.holds[leftToe].type !== "empty" &&
+        row.holds[leftHeel].type === "empty"
+      ) {
         cost += BRACKETTAP * jackPenalty;
       }
     }
 
     if (rightHeel !== INVALID_COLUMN && rightToe !== INVALID_COLUMN) {
       let jackPenalty = 1;
-      if (initialState.didTheFootMove[FootValue.RightHeel] || initialState.didTheFootMove[FootValue.RightToe]) {
+      if (
+        initialState.didTheFootMove[FootValue.RightHeel] ||
+        initialState.didTheFootMove[FootValue.RightToe]
+      ) {
         jackPenalty = 1 / Math.max(elapsedTime, EPSILON);
       }
-      if (row.holds[rightHeel].type !== 'empty' && row.holds[rightToe].type === 'empty') {
+      if (
+        row.holds[rightHeel].type !== "empty" &&
+        row.holds[rightToe].type === "empty"
+      ) {
         cost += BRACKETTAP * jackPenalty;
       }
-      if (row.holds[rightToe].type !== 'empty' && row.holds[rightHeel].type === 'empty') {
+      if (
+        row.holds[rightToe].type !== "empty" &&
+        row.holds[rightHeel].type === "empty"
+      ) {
         cost += BRACKETTAP * jackPenalty;
       }
     }
@@ -1029,16 +1265,31 @@ class StepParityCostCalculator {
     return cost;
   }
 
-  private calcBracketJackCost(resultState: State, movedLeft: boolean, movedRight: boolean, jackedLeft: boolean, jackedRight: boolean, didJump: boolean): number {
+  private calcBracketJackCost(
+    resultState: State,
+    movedLeft: boolean,
+    movedRight: boolean,
+    jackedLeft: boolean,
+    jackedRight: boolean,
+    didJump: boolean,
+  ): number {
     if (movedLeft === movedRight || resultState.holdingMask !== 0 || didJump) {
       return 0;
     }
 
     let cost = 0;
-    if (jackedLeft && resultState.didTheFootMove[FootValue.LeftHeel] && resultState.didTheFootMove[FootValue.LeftToe]) {
+    if (
+      jackedLeft &&
+      resultState.didTheFootMove[FootValue.LeftHeel] &&
+      resultState.didTheFootMove[FootValue.LeftToe]
+    ) {
       cost += BRACKETJACK;
     }
-    if (jackedRight && resultState.didTheFootMove[FootValue.RightHeel] && resultState.didTheFootMove[FootValue.RightToe]) {
+    if (
+      jackedRight &&
+      resultState.didTheFootMove[FootValue.RightHeel] &&
+      resultState.didTheFootMove[FootValue.RightToe]
+    ) {
       cost += BRACKETJACK;
     }
     return cost;
@@ -1059,29 +1310,58 @@ class StepParityCostCalculator {
       return 0;
     }
 
-    return didDoubleStep(initialState, resultState, rows, rowIndex, movedLeft, jackedLeft, movedRight, jackedRight)
+    return didDoubleStep(
+      initialState,
+      resultState,
+      rows,
+      rowIndex,
+      movedLeft,
+      jackedLeft,
+      movedRight,
+      jackedRight,
+    )
       ? DOUBLESTEP
       : 0;
   }
 
   private calcPreferredBracketBonus(row: Row, resultState: State): number {
-    if (this.config.favorJumpsOverBrackets || row.holdMask !== 0 || row.noteCount !== 2 || !isBracketState(resultState)) {
+    if (
+      this.config.favorJumpsOverBrackets ||
+      row.holdMask !== 0 ||
+      row.noteCount !== 2 ||
+      !isBracketState(resultState)
+    ) {
       return 0;
     }
 
     const activeColumns = row.notes
-      .map((note, index) => (note.type !== 'empty' ? index : INVALID_COLUMN))
+      .map((note, index) => (note.type !== "empty" ? index : INVALID_COLUMN))
       .filter((index) => index !== INVALID_COLUMN);
 
-    if (activeColumns.length !== 2 || !layout.bracketCheck(activeColumns[0] ?? INVALID_COLUMN, activeColumns[1] ?? INVALID_COLUMN)) {
+    if (
+      activeColumns.length !== 2 ||
+      !layout.bracketCheck(
+        activeColumns[0] ?? INVALID_COLUMN,
+        activeColumns[1] ?? INVALID_COLUMN,
+      )
+    ) {
       return 0;
     }
 
     return -PREFERRED_BRACKET_BONUS;
   }
 
-  private calcSlowBracketCost(row: Row, movedLeft: boolean, movedRight: boolean, elapsedTime: number): number {
-    if (elapsedTime <= SLOW_BRACKET_THRESHOLD || movedLeft === movedRight || row.noteCount < 2) {
+  private calcSlowBracketCost(
+    row: Row,
+    movedLeft: boolean,
+    movedRight: boolean,
+    elapsedTime: number,
+  ): number {
+    if (
+      elapsedTime <= SLOW_BRACKET_THRESHOLD ||
+      movedLeft === movedRight ||
+      row.noteCount < 2
+    ) {
       return 0;
     }
 
@@ -1097,14 +1377,26 @@ class StepParityCostCalculator {
     const leftPosition = layout.averagePoint(leftHeel, leftToe);
     const rightPosition = layout.averagePoint(rightHeel, rightToe);
     const crossedOver = rightPosition.x < leftPosition.x;
-    const rightBackwards = rightHeel !== INVALID_COLUMN && rightToe !== INVALID_COLUMN ? layout.columns[rightToe].y < layout.columns[rightHeel].y : false;
-    const leftBackwards = leftHeel !== INVALID_COLUMN && leftToe !== INVALID_COLUMN ? layout.columns[leftToe].y < layout.columns[leftHeel].y : false;
+    const rightBackwards =
+      rightHeel !== INVALID_COLUMN && rightToe !== INVALID_COLUMN
+        ? layout.columns[rightToe].y < layout.columns[rightHeel].y
+        : false;
+    const leftBackwards =
+      leftHeel !== INVALID_COLUMN && leftToe !== INVALID_COLUMN
+        ? layout.columns[leftToe].y < layout.columns[leftHeel].y
+        : false;
 
     return !crossedOver && (rightBackwards || leftBackwards) ? TWISTED_FOOT : 0;
   }
 
-  private calcMissedFootswitchCost(row: Row, jackedLeft: boolean, jackedRight: boolean): number {
-    return (jackedLeft || jackedRight) && row.mineMask !== 0 ? MISSED_FOOTSWITCH : 0;
+  private calcMissedFootswitchCost(
+    row: Row,
+    jackedLeft: boolean,
+    jackedRight: boolean,
+  ): number {
+    return (jackedLeft || jackedRight) && row.mineMask !== 0
+      ? MISSED_FOOTSWITCH
+      : 0;
   }
 
   private calcFacingCosts(resultState: State): number {
@@ -1173,44 +1465,67 @@ class StepParityCostCalculator {
     return 0;
   }
 
-  private calcFootswitchCost(initialState: State, columns: FootValue[], row: Row, elapsedTime: number): number {
+  private calcFootswitchCost(
+    initialState: State,
+    columns: FootValue[],
+    row: Row,
+    elapsedTime: number,
+  ): number {
     if (!this.config.allowFootswitches) {
       for (let column = 0; column < row.columnCount; column += 1) {
-        if (initialState.combinedColumns[column] === FootValue.None || columns[column] === FootValue.None) {
+        if (
+          initialState.combinedColumns[column] === FootValue.None ||
+          columns[column] === FootValue.None
+        ) {
           continue;
         }
 
         if (
           initialState.combinedColumns[column] !== columns[column] &&
-          initialState.combinedColumns[column] !== otherPartOfFoot[columns[column]]
+          initialState.combinedColumns[column] !==
+            otherPartOfFoot[columns[column]]
         ) {
           return HARD_DISABLE_PENALTY;
         }
       }
     }
 
-    if (elapsedTime < SLOW_FOOTSWITCH_THRESHOLD || elapsedTime >= SLOW_FOOTSWITCH_IGNORE || row.mineMask !== 0) {
+    if (
+      elapsedTime < SLOW_FOOTSWITCH_THRESHOLD ||
+      elapsedTime >= SLOW_FOOTSWITCH_IGNORE ||
+      row.mineMask !== 0
+    ) {
       return 0;
     }
 
     const timeScaled = elapsedTime - SLOW_FOOTSWITCH_THRESHOLD;
     for (let column = 0; column < row.columnCount; column += 1) {
-      if (initialState.combinedColumns[column] === FootValue.None || columns[column] === FootValue.None) {
+      if (
+        initialState.combinedColumns[column] === FootValue.None ||
+        columns[column] === FootValue.None
+      ) {
         continue;
       }
 
       if (
         initialState.combinedColumns[column] !== columns[column] &&
-        initialState.combinedColumns[column] !== otherPartOfFoot[columns[column]]
+        initialState.combinedColumns[column] !==
+          otherPartOfFoot[columns[column]]
       ) {
-        return (timeScaled / (SLOW_FOOTSWITCH_THRESHOLD + timeScaled)) * FOOTSWITCH;
+        return (
+          (timeScaled / (SLOW_FOOTSWITCH_THRESHOLD + timeScaled)) * FOOTSWITCH
+        );
       }
     }
 
     return 0;
   }
 
-  private calcSideSwitchCost(initialState: State, resultState: State, columns: FootValue[]): number {
+  private calcSideSwitchCost(
+    initialState: State,
+    resultState: State,
+    columns: FootValue[],
+  ): number {
     let cost = 0;
     for (const column of layout.sideArrows) {
       if (
@@ -1225,8 +1540,18 @@ class StepParityCostCalculator {
     return cost;
   }
 
-  private calcJackCost(movedLeft: boolean, movedRight: boolean, jackedLeft: boolean, jackedRight: boolean, elapsedTime: number): number {
-    if (elapsedTime >= JACK_THRESHOLD || movedLeft === movedRight || (!jackedLeft && !jackedRight)) {
+  private calcJackCost(
+    movedLeft: boolean,
+    movedRight: boolean,
+    jackedLeft: boolean,
+    jackedRight: boolean,
+    elapsedTime: number,
+  ): number {
+    if (
+      elapsedTime >= JACK_THRESHOLD ||
+      movedLeft === movedRight ||
+      (!jackedLeft && !jackedRight)
+    ) {
       return 0;
     }
 
@@ -1234,7 +1559,11 @@ class StepParityCostCalculator {
     return (1 / timeScaled - 1 / JACK_THRESHOLD) * JACK;
   }
 
-  private calcBigMovementsQuicklyCost(initialState: State, resultState: State, elapsedTime: number): number {
+  private calcBigMovementsQuicklyCost(
+    initialState: State,
+    resultState: State,
+    elapsedTime: number,
+  ): number {
     let cost = 0;
     const timeScale = Math.max(elapsedTime, EPSILON);
 
@@ -1249,13 +1578,16 @@ class StepParityCostCalculator {
       }
 
       const resultPosition = resultState.whatNoteTheFootIsHitting[foot];
-      const otherPosition = resultState.whatNoteTheFootIsHitting[otherPartOfFoot[foot]];
+      const otherPosition =
+        resultState.whatNoteTheFootIsHitting[otherPartOfFoot[foot]];
       const isBracketing = otherPosition !== INVALID_COLUMN;
       if (isBracketing && otherPosition === initialPosition) {
         continue;
       }
 
-      let distanceCost = (layout.getDistance(initialPosition, resultPosition) * DISTANCE) / timeScale;
+      let distanceCost =
+        (layout.getDistance(initialPosition, resultPosition) * DISTANCE) /
+        timeScale;
       if (isBracketing) {
         distanceCost *= 0.2;
       }
@@ -1266,7 +1598,10 @@ class StepParityCostCalculator {
   }
 }
 
-const computeCheapestPath = (endNode: StepParityNode, startNode: StepParityNode): number[] => {
+const computeCheapestPath = (
+  endNode: StepParityNode,
+  startNode: StepParityNode,
+): number[] => {
   const bestFinalNode = endNode.previousNode;
   if (!bestFinalNode) {
     return [];
@@ -1289,7 +1624,7 @@ const computeCheapestPath = (endNode: StepParityNode, startNode: StepParityNode)
 
 const getActiveNoteColumns = (row: Row): number[] =>
   row.notes
-    .map((note, index) => (note.type !== 'empty' ? index : INVALID_COLUMN))
+    .map((note, index) => (note.type !== "empty" ? index : INVALID_COLUMN))
     .filter((index) => index !== INVALID_COLUMN);
 
 const getBracketPartsForSideRow = (
@@ -1340,7 +1675,13 @@ const applySimpleBracketOverrides = (
     }
 
     const activeColumns = getActiveNoteColumns(row);
-    if (activeColumns.length !== 2 || !layout.bracketCheck(activeColumns[0] ?? INVALID_COLUMN, activeColumns[1] ?? INVALID_COLUMN)) {
+    if (
+      activeColumns.length !== 2 ||
+      !layout.bracketCheck(
+        activeColumns[0] ?? INVALID_COLUMN,
+        activeColumns[1] ?? INVALID_COLUMN,
+      )
+    ) {
       continue;
     }
 
@@ -1351,7 +1692,9 @@ const applySimpleBracketOverrides = (
       continue;
     }
 
-    const sideColumn = includesLeft ? panelIndexByName.left : panelIndexByName.right;
+    const sideColumn = includesLeft
+      ? panelIndexByName.left
+      : panelIndexByName.right;
     const otherColumn = activeColumns.find((column) => column !== sideColumn);
     if (otherColumn === undefined) {
       continue;
@@ -1372,12 +1715,12 @@ const applySimpleBracketOverrides = (
 
     const existingDiagnostic = diagnosticsByRowIndex.get(row.rowIndex);
     if (existingDiagnostic) {
-      existingDiagnostic.kinds = ['bracket'];
+      existingDiagnostic.kinds = ["bracket"];
     } else {
       const nextDiagnostic: ParityRowDiagnostic = {
         beat: row.beat,
         rowIndex: row.rowIndex,
-        kinds: ['bracket'],
+        kinds: ["bracket"],
       };
       diagnostics.push(nextDiagnostic);
       diagnosticsByRowIndex.set(row.rowIndex, nextDiagnostic);
@@ -1387,7 +1730,10 @@ const applySimpleBracketOverrides = (
   return diagnostics.sort((left, right) => left.rowIndex - right.rowIndex);
 };
 
-const analyzeRows = (rows: Row[], config: StepParityConfig): ParityRowDiagnostic[] | null => {
+const analyzeRows = (
+  rows: Row[],
+  config: StepParityConfig,
+): ParityRowDiagnostic[] | null => {
   if (rows.length === 0) {
     return null;
   }
@@ -1395,7 +1741,11 @@ const analyzeRows = (rows: Row[], config: StepParityConfig): ParityRowDiagnostic
   const costCalculator = new StepParityCostCalculator(config);
   const nodes: StepParityNode[] = [];
   const stateCache = new Map<string, State>();
-  const addNode = (state: State, second: number, rowIndex: number): StepParityNode => {
+  const addNode = (
+    state: State,
+    second: number,
+    rowIndex: number,
+  ): StepParityNode => {
     const node: StepParityNode = {
       id: nodes.length,
       state,
@@ -1423,9 +1773,17 @@ const analyzeRows = (rows: Row[], config: StepParityConfig): ParityRowDiagnostic
 
       for (const placement of permutations) {
         const resultState = initResultState(initialNode.state, row, placement);
-        const cachedState = stateCache.get(getStateKey(resultState)) ?? resultState;
+        const cachedState =
+          stateCache.get(getStateKey(resultState)) ?? resultState;
         stateCache.set(getStateKey(cachedState), cachedState);
-        const cost = costCalculator.getActionCost(initialNode.state, cachedState, rows, placement, index, elapsedTime);
+        const cost = costCalculator.getActionCost(
+          initialNode.state,
+          cachedState,
+          rows,
+          placement,
+          index,
+          elapsedTime,
+        );
         const stateKey = getStateKey(cachedState);
         const totalCost = initialNode.totalCost + cost;
         const existingNode = stateMap.get(stateKey);
@@ -1453,7 +1811,11 @@ const analyzeRows = (rows: Row[], config: StepParityConfig): ParityRowDiagnostic
   }
 
   const endingState = createEmptyState();
-  const endNode = addNode(endingState, rows.at(-1)?.second ?? 0 + 1, rows.length);
+  const endNode = addNode(
+    endingState,
+    rows.at(-1)?.second ?? 0 + 1,
+    rows.length,
+  );
   endNode.totalCost = Number.POSITIVE_INFINITY;
 
   for (const node of previousNodes) {
@@ -1475,8 +1837,17 @@ const analyzeRows = (rows: Row[], config: StepParityConfig): ParityRowDiagnostic
     if (node) {
       setFootPlacement(rows[rowIndex], node.state);
       const previousState = node.previousNode?.state ?? beginningState;
-      const elapsedTime = Math.max(rows[rowIndex].second - (node.previousNode?.second ?? startNode.second), EPSILON);
-      const kinds = getRowDiagnosticKinds(previousState, node.state, rows, rowIndex, elapsedTime);
+      const elapsedTime = Math.max(
+        rows[rowIndex].second - (node.previousNode?.second ?? startNode.second),
+        EPSILON,
+      );
+      const kinds = getRowDiagnosticKinds(
+        previousState,
+        node.state,
+        rows,
+        rowIndex,
+        elapsedTime,
+      );
       if (kinds.length > 0) {
         diagnostics.push({
           beat: rows[rowIndex].beat,
