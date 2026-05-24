@@ -73,7 +73,7 @@ interface BotFootPose {
   lastStepBeat: number;
 }
 
-interface BotViewState {
+export interface BotViewState {
   feet: Record<FootName, BotFootPose>;
   activePanels: Record<Panel, boolean>;
 }
@@ -728,8 +728,14 @@ const applyCrossoverTurn = (
   footMotion: Record<FootName, BotFootMotionSample>,
 ): Record<FootName, BotFootPose> => {
   const crossoverDistance = feet.left.x - feet.right.x;
-  const isRightFootCrossingLeft = feet.right.panel === 'left' || footMotion.right.upcomingStep?.toPanel === 'left';
-  const isLeftFootCrossingRight = feet.left.panel === 'right' || footMotion.left.upcomingStep?.toPanel === 'right';
+  const isRightFootCrossingLeft =
+    feet.right.panel === 'left' ||
+    footMotion.right.completedStep?.toPanel === 'left' ||
+    footMotion.right.upcomingStep?.toPanel === 'left';
+  const isLeftFootCrossingRight =
+    feet.left.panel === 'right' ||
+    footMotion.left.completedStep?.toPanel === 'right' ||
+    footMotion.left.upcomingStep?.toPanel === 'right';
 
   if (crossoverDistance <= 0 && !isRightFootCrossingLeft && !isLeftFootCrossingRight) {
     return feet;
@@ -757,6 +763,10 @@ const applyCrossoverTurn = (
   const leadFootOffset = bodyFacingAngle > 0 ? 8 : -8;
   const trailingFootOffset = bodyFacingAngle > 0 ? -4 : 4;
   const crossingIsMovingToSide = crossingUpcomingStep?.toPanel === targetSidePanel;
+  const crossingIsExitingSide =
+    crossingCompletedStep?.toPanel === targetSidePanel &&
+    crossingUpcomingStep !== null &&
+    crossingUpcomingStep.toPanel !== targetSidePanel;
   const referenceStartX = isRightFootCrossingLeft
     ? Math.max(footTargets.right.up.x, footTargets.right.down.x, footTargets.right.right.x)
     : Math.min(footTargets.left.up.x, footTargets.left.down.x, footTargets.left.left.x);
@@ -771,6 +781,8 @@ const applyCrossoverTurn = (
       : 0;
   const geometricBlend = crossingIsMovingToSide
     ? footMotion[crossingFoot].moveProgress
+    : crossingIsExitingSide
+      ? 1 - footMotion[crossingFoot].moveProgress
     : crossingHasReachedSide
       ? 1
       : crossoverDistance > 0
@@ -1472,6 +1484,20 @@ export const buildBotTimeline = (
   parityConfig: Partial<StepParityConfig> = {},
 ): Record<FootName, BotStep[]> => {
   return buildParityBotTimeline(events, holdEndBeatMap, simfile, parityConfig) ?? buildGreedyBotTimeline(events, holdEndBeatMap, simfile);
+};
+
+export const sampleBotStateAtBeat = (
+  botTimeline: Record<'left' | 'right', BotStep[]>,
+  simfile: SimfileDocument,
+  beat: number,
+  formStyle: BotFormStyleId = defaultBotFormStyle,
+): BotViewState => {
+  const botPanelTimeline = buildBotPanelTimeline(botTimeline);
+  const botFootTargets = getBotFootTargets(formStyle);
+  const botFootAngles = getBotFootAngles(formStyle);
+  const timeSeconds = beatToSeconds(beat, simfile.bpms, simfile.stops, simfile.metadata.offset);
+
+  return sampleBotState(botTimeline, botPanelTimeline, botFootTargets, botFootAngles, timeSeconds);
 };
 
 interface DancingBotWindowProps {
