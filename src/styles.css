@@ -292,9 +292,52 @@ body {
   gap: 12px;
 }
 
+.bot-settings-section {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.bot-settings-section[open] {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.bot-settings-section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.bot-settings-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.bot-settings-section-summary::after {
+  content: "+";
+  color: rgba(248, 244, 233, 0.52);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.bot-settings-section[open] .bot-settings-section-summary::after {
+  content: "-";
+}
+
+.bot-settings-section-heading {
+  color: rgba(248, 244, 233, 0.84);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
 .bot-settings-group {
   display: grid;
   gap: 10px;
+  padding: 0 14px 14px;
 }
 
 .bot-settings-group-header {
@@ -429,6 +472,10 @@ body {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.bot-future-control-grid-behavior {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .bot-future-control-slot {

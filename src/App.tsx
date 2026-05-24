@@ -22,6 +22,7 @@ import type { BotStep } from './components/DancingBotWindow';
 import { NotefieldPreview } from './components/NotefieldPreview';
 import { useChartPlayback } from './hooks/useChartPlayback';
 import type { PlaybackClock } from './hooks/useChartPlayback';
+import type { StepParityConfig } from './lib/parity';
 import { bundledSongSources, loadLocalSongSource, releaseLoadedSongSource } from './lib/songSource';
 import type { LoadedSongSource } from './lib/songSource';
 
@@ -310,6 +311,9 @@ function App() {
   const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(defaultBotPadStyle);
   const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(true);
   const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(true);
+  const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(true);
+  const [isBotBracketEnabled, setIsBotBracketEnabled] = useState(true);
+  const [isBotFootswitchEnabled, setIsBotFootswitchEnabled] = useState(true);
   const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
   const [songLoadError, setSongLoadError] = useState<string | null>(null);
@@ -354,9 +358,17 @@ function App() {
   const selectedNoteskinOption = bundledNoteskinOptions[0] ?? null;
   const holdSegments = useMemo(() => buildHoldSegments(selectedTimedChart.events), [selectedTimedChart.events]);
   const holdEndBeatMap = useMemo(() => buildHoldEndBeatMap(holdSegments), [holdSegments]);
+  const botParityConfig = useMemo<Partial<StepParityConfig>>(
+    () => ({
+      allowCrossovers: isBotCrossoverEnabled,
+      allowBrackets: isBotBracketEnabled,
+      allowFootswitches: isBotFootswitchEnabled,
+    }),
+    [isBotBracketEnabled, isBotCrossoverEnabled, isBotFootswitchEnabled],
+  );
   const botTimeline = useMemo(
-    () => buildBotTimeline(selectedTimedChart.events, holdEndBeatMap, simfile),
-    [holdEndBeatMap, selectedTimedChart.events, simfile],
+    () => buildBotTimeline(selectedTimedChart.events, holdEndBeatMap, simfile, botParityConfig),
+    [botParityConfig, holdEndBeatMap, selectedTimedChart.events, simfile],
   );
   const pixelsPerBeat = viewportHeight / visibleBeats;
   const visualScale = clamp(Math.sqrt(defaultVisibleBeats / visibleBeats), minVisualScale, maxVisualScale);
@@ -713,6 +725,21 @@ function App() {
     restoreNotefieldFocus();
   };
 
+  const handleBotCrossoverToggle = () => {
+    setIsBotCrossoverEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
+  const handleBotBracketToggle = () => {
+    setIsBotBracketEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
+  const handleBotFootswitchToggle = () => {
+    setIsBotFootswitchEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
   const handleImportSongFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     event.target.value = '';
@@ -978,11 +1005,17 @@ function App() {
             selectedPadStyle={selectedBotPadStyle}
             isPanelGlowEnabled={isBotPanelGlowEnabled}
             isPanelLightsEnabled={isBotPanelLightsEnabled}
+            isCrossoverEnabled={isBotCrossoverEnabled}
+            isBracketEnabled={isBotBracketEnabled}
+            isFootswitchEnabled={isBotFootswitchEnabled}
             onFormStyleChange={handleBotFormStyleChange}
             onFootStyleCycle={handleBotFootStyleCycle}
             onPadStyleToggle={handleBotPadStyleToggle}
             onPanelGlowToggle={handleBotPanelGlowToggle}
             onPanelLightsToggle={handleBotPanelLightsToggle}
+            onCrossoverToggle={handleBotCrossoverToggle}
+            onBracketToggle={handleBotBracketToggle}
+            onFootswitchToggle={handleBotFootswitchToggle}
             beginBotWindowInteraction={beginBotWindowInteraction}
           />
         }
