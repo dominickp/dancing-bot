@@ -141,7 +141,6 @@ const JACK = 30;
 const SLOW_BRACKET = 300;
 const TWISTED_FOOT = 100000;
 const BRACKETTAP = 400;
-const PREFERRED_BRACKET_BONUS = 5000;
 const HOLDSWITCH = 55;
 const MINE = 10000;
 const FOOTSWITCH = 325;
@@ -1122,7 +1121,6 @@ class StepParityCostCalculator {
       jackedRight,
       didJump,
     );
-    cost += this.calcPreferredBracketBonus(row, resultState);
     cost += this.calcSlowBracketCost(row, movedLeft, movedRight, elapsedTime);
     cost += this.calcTwistedFootCost(resultState);
     cost += this.calcFacingCosts(resultState);
@@ -1336,33 +1334,6 @@ class StepParityCostCalculator {
       : 0;
   }
 
-  private calcPreferredBracketBonus(row: Row, resultState: State): number {
-    if (
-      this.config.favorJumpsOverBrackets ||
-      row.holdMask !== 0 ||
-      row.noteCount !== 2 ||
-      !isBracketState(resultState)
-    ) {
-      return 0;
-    }
-
-    const activeColumns = row.notes
-      .map((note, index) => (note.type !== "empty" ? index : INVALID_COLUMN))
-      .filter((index) => index !== INVALID_COLUMN);
-
-    if (
-      activeColumns.length !== 2 ||
-      !layout.bracketCheck(
-        activeColumns[0] ?? INVALID_COLUMN,
-        activeColumns[1] ?? INVALID_COLUMN,
-      )
-    ) {
-      return 0;
-    }
-
-    return -PREFERRED_BRACKET_BONUS;
-  }
-
   private calcSlowBracketCost(
     row: Row,
     movedLeft: boolean,
@@ -1377,8 +1348,7 @@ class StepParityCostCalculator {
       return 0;
     }
 
-    const scale = this.config.favorJumpsOverBrackets ? 1 : 0.35;
-    return (elapsedTime - SLOW_BRACKET_THRESHOLD) * SLOW_BRACKET * scale;
+    return (elapsedTime - SLOW_BRACKET_THRESHOLD) * SLOW_BRACKET;
   }
 
   private calcTwistedFootCost(resultState: State): number {
@@ -1668,19 +1638,7 @@ const getBracketPartsForSideRow = (
     : { sidePart: FootValue.RightHeel, otherPart: FootValue.RightToe };
 };
 
-const applySimpleBracketOverrides = (
-  rows: Row[],
-  diagnostics: ParityRowDiagnostic[],
-  config: StepParityConfig,
-): ParityRowDiagnostic[] => {
-  if (!config.allowBrackets) {
-    return diagnostics;
-  }
-
-  const diagnosticsByRowIndex = new Map<number, ParityRowDiagnostic>(
-    diagnostics.map((diagnostic) => [diagnostic.rowIndex, diagnostic]),
-  );
-
+const normalizeSideBracketOrientations = (rows: Row[]): void => {
   for (const row of rows) {
     if (row.noteCount !== 2 || row.holdMask !== 0 || row.mineMask !== 0) {
       continue;
@@ -1699,7 +1657,6 @@ const applySimpleBracketOverrides = (
 
     const includesLeft = activeColumns.includes(panelIndexByName.left);
     const includesRight = activeColumns.includes(panelIndexByName.right);
-
     if (includesLeft === includesRight) {
       continue;
     }
@@ -1714,9 +1671,20 @@ const applySimpleBracketOverrides = (
 
     const sideNote = row.notes[sideColumn];
     const otherNote = row.notes[otherColumn];
+    const currentSidePart = row.columns[sideColumn] ?? FootValue.None;
+    const currentOtherPart = row.columns[otherColumn] ?? FootValue.None;
+    const currentSideFoot = currentSidePart === FootValue.None ? null : getFootSideFromFootPart(toFootPart(currentSidePart) ?? "left-heel");
+    const currentOtherFoot = currentOtherPart === FootValue.None ? null : getFootSideFromFootPart(toFootPart(currentOtherPart) ?? "left-heel");
     const bracketParts = getBracketPartsForSideRow(sideColumn, otherColumn);
 
-    if (!sideNote || !otherNote || !bracketParts) {
+    if (
+      !sideNote ||
+      !otherNote ||
+      !bracketParts ||
+      currentSideFoot === null ||
+      currentOtherFoot === null ||
+      currentSideFoot !== currentOtherFoot
+    ) {
       continue;
     }
 
@@ -1724,22 +1692,7 @@ const applySimpleBracketOverrides = (
     otherNote.parity = bracketParts.otherPart;
     row.columns[sideColumn] = bracketParts.sidePart;
     row.columns[otherColumn] = bracketParts.otherPart;
-
-    const existingDiagnostic = diagnosticsByRowIndex.get(row.rowIndex);
-    if (existingDiagnostic) {
-      existingDiagnostic.kinds = ["bracket"];
-    } else {
-      const nextDiagnostic: ParityRowDiagnostic = {
-        beat: row.beat,
-        rowIndex: row.rowIndex,
-        kinds: ["bracket"],
-      };
-      diagnostics.push(nextDiagnostic);
-      diagnosticsByRowIndex.set(row.rowIndex, nextDiagnostic);
-    }
   }
-
-  return diagnostics.sort((left, right) => left.rowIndex - right.rowIndex);
 };
 
 const analyzeRows = (
@@ -1870,7 +1823,8 @@ const analyzeRows = (
     }
   });
 
-  return applySimpleBracketOverrides(rows, diagnostics, config);
+  normalizeSideBracketOrientations(rows);
+  return diagnostics;
 };
 
 export const buildParityAssignmentMap = (

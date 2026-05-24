@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildParityAssignmentMap } from "./parity";
+import ferrariSource from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
+import { buildParityAssignmentMap, getFootSideFromFootPart } from "./parity";
 import { buildTimedChart, parseSimfile } from "./simfile";
 
 const createSimfile = (measureRows: string[]): string =>
@@ -9,10 +10,11 @@ const getAssignmentKey = (
   panel: string,
   beat: number,
   rowIndex: number,
-): string => `${panel}:${beat.toFixed(6)}:tap:0:${rowIndex}`;
+  measureIndex = 0,
+): string => `${panel}:${beat.toFixed(6)}:tap:${measureIndex}:${rowIndex}`;
 
 describe("buildParityAssignmentMap", () => {
-  it("detects adjacent left brackets with directionally correct heel and toe assignments", () => {
+  it("keeps adjacent left-side pairs free of double-step regressions", () => {
     const source = createSimfile([
       "0001",
       "0000",
@@ -41,25 +43,6 @@ describe("buildParityAssignmentMap", () => {
       },
     );
 
-    expect(result.assignments.get(getAssignmentKey("left", 1, 2))).toBe(
-      "left-toe",
-    );
-    expect(result.assignments.get(getAssignmentKey("down", 1, 2))).toBe(
-      "left-heel",
-    );
-    expect(result.assignments.get(getAssignmentKey("left", 3, 6))).toBe(
-      "left-heel",
-    );
-    expect(result.assignments.get(getAssignmentKey("up", 3, 6))).toBe(
-      "left-toe",
-    );
-
-    expect(result.diagnostics).toEqual(
-      expect.arrayContaining([
-        { beat: 1, rowIndex: 1, kinds: ["bracket"] },
-        { beat: 3, rowIndex: 3, kinds: ["bracket"] },
-      ]),
-    );
     expect(
       result.diagnostics.some((diagnostic) =>
         diagnostic.kinds.includes("double-step"),
@@ -143,6 +126,101 @@ describe("buildParityAssignmentMap", () => {
     );
     expect(result.assignments.get(getAssignmentKey("right", 1, 2))).toMatch(
       /^left-/,
+    );
+  });
+
+  it("does not manufacture a crossover after a DR bracket followed by LDDU", () => {
+    const source = createSimfile([
+      "0101",
+      "1000",
+      "0100",
+      "0100",
+      "0010",
+      "0000",
+      "0000",
+      "0000",
+    ]);
+    const simfile = parseSimfile(source);
+    const chart = simfile.charts[0];
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const withoutBrackets = buildParityAssignmentMap(
+      timedChart.events,
+      new Map(),
+      simfile,
+      {
+        allowBrackets: false,
+        allowCrossovers: true,
+        allowFootswitches: true,
+        favorJumpsOverBrackets: true,
+      },
+    );
+    const withBrackets = buildParityAssignmentMap(
+      timedChart.events,
+      new Map(),
+      simfile,
+      {
+        allowBrackets: true,
+        allowCrossovers: true,
+        allowFootswitches: true,
+        favorJumpsOverBrackets: false,
+      },
+    );
+
+    expect(
+      withBrackets.diagnostics.filter((diagnostic) => diagnostic.rowIndex >= 1),
+    ).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kinds: expect.arrayContaining(["crossover"]),
+        }),
+      ]),
+    );
+
+    const followupKeys = [
+      getAssignmentKey("left", 0.5, 1),
+      getAssignmentKey("down", 1, 2),
+      getAssignmentKey("down", 1.5, 3),
+      getAssignmentKey("up", 2, 4),
+    ];
+
+    expect(
+      followupKeys.map((key) =>
+        getFootSideFromFootPart(withBrackets.assignments.get(key)!),
+      ),
+    ).toEqual(
+      followupKeys.map((key) =>
+        getFootSideFromFootPart(withoutBrackets.assignments.get(key)!),
+      ),
+    );
+  });
+
+  it("keeps Ferrari beat 10 LD bracket as toe-left heel-down", () => {
+    const simfile = parseSimfile(ferrariSource);
+    const chart = simfile.charts[0];
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const result = buildParityAssignmentMap(
+      timedChart.events,
+      new Map(),
+      simfile,
+      {
+        allowBrackets: true,
+        allowCrossovers: true,
+        allowFootswitches: true,
+        favorJumpsOverBrackets: false,
+      },
+    );
+
+    expect(result.assignments.get(getAssignmentKey("left", 10, 4, 2))).toBe(
+      "left-toe",
+    );
+    expect(result.assignments.get(getAssignmentKey("down", 10, 4, 2))).toBe(
+      "left-heel",
     );
   });
 });

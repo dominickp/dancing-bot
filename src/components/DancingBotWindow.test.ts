@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import ferrariSource from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
 import { buildTimedChart, parseSimfile, secondsToBeat } from "../lib/simfile";
 import { buildBotTimeline, sampleBotStateAtBeat } from "./DancingBotWindow";
 
@@ -7,6 +8,23 @@ const createSimfile = (measureRows: string[]): string =>
 
 const buildAnimationSnapshot = (measureRows: string[]) => {
   const simfile = parseSimfile(createSimfile(measureRows));
+  const chart = simfile.charts[0];
+
+  expect(chart).toBeTruthy();
+
+  const timedChart = buildTimedChart(simfile, chart!);
+  const botTimeline = buildBotTimeline(timedChart.events, new Map(), simfile, {
+    allowBrackets: true,
+    allowCrossovers: true,
+    allowFootswitches: true,
+    favorJumpsOverBrackets: false,
+  });
+
+  return { simfile, botTimeline };
+};
+
+const buildFerrariSnapshot = () => {
+  const simfile = parseSimfile(ferrariSource);
   const chart = simfile.charts[0];
 
   expect(chart).toBeTruthy();
@@ -42,6 +60,23 @@ const getAngleDelta = (fromAngle: number, toAngle: number): number => {
 };
 
 describe("DancingBotWindow animation sampling", () => {
+  it("keeps Ferrari beat 10 LD bracket sourced as heel-down toe-left", () => {
+    const { simfile, botTimeline } = buildFerrariSnapshot();
+    const beatTenStep = botTimeline.left.find((step) => step.hitBeat === 10);
+
+    expect(beatTenStep).toBeTruthy();
+    expect(beatTenStep).toMatchObject({
+      heelPanel: "down",
+      toePanel: "left",
+      toPanel: "down",
+    });
+
+    const snapshot = sampleBotStateAtBeat(botTimeline, simfile, 10.05);
+
+    expect(snapshot.feet.left.panel).toBe("down");
+    expect(snapshot.feet.left.angle).toBeLessThan(0);
+  });
+
   it("keeps the first crossover entry on left-up-right instead of spinning into right-left-right", () => {
     const { simfile, botTimeline } = buildAnimationSnapshot([
       "1000",
