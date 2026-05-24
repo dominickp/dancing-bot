@@ -25,6 +25,7 @@ import type { PlaybackClock } from './hooks/useChartPlayback';
 import type { StepParityConfig } from './lib/parity';
 import { bundledSongSources, loadLocalSongSource, releaseLoadedSongSource } from './lib/songSource';
 import type { LoadedSongSource } from './lib/songSource';
+import { buildParityAssignmentMap } from './lib/parity';
 
 const panelOrder = ['left', 'down', 'up', 'right'] as const;
 const receptorOffset = 72;
@@ -56,6 +57,12 @@ interface MinimapMeasure {
   measureIndex: number;
   startBeat: number;
   density: number;
+}
+
+interface NotefieldParityHint {
+  beat: number;
+  rowIndex: number;
+  labels: string[];
 }
 
 interface PlayfieldInteraction {
@@ -314,6 +321,7 @@ function App() {
   const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(true);
   const [isBotBracketEnabled, setIsBotBracketEnabled] = useState(true);
   const [isBotFootswitchEnabled, setIsBotFootswitchEnabled] = useState(true);
+  const [isParityHintOverlayEnabled, setIsParityHintOverlayEnabled] = useState(false);
   const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
   const [songLoadError, setSongLoadError] = useState<string | null>(null);
@@ -370,6 +378,26 @@ function App() {
     () => buildBotTimeline(selectedTimedChart.events, holdEndBeatMap, simfile, botParityConfig),
     [botParityConfig, holdEndBeatMap, selectedTimedChart.events, simfile],
   );
+  const parityHintDiagnostics = useMemo<NotefieldParityHint[]>(() => {
+    if (!isParityHintOverlayEnabled) {
+      return [];
+    }
+
+    const result = buildParityAssignmentMap(selectedTimedChart.events, holdEndBeatMap, simfile, botParityConfig);
+    const labelByKind: Record<string, string> = {
+      bracket: 'Bracket',
+      crossover: 'Crossover',
+      'double-step': 'Double-step',
+      footswitch: 'Footswitch',
+      spin: 'Spin',
+    };
+
+    return result.diagnostics.map((diagnostic) => ({
+      beat: diagnostic.beat,
+      rowIndex: diagnostic.rowIndex,
+      labels: diagnostic.kinds.map((kind) => labelByKind[kind] ?? kind),
+    }));
+  }, [botParityConfig, holdEndBeatMap, isParityHintOverlayEnabled, selectedTimedChart.events, simfile]);
   const pixelsPerBeat = viewportHeight / visibleBeats;
   const visualScale = clamp(Math.sqrt(defaultVisibleBeats / visibleBeats), minVisualScale, maxVisualScale);
   const laneGap = Math.round(baseLaneGap * visualScale);
@@ -508,6 +536,13 @@ function App() {
 
     return beats;
   }, [measureEnd, measureStart]);
+  const visibleParityHints = useMemo(
+    () =>
+      parityHintDiagnostics.filter(
+        (hint) => hint.beat >= renderBeatAnchor - renderBufferBeats && hint.beat <= renderBeatAnchor + visibleBeats + renderBufferBeats,
+      ),
+    [parityHintDiagnostics, renderBeatAnchor, visibleBeats],
+  );
 
   useEffect(() => {
     const updateUnsupportedState = () => {
@@ -738,6 +773,10 @@ function App() {
   const handleBotFootswitchToggle = () => {
     setIsBotFootswitchEnabled((currentValue) => !currentValue);
     restoreNotefieldFocus();
+  };
+
+  const handleParityHintOverlayToggle = () => {
+    setIsParityHintOverlayEnabled((currentValue) => !currentValue);
   };
 
   const handleImportSongFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -986,6 +1025,20 @@ function App() {
                 onChange={handleImportSongFolder}
               />
             </label>
+
+            <label className="toolbar-field toolbar-field-action">
+              <span>Notefield</span>
+              <button
+                type="button"
+                className={`toolbar-button${isParityHintOverlayEnabled ? ' is-enabled' : ''}`}
+                aria-pressed={isParityHintOverlayEnabled}
+                onClick={handleParityHintOverlayToggle}
+              >
+                {isParityHintOverlayEnabled
+                  ? `Parity hints on (${parityHintDiagnostics.length})`
+                  : 'Parity hints off'}
+              </button>
+            </label>
           </div>
         </div>
       </header>
@@ -1046,6 +1099,7 @@ function App() {
         totalChartBeats={totalChartBeats}
         viewportHeight={viewportHeight}
         visibleBeatGuides={visibleBeatGuides}
+        visibleParityHints={visibleParityHints}
         visibleEvents={visibleEvents}
         visibleHolds={visibleHolds}
       />

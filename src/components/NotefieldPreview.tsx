@@ -19,6 +19,12 @@ interface BeatGuide {
   isMeasure: boolean;
 }
 
+interface ParityHintView {
+  beat: number;
+  rowIndex: number;
+  labels: string[];
+}
+
 interface NotefieldPreviewProps {
   chartContentHeight: number;
   displayBeat: number;
@@ -47,6 +53,7 @@ interface NotefieldPreviewProps {
   totalChartBeats: number;
   viewportHeight: number;
   visibleBeatGuides: BeatGuide[];
+  visibleParityHints: ParityHintView[];
   visibleEvents: TimedNoteEvent[];
   visibleHolds: HoldSegmentView[];
   botWindow: ReactNode;
@@ -80,6 +87,7 @@ export function NotefieldPreview({
   totalChartBeats,
   viewportHeight,
   visibleBeatGuides,
+  visibleParityHints,
   visibleEvents,
   visibleHolds,
   botWindow,
@@ -122,6 +130,16 @@ export function NotefieldPreview({
                     style={{ top: beat * pixelsPerBeat }}
                   >
                     {isMeasure ? <span>M {beat / 4 + 1}</span> : null}
+                  </div>
+                ))}
+
+                {visibleParityHints.map((hint) => (
+                  <div key={`${hint.rowIndex}-${hint.beat}`} className="parity-hint" style={{ top: hint.beat * pixelsPerBeat }}>
+                    {hint.labels.map((label) => (
+                      <span key={label} className="parity-hint-chip">
+                        {label}
+                      </span>
+                    ))}
                   </div>
                 ))}
               </div>

@@ -20,7 +20,16 @@ export const defaultStepParityConfig: StepParityConfig = {
 
 export interface ParityAssignmentResult {
   assignments: Map<string, ParityFootPart>;
+  diagnostics: ParityRowDiagnostic[];
   rowCount: number;
+}
+
+export type ParityDiagnosticKind = 'bracket' | 'crossover' | 'double-step' | 'footswitch' | 'spin';
+
+export interface ParityRowDiagnostic {
+  beat: number;
+  rowIndex: number;
+  kinds: ParityDiagnosticKind[];
 }
 
 type RowNoteType = 'empty' | 'tap' | 'hold-head' | 'roll-head';
@@ -807,6 +816,73 @@ const isCrossoverState = (resultState: State): boolean => {
   return rightPosition.x < leftPosition.x;
 };
 
+const didFootswitch = (initialState: State, resultState: State, row: Row): boolean => {
+  for (let column = 0; column < row.columnCount; column += 1) {
+    if (row.notes[column].type === 'empty') {
+      continue;
+    }
+
+    const initialFoot = initialState.combinedColumns[column];
+    const nextFoot = resultState.combinedColumns[column];
+    if (initialFoot === FootValue.None || nextFoot === FootValue.None) {
+      continue;
+    }
+
+    if (initialFoot !== nextFoot && initialFoot !== otherPartOfFoot[nextFoot]) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const getRowDiagnosticKinds = (
+  initialState: State,
+  resultState: State,
+  rows: Row[],
+  rowIndex: number,
+  elapsedTime: number,
+): ParityDiagnosticKind[] => {
+  const row = rows[rowIndex];
+  const leftHeel = resultState.whatNoteTheFootIsHitting[FootValue.LeftHeel];
+  const leftToe = resultState.whatNoteTheFootIsHitting[FootValue.LeftToe];
+  const rightHeel = resultState.whatNoteTheFootIsHitting[FootValue.RightHeel];
+  const rightToe = resultState.whatNoteTheFootIsHitting[FootValue.RightToe];
+  const movedLeft = resultState.didTheFootMove[FootValue.LeftHeel] || resultState.didTheFootMove[FootValue.LeftToe];
+  const movedRight = resultState.didTheFootMove[FootValue.RightHeel] || resultState.didTheFootMove[FootValue.RightToe];
+  const didJump =
+    ((initialState.didTheFootMove[FootValue.LeftHeel] && !initialState.isTheFootHolding[FootValue.LeftHeel]) ||
+      (initialState.didTheFootMove[FootValue.LeftToe] && !initialState.isTheFootHolding[FootValue.LeftToe])) &&
+    ((initialState.didTheFootMove[FootValue.RightHeel] && !initialState.isTheFootHolding[FootValue.RightHeel]) ||
+      (initialState.didTheFootMove[FootValue.RightToe] && !initialState.isTheFootHolding[FootValue.RightToe]));
+  const jackedLeft = didJackLeft(initialState, resultState, leftHeel, leftToe, movedLeft, didJump);
+  const jackedRight = didJackRight(initialState, resultState, rightHeel, rightToe, movedRight, didJump);
+  const kinds: ParityDiagnosticKind[] = [];
+
+  if (isCrossoverState(resultState)) {
+    kinds.push('crossover');
+  }
+
+  if (isBracketState(resultState)) {
+    kinds.push('bracket');
+  }
+
+  if (didFootswitch(initialState, resultState, row)) {
+    kinds.push('footswitch');
+  }
+
+  if (didDoubleStep(initialState, resultState, rows, rowIndex, movedLeft, jackedLeft, movedRight, jackedRight)) {
+    kinds.push('double-step');
+  }
+
+  const diagnosticCostCalculator = new StepParityCostCalculator(defaultStepParityConfig);
+  if (diagnosticCostCalculator['calcSpinCosts'](initialState, resultState) > 0) {
+    kinds.push('spin');
+  }
+
+  return kinds;
+};
+
 class StepParityCostCalculator {
   constructor(private readonly config: StepParityConfig) {}
 
@@ -1188,9 +1264,9 @@ const computeCheapestPath = (endNode: StepParityNode, startNode: StepParityNode)
   return path.reverse();
 };
 
-const analyzeRows = (rows: Row[], config: StepParityConfig): boolean => {
+const analyzeRows = (rows: Row[], config: StepParityConfig): ParityRowDiagnostic[] | null => {
   if (rows.length === 0) {
-    return false;
+    return null;
   }
 
   const costCalculator = new StepParityCostCalculator(config);
@@ -1249,7 +1325,7 @@ const analyzeRows = (rows: Row[], config: StepParityConfig): boolean => {
 
     previousNodes = resultNodes;
     if (previousNodes.length === 0) {
-      return false;
+      return null;
     }
   }
 
@@ -1266,17 +1342,29 @@ const analyzeRows = (rows: Row[], config: StepParityConfig): boolean => {
 
   const path = computeCheapestPath(endNode, startNode);
   if (path.length !== rows.length) {
-    return false;
+    return null;
   }
+
+  const diagnostics: ParityRowDiagnostic[] = [];
 
   path.forEach((nodeId, rowIndex) => {
     const node = nodes[nodeId];
     if (node) {
       setFootPlacement(rows[rowIndex], node.state);
+      const previousState = node.previousNode?.state ?? beginningState;
+      const elapsedTime = Math.max(rows[rowIndex].second - (node.previousNode?.second ?? startNode.second), EPSILON);
+      const kinds = getRowDiagnosticKinds(previousState, node.state, rows, rowIndex, elapsedTime);
+      if (kinds.length > 0) {
+        diagnostics.push({
+          beat: rows[rowIndex].beat,
+          rowIndex,
+          kinds,
+        });
+      }
     }
   });
 
-  return true;
+  return diagnostics;
 };
 
 export const buildParityAssignmentMap = (
@@ -1291,9 +1379,10 @@ export const buildParityAssignmentMap = (
   };
   const rows = buildRows(events, holdEndBeatMap, simfile);
   const assignments = new Map<string, ParityFootPart>();
+  const diagnostics = analyzeRows(rows, mergedConfig);
 
-  if (!analyzeRows(rows, mergedConfig)) {
-    return { assignments, rowCount: rows.length };
+  if (!diagnostics) {
+    return { assignments, diagnostics: [], rowCount: rows.length };
   }
 
   for (const row of rows) {
@@ -1309,5 +1398,5 @@ export const buildParityAssignmentMap = (
     }
   }
 
-  return { assignments, rowCount: rows.length };
+  return { assignments, diagnostics, rowCount: rows.length };
 };

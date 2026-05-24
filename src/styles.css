@@ -202,6 +202,18 @@ body {
   cursor: pointer;
 }
 
+.toolbar-button.is-enabled {
+  border-color: rgba(255, 177, 74, 0.34);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 177, 74, 0.12),
+      rgba(255, 255, 255, 0.03)
+    ),
+    rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 177, 74, 0.14);
+}
+
 .toolbar-button:focus-visible {
   outline: 2px solid rgba(255, 177, 74, 0.55);
   outline-offset: 2px;
@@ -1106,7 +1118,7 @@ body {
   z-index: 1;
   overflow: visible;
   contain: layout style;
-  clip-path: inset(var(--receptor-offset) -64px 0 0);
+  clip-path: inset(var(--receptor-offset) -320px 0 -32px);
 }
 
 .chart-scroll-layer {
@@ -1151,6 +1163,27 @@ body {
   font-size: 0.7rem;
   transform: translate(calc(100% + 10px), -50%);
   white-space: nowrap;
+}
+
+.parity-hint {
+  position: absolute;
+  right: 0;
+  display: inline-flex;
+  gap: 6px;
+  transform: translate(calc(100% + 12px), -50%);
+  pointer-events: none;
+  white-space: nowrap;
+  justify-content: flex-start;
+}
+
+.parity-hint-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(9, 12, 18, 0.9);
+  border: 1px solid rgba(255, 177, 74, 0.18);
+  color: rgba(255, 210, 140, 0.92);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
 }
 
 .lane-note {
