@@ -6,6 +6,7 @@ import type { Panel, SimfileDocument, TimedNoteEvent } from "../lib/simfile";
 const renderWindowStepBeats = 2;
 const displayRefreshMs = 80;
 const hitWindowBeats = 0.18;
+const loadingOverlayDelayMs = 180;
 
 export interface PlaybackClock {
   audioTime: number;
@@ -103,6 +104,7 @@ export function useChartPlayback({
   const currentBeatRef = useRef(0);
   const renderBeatAnchorRef = useRef(0);
   const playbackClockRef = useRef<PlaybackClock | null>(null);
+  const loadingTimeoutRef = useRef<number | null>(null);
   const lastDisplayUpdateRef = useRef(0);
   const lastAnimatedBeatRef = useRef(0);
   const triggeredHitKeysRef = useRef(new Set<string>());
@@ -118,6 +120,11 @@ export function useChartPlayback({
           : value;
 
       if (!nextValue) {
+        if (loadingTimeoutRef.current !== null) {
+          window.clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
+
         setIsLoading(false);
       }
 
@@ -250,6 +257,11 @@ export function useChartPlayback({
 
   useEffect(() => {
     if (!audioSource) {
+      if (loadingTimeoutRef.current !== null) {
+        window.clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+
       setAudioReady(false);
       setIsLoading(false);
       setIsPlaying(false);
@@ -309,6 +321,11 @@ export function useChartPlayback({
   }, [applyScrollPosition]);
 
   useEffect(() => {
+    if (loadingTimeoutRef.current !== null) {
+      window.clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+
     setAudioReady(false);
     setIsLoading(false);
     setIsPlaying(false);
@@ -369,6 +386,11 @@ export function useChartPlayback({
         animationFrameRef.current = null;
       }
 
+      if (loadingTimeoutRef.current !== null) {
+        window.clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+
       setIsLoading(false);
       setIsPlaying(false);
       audio?.pause();
@@ -376,6 +398,11 @@ export function useChartPlayback({
     }
 
     if (!audio) {
+      if (loadingTimeoutRef.current !== null) {
+        window.clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+
       setPlaybackRequested(false);
       setIsLoading(false);
       setIsPlaying(false);
@@ -384,7 +411,14 @@ export function useChartPlayback({
 
     syncAudioToBeat(currentBeatRef.current);
     lastAnimatedBeatRef.current = currentBeatRef.current;
-    setIsLoading(true);
+
+    loadingTimeoutRef.current = window.setTimeout(() => {
+      if (playbackRequestedRef.current && !isPlayingRef.current) {
+        setIsLoading(true);
+      }
+
+      loadingTimeoutRef.current = null;
+    }, loadingOverlayDelayMs);
 
     let isCancelled = false;
 
@@ -450,6 +484,11 @@ export function useChartPlayback({
           return;
         }
 
+        if (loadingTimeoutRef.current !== null) {
+          window.clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
+
         setIsPlaying(true);
         setIsLoading(false);
         playbackClockRef.current = {
@@ -464,6 +503,11 @@ export function useChartPlayback({
           return;
         }
 
+        if (loadingTimeoutRef.current !== null) {
+          window.clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
+
         setPlaybackRequested(false);
         setIsLoading(false);
         setIsPlaying(false);
@@ -471,6 +515,11 @@ export function useChartPlayback({
 
     return () => {
       isCancelled = true;
+
+      if (loadingTimeoutRef.current !== null) {
+        window.clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
 
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
