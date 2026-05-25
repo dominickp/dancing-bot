@@ -327,6 +327,58 @@ body {
   outline: none;
 }
 
+.notefield-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  padding: 24px;
+  background:
+    linear-gradient(180deg, rgba(4, 6, 10, 0.78), rgba(4, 6, 10, 0.88)),
+    radial-gradient(circle at top, rgba(255, 177, 74, 0.12), transparent 36%);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.notefield-loader-copy {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+}
+
+.notefield-loader-copy strong {
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.notefield-loader-copy span {
+  color: rgba(248, 244, 233, 0.76);
+  font-size: 0.92rem;
+}
+
+.notefield-loader-spinner {
+  width: 52px;
+  height: 52px;
+  border: 3px solid rgba(255, 255, 255, 0.16);
+  border-top-color: #ffb14a;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 177, 74, 0.08);
+  animation: notefield-loader-spin 0.85s linear infinite;
+}
+
+@keyframes notefield-loader-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .bot-window {
   position: absolute;
   z-index: 5;
@@ -1210,7 +1262,10 @@ body {
   z-index: 1;
   overflow: visible;
   contain: layout style;
-  clip-path: inset(var(--receptor-offset) -320px 0 calc((var(--measure-guide-gutter) + 32px) * -1));
+  clip-path: inset(
+    var(--receptor-offset) -320px 0
+      calc((var(--measure-guide-gutter) + 32px) * -1)
+  );
 }
 
 .chart-scroll-layer {
@@ -1219,7 +1274,9 @@ body {
   grid-template-columns: repeat(4, 1fr);
   gap: var(--lane-gap);
   contain: layout paint style;
-  clip-path: inset(calc(var(--receptor-offset) - var(--note-height) - 4px) 0 0 0);
+  clip-path: inset(
+    calc(var(--receptor-offset) - var(--note-height) - 4px) 0 0 0
+  );
 }
 
 .lane-column {

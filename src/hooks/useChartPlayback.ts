@@ -32,6 +32,7 @@ interface UseChartPlaybackArgs {
 interface UseChartPlaybackResult {
   audioReady: boolean;
   displayBeat: number;
+  isLoading: boolean;
   isPlaying: boolean;
   measureGuideLayerRef: MutableRefObject<HTMLDivElement | null>;
   playbackClockRef: MutableRefObject<PlaybackClock | null>;
@@ -91,8 +92,10 @@ export function useChartPlayback({
 }: UseChartPlaybackArgs): UseChartPlaybackResult {
   const [audioReady, setAudioReady] = useState(false);
   const [displayBeat, setDisplayBeat] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const [renderBeatAnchor, setRenderBeatAnchor] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackRequested, setPlaybackRequested] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const measureGuideLayerRef = useRef<HTMLDivElement | null>(null);
@@ -104,7 +107,23 @@ export function useChartPlayback({
   const lastAnimatedBeatRef = useRef(0);
   const triggeredHitKeysRef = useRef(new Set<string>());
   const isPlayingRef = useRef(isPlaying);
+  const playbackRequestedRef = useRef(playbackRequested);
   const panelFeedbackRef = useRef(onTriggerPanelFeedback);
+
+  const setPlaybackIntent = useCallback((value: SetStateAction<boolean>) => {
+    setPlaybackRequested((previousValue) => {
+      const nextValue =
+        typeof value === "function"
+          ? (value as (previousState: boolean) => boolean)(previousValue)
+          : value;
+
+      if (!nextValue) {
+        setIsLoading(false);
+      }
+
+      return nextValue;
+    });
+  }, []);
 
   const applyScrollPosition = useCallback(
     (beat: number) => {
@@ -226,8 +245,15 @@ export function useChartPlayback({
   }, [isPlaying]);
 
   useEffect(() => {
+    playbackRequestedRef.current = playbackRequested;
+  }, [playbackRequested]);
+
+  useEffect(() => {
     if (!audioSource) {
       setAudioReady(false);
+      setIsLoading(false);
+      setIsPlaying(false);
+      setPlaybackRequested(false);
       audioRef.current = null;
       return undefined;
     }
@@ -239,6 +265,8 @@ export function useChartPlayback({
     const handleLoadedMetadata = () => setAudioReady(true);
     const handleEnded = () => {
       setIsPlaying(false);
+      setPlaybackRequested(false);
+      setIsLoading(false);
       refreshRenderWindow(lastBeat);
     };
 
@@ -281,8 +309,10 @@ export function useChartPlayback({
   }, [applyScrollPosition]);
 
   useEffect(() => {
-    setIsPlaying(false);
     setAudioReady(false);
+    setIsLoading(false);
+    setIsPlaying(false);
+    setPlaybackRequested(false);
     currentBeatRef.current = 0;
     lastAnimatedBeatRef.current = 0;
     triggeredHitKeysRef.current.clear();
@@ -303,12 +333,7 @@ export function useChartPlayback({
     if (audio) {
       const nextTime = Math.max(
         0,
-        beatToSeconds(
-          0,
-          simfile.bpms,
-          simfile.stops,
-          simfile.metadata.offset,
-        ),
+        beatToSeconds(0, simfile.bpms, simfile.stops, simfile.metadata.offset),
       );
 
       audio.currentTime = Number.isFinite(audio.duration)
@@ -320,7 +345,14 @@ export function useChartPlayback({
         playbackRate: audio.playbackRate,
       };
     }
-  }, [audioSource, chartIndex, receptorOffset, simfile.bpms, simfile.metadata.offset, simfile.stops]);
+  }, [
+    audioSource,
+    chartIndex,
+    receptorOffset,
+    simfile.bpms,
+    simfile.metadata.offset,
+    simfile.stops,
+  ]);
 
   useEffect(() => {
     if (!isPlayingRef.current) {
@@ -331,23 +363,30 @@ export function useChartPlayback({
   useEffect(() => {
     const audio = audioRef.current;
 
-    if (!isPlaying) {
+    if (!playbackRequested) {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
 
+      setIsLoading(false);
+      setIsPlaying(false);
       audio?.pause();
       return;
     }
 
     if (!audio) {
+      setPlaybackRequested(false);
+      setIsLoading(false);
       setIsPlaying(false);
       return;
     }
 
     syncAudioToBeat(currentBeatRef.current);
     lastAnimatedBeatRef.current = currentBeatRef.current;
+    setIsLoading(true);
+
+    let isCancelled = false;
 
     const tick = (timestamp: number) => {
       const previousClock = playbackClockRef.current ?? {
@@ -356,7 +395,9 @@ export function useChartPlayback({
         playbackRate: audio.playbackRate,
       };
       let estimatedAudioTime =
-        previousClock.audioTime + ((timestamp - previousClock.perfTime) / 1000) * previousClock.playbackRate;
+        previousClock.audioTime +
+        ((timestamp - previousClock.perfTime) / 1000) *
+          previousClock.playbackRate;
       const actualAudioTime = audio.currentTime;
 
       if (Math.abs(actualAudioTime - estimatedAudioTime) > 0.03) {
@@ -404,6 +445,13 @@ export function useChartPlayback({
     void audio
       .play()
       .then(() => {
+        if (isCancelled || !playbackRequestedRef.current) {
+          audio.pause();
+          return;
+        }
+
+        setIsPlaying(true);
+        setIsLoading(false);
         playbackClockRef.current = {
           audioTime: audio.currentTime,
           perfTime: performance.now(),
@@ -412,10 +460,18 @@ export function useChartPlayback({
         animationFrameRef.current = requestAnimationFrame(tick);
       })
       .catch(() => {
+        if (isCancelled) {
+          return;
+        }
+
+        setPlaybackRequested(false);
+        setIsLoading(false);
         setIsPlaying(false);
       });
 
     return () => {
+      isCancelled = true;
+
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -423,8 +479,8 @@ export function useChartPlayback({
   }, [
     applyScrollPosition,
     events,
-    isPlaying,
     lastBeat,
+    playbackRequested,
     playbackRate,
     pixelsPerBeat,
     receptorOffset,
@@ -468,7 +524,7 @@ export function useChartPlayback({
       const nextBeat =
         currentBeatRef.current + scrollDirection * scrollStepBeats * stepCount;
 
-      if (isPlayingRef.current) {
+      if (playbackRequestedRef.current) {
         seekToBeat(nextBeat);
         return;
       }
@@ -515,11 +571,11 @@ export function useChartPlayback({
 
       event.preventDefault();
 
-      if (!isPlayingRef.current && currentBeatRef.current >= lastBeat) {
+      if (!playbackRequestedRef.current && currentBeatRef.current >= lastBeat) {
         seekToBeat(0);
       }
 
-      setIsPlaying((value) => !value);
+      setPlaybackIntent((value) => !value);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -529,12 +585,13 @@ export function useChartPlayback({
   return {
     audioReady,
     displayBeat,
+    isLoading,
     isPlaying,
     measureGuideLayerRef,
     playbackClockRef,
     renderBeatAnchor,
     scrollLayerRef,
     seekToBeat,
-    setIsPlaying,
+    setIsPlaying: setPlaybackIntent,
   };
 }

@@ -43,6 +43,7 @@ interface NotefieldPreviewProps {
   minimapMeasures: MinimapMeasureView[];
   minimapRef: MutableRefObject<HTMLDivElement | null>;
   notefieldFrameRef: MutableRefObject<HTMLDivElement | null>;
+  isLoading: boolean;
   panelOrder: readonly Panel[];
   pixelsPerBeat: number;
   isPlayfieldDragging: boolean;
@@ -77,6 +78,7 @@ export function NotefieldPreview({
   minimapMeasures,
   minimapRef,
   notefieldFrameRef,
+  isLoading,
   panelOrder,
   pixelsPerBeat,
   isPlayfieldDragging,
@@ -95,7 +97,7 @@ export function NotefieldPreview({
   return (
     <section className="notefield-panel" aria-label="Interactive notefield preview">
       <div className="notefield-layout">
-        <div className="notefield-frame" ref={notefieldFrameRef} tabIndex={-1}>
+        <div className="notefield-frame" ref={notefieldFrameRef} tabIndex={-1} aria-busy={isLoading}>
           <div
             className={`notefield-playfield${isPlayfieldDragging ? ' is-dragging' : ''}`}
             style={playfieldStyle}
@@ -187,6 +189,16 @@ export function NotefieldPreview({
               </div>
             </div>
           </div>
+
+          {isLoading ? (
+            <div className="notefield-loader" role="status" aria-live="polite">
+              <div className="notefield-loader-spinner" aria-hidden="true" />
+              <div className="notefield-loader-copy">
+                <strong>Loading audio</strong>
+                <span>Starting playback once the track is ready.</span>
+              </div>
+            </div>
+          ) : null}
 
           {botWindow}
         </div>

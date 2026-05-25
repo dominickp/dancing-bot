@@ -576,6 +576,7 @@ function App() {
 
   const {
     displayBeat,
+    isLoading,
     isPlaying,
     measureGuideLayerRef,
     playbackClockRef,
@@ -1327,6 +1328,7 @@ function App() {
         minimapMeasures={minimapMeasures}
         minimapRef={minimapRef}
         notefieldFrameRef={notefieldFrameRef}
+        isLoading={isLoading}
         panelOrder={panelOrder}
         pixelsPerBeat={pixelsPerBeat}
         playfieldStyle={playfieldStyle}
