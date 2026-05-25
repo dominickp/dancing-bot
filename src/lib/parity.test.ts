@@ -223,4 +223,64 @@ describe("buildParityAssignmentMap", () => {
       "left-heel",
     );
   });
+
+  it("keeps an established LD bracket anchored when expanding into LDR and LDUR", () => {
+    const source = createSimfile([
+      "1000",
+      "1100",
+      "1101",
+      "1111",
+    ]);
+    const simfile = parseSimfile(source);
+    const chart = simfile.charts[0];
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const result = buildParityAssignmentMap(
+      timedChart.events,
+      new Map(),
+      simfile,
+      {
+        allowBrackets: true,
+        allowCrossovers: true,
+        allowFootswitches: true,
+        favorJumpsOverBrackets: false,
+      },
+    );
+
+    expect(
+      getFootSideFromFootPart(
+        result.assignments.get(getAssignmentKey("left", 1, 1))!,
+      ),
+    ).toBe("left");
+    expect(
+      getFootSideFromFootPart(
+        result.assignments.get(getAssignmentKey("down", 1, 1))!,
+      ),
+    ).toBe("left");
+
+    expect(result.assignments.get(getAssignmentKey("left", 2, 2))).toBe(
+      "left-toe",
+    );
+    expect(result.assignments.get(getAssignmentKey("down", 2, 2))).toBe(
+      "left-heel",
+    );
+    expect(result.assignments.get(getAssignmentKey("right", 2, 2))).toMatch(
+      /^right-/,
+    );
+
+    expect(result.assignments.get(getAssignmentKey("left", 3, 3))).toBe(
+      "left-toe",
+    );
+    expect(result.assignments.get(getAssignmentKey("down", 3, 3))).toBe(
+      "left-heel",
+    );
+    expect(result.assignments.get(getAssignmentKey("up", 3, 3))).toBe(
+      "right-toe",
+    );
+    expect(result.assignments.get(getAssignmentKey("right", 3, 3))).toBe(
+      "right-heel",
+    );
+  });
 });

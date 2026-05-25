@@ -1638,6 +1638,208 @@ const getBracketPartsForSideRow = (
     : { sidePart: FootValue.RightHeel, otherPart: FootValue.RightToe };
 };
 
+const getFootSideForValue = (value: FootValue): ParityFootName | null => {
+  const footPart = toFootPart(value);
+  return footPart ? getFootSideFromFootPart(footPart) : null;
+};
+
+const setRowColumnPart = (
+  row: Row,
+  column: number,
+  footValue: FootValue,
+): void => {
+  const note = row.notes[column];
+  if (!note) {
+    return;
+  }
+
+  note.parity = footValue;
+  row.columns[column] = footValue;
+};
+
+const getSideFootForColumn = (column: number): ParityFootName | null => {
+  if (column === panelIndexByName.left) {
+    return "left";
+  }
+
+  if (column === panelIndexByName.right) {
+    return "right";
+  }
+
+  return null;
+};
+
+const getDefaultSinglePart = (
+  footSide: ParityFootName,
+  column: number,
+): FootValue => {
+  if (footSide === "left") {
+    return column === panelIndexByName.up
+      ? FootValue.LeftToe
+      : FootValue.LeftHeel;
+  }
+
+  return column === panelIndexByName.up
+    ? FootValue.RightToe
+    : FootValue.RightHeel;
+};
+
+const getExpandableSideBracket = (
+  previousRow: Row,
+  activeColumns: number[],
+): { sideColumn: number; otherColumn: number; parts: { sidePart: FootValue; otherPart: FootValue } } | null => {
+  for (const sideColumn of [panelIndexByName.left, panelIndexByName.right]) {
+    if (!activeColumns.includes(sideColumn)) {
+      continue;
+    }
+
+    const sideFoot = getSideFootForColumn(sideColumn);
+    if (!sideFoot) {
+      continue;
+    }
+
+    const candidateColumns = activeColumns.filter(
+      (column) =>
+        column !== sideColumn &&
+        (column === panelIndexByName.down || column === panelIndexByName.up) &&
+        layout.bracketCheck(sideColumn, column),
+    );
+
+    if (candidateColumns.length === 0) {
+      continue;
+    }
+
+    for (const otherColumn of candidateColumns) {
+      const previousSideFoot = getFootSideForValue(
+        previousRow.columns[sideColumn] ?? FootValue.None,
+      );
+      const previousOtherFoot = getFootSideForValue(
+        previousRow.columns[otherColumn] ?? FootValue.None,
+      );
+      const parts = getBracketPartsForSideRow(sideColumn, otherColumn);
+
+      if (
+        parts &&
+        previousSideFoot === sideFoot &&
+        previousOtherFoot === sideFoot
+      ) {
+        return { sideColumn, otherColumn, parts };
+      }
+    }
+
+    if (candidateColumns.length !== 1) {
+      continue;
+    }
+
+    const previousSideFoot = getFootSideForValue(
+      previousRow.columns[sideColumn] ?? FootValue.None,
+    );
+    const parts = getBracketPartsForSideRow(sideColumn, candidateColumns[0]!);
+    if (parts && previousSideFoot === sideFoot) {
+      return {
+        sideColumn,
+        otherColumn: candidateColumns[0]!,
+        parts,
+      };
+    }
+  }
+
+  return null;
+};
+
+const getExpandedOppositeFootAssignments = (
+  row: Row,
+  remainingColumns: number[],
+): Array<{ column: number; part: FootValue }> | null => {
+  if (remainingColumns.length === 0) {
+    return [];
+  }
+
+  if (remainingColumns.length > 2) {
+    return null;
+  }
+
+  if (remainingColumns.length === 1) {
+    const column = remainingColumns[0]!;
+    const sideFoot = getSideFootForColumn(column);
+    if (!sideFoot) {
+      return null;
+    }
+
+    const currentPart = row.columns[column] ?? FootValue.None;
+    return [
+      {
+        column,
+        part:
+          getFootSideForValue(currentPart) === sideFoot
+            ? currentPart
+            : getDefaultSinglePart(sideFoot, column),
+      },
+    ];
+  }
+
+  const sideColumn = remainingColumns.find(
+    (column) =>
+      column === panelIndexByName.left || column === panelIndexByName.right,
+  );
+  if (sideColumn === undefined) {
+    return null;
+  }
+
+  const otherColumn = remainingColumns.find((column) => column !== sideColumn);
+  if (otherColumn === undefined || !layout.bracketCheck(sideColumn, otherColumn)) {
+    return null;
+  }
+
+  const parts = getBracketPartsForSideRow(sideColumn, otherColumn);
+  if (!parts) {
+    return null;
+  }
+
+  return [
+    { column: sideColumn, part: parts.sidePart },
+    { column: otherColumn, part: parts.otherPart },
+  ];
+};
+
+const normalizeBracketExpansions = (rows: Row[]): void => {
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    if (!row || row.noteCount < 2 || row.noteCount > 4 || row.holdMask !== 0 || row.mineMask !== 0) {
+      continue;
+    }
+
+    const previousRow = rows[rowIndex - 1];
+    if (!previousRow) {
+      continue;
+    }
+
+    const activeColumns = getActiveNoteColumns(row);
+    const anchor = getExpandableSideBracket(previousRow, activeColumns);
+    if (!anchor) {
+      continue;
+    }
+
+    const remainingColumns = activeColumns.filter(
+      (column) =>
+        column !== anchor.sideColumn && column !== anchor.otherColumn,
+    );
+    const oppositeAssignments = getExpandedOppositeFootAssignments(
+      row,
+      remainingColumns,
+    );
+    if (!oppositeAssignments) {
+      continue;
+    }
+
+    setRowColumnPart(row, anchor.sideColumn, anchor.parts.sidePart);
+    setRowColumnPart(row, anchor.otherColumn, anchor.parts.otherPart);
+    for (const assignment of oppositeAssignments) {
+      setRowColumnPart(row, assignment.column, assignment.part);
+    }
+  }
+};
+
 const normalizeSideBracketOrientations = (rows: Row[]): void => {
   for (const row of rows) {
     if (row.noteCount !== 2 || row.holdMask !== 0 || row.mineMask !== 0) {
@@ -1693,6 +1895,8 @@ const normalizeSideBracketOrientations = (rows: Row[]): void => {
     row.columns[sideColumn] = bracketParts.sidePart;
     row.columns[otherColumn] = bracketParts.otherPart;
   }
+
+  normalizeBracketExpansions(rows);
 };
 
 const analyzeRows = (
