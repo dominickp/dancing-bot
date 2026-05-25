@@ -1273,8 +1273,8 @@ function App() {
           onClick={handleParityHintOverlayToggle}
         >
           {isParityHintOverlayEnabled
-            ? `Parity hints on (${parityHintDiagnostics.length})`
-            : 'Parity hints off'}
+            ? `Pattern hints on (${parityHintDiagnostics.length})`
+            : 'Pattern hints off'}
         </button>
       </section>
 
