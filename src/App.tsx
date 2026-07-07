@@ -119,7 +119,7 @@ const emptySimfileDocument: SimfileDocument = {
 
 const defaultBotWindowRect: BotWindowRect = {
   x: 26,
-  y: 24,
+  y: 12,
   width: 460,
   height: 800,
 };

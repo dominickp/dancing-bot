@@ -1,7 +1,4 @@
 :root {
-  font-family: Tahoma, Verdana, sans-serif;
-  font-weight: 400;
-  font-style: normal;
   color-scheme: dark;
   color: #d8dde6;
   background: #11151a;
@@ -21,6 +18,10 @@
   --accent-soft: rgba(212, 176, 106, 0.16);
   --accent-strong: #f0cb7f;
   --focus-ring: rgba(240, 203, 127, 0.7);
+  font-size: 18px;
+  font-family: "Quantico", sans-serif;
+  font-weight: 400;
+  font-style: normal;
 }
 
 * {
@@ -101,6 +102,7 @@ body {
 }
 
 .toolbar {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: end;
@@ -162,6 +164,9 @@ body {
 }
 
 .toolbar-link {
+  position: absolute;
+  top: 12px;
+  right: 14px;
   display: inline-flex;
   align-items: center;
   color: var(--text-dim);
@@ -298,6 +303,7 @@ body {
   align-items: end;
   justify-content: flex-end;
   flex-wrap: wrap;
+  font-size: 0.9rem;
 }
 
 .toolbar-field {
@@ -367,6 +373,7 @@ body {
   font: inherit;
   text-align: left;
   cursor: pointer;
+  font-size: 0.8rem;
 }
 
 .toolbar-button.is-enabled {
@@ -401,13 +408,7 @@ body {
   overflow: hidden;
   height: 100%;
   min-height: 0;
-  border: 1px solid var(--chrome-border-strong);
-  border-radius: 4px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 14%), #0e1116;
-  box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.06),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.45);
+  background: black;
   touch-action: none;
   cursor: ns-resize;
 }
@@ -1517,11 +1518,13 @@ body {
 
   .toolbar {
     padding: 10px;
+    padding-right: 10px;
     align-items: start;
     flex-direction: column;
   }
 
   .toolbar-link {
+    position: static;
     white-space: normal;
   }
 
