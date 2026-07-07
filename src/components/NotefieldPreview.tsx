@@ -24,6 +24,7 @@ interface ParityHintView {
 }
 
 interface NotefieldPreviewProps {
+  chartVerticalOffset: number;
   chartContentHeight: number;
   displayBeat: number;
   explosionRefs: MutableRefObject<Record<Panel, HTMLDivElement | null>>;
@@ -61,6 +62,7 @@ interface NotefieldPreviewProps {
 }
 
 export function NotefieldPreview({
+  chartVerticalOffset,
   chartContentHeight,
   displayBeat,
   explosionRefs,
@@ -198,14 +200,18 @@ export function NotefieldPreview({
                     <div
                       key={beat}
                       className={`measure-guide${isMeasure ? ' measure-guide-major' : ' measure-guide-minor'}`}
-                      style={{ top: beat * pixelsPerBeat }}
+                      style={{ top: chartVerticalOffset + beat * pixelsPerBeat }}
                     >
                       {isMeasure ? <span>M {beat / 4}</span> : null}
                     </div>
                   ))}
 
                   {visibleParityHints.map((hint) => (
-                    <div key={`${hint.rowIndex}-${hint.beat}`} className="parity-hint" style={{ top: hint.beat * pixelsPerBeat }}>
+                    <div
+                      key={`${hint.rowIndex}-${hint.beat}`}
+                      className="parity-hint"
+                      style={{ top: chartVerticalOffset + hint.beat * pixelsPerBeat }}
+                    >
                       {hint.labels.map((label) => (
                         <span key={label} className="parity-hint-chip">
                           {label}

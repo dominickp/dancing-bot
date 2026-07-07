@@ -134,6 +134,22 @@ const defaultBotWindowRect: BotWindowRect = {
   height: 800,
 };
 
+const isLegacyDefaultBotWindowRect = (rect: BotWindowRect): boolean =>
+  rect.x === defaultBotWindowRect.x &&
+  rect.y === defaultBotWindowRect.y &&
+  rect.width === defaultBotWindowRect.width &&
+  rect.height === defaultBotWindowRect.height;
+
+const getDockedBotWindowRect = (frameWidth: number, frameHeight: number): BotWindowRect =>
+  clampBotWindowRect(
+    {
+      ...defaultBotWindowRect,
+      x: frameWidth - defaultBotWindowRect.width - 24,
+    },
+    frameWidth,
+    frameHeight,
+  );
+
 const defaultUiSettings: PersistedUiSettings = {
   selectedBotFormStyle: defaultBotFormStyle,
   selectedBotFootStyle: defaultBotFootStyle,
@@ -580,6 +596,7 @@ function App() {
   const holdWidth = receptorHeight;
   const receptorRadius = Math.max(Math.round(14 * visualScale), 10);
   const explosionSize = Math.round(receptorHeight * 1.28);
+  const chartVerticalOffset = renderBufferBeats * pixelsPerBeat;
   const chartContentHeight = (selectedTimedChart.lastBeat + renderBufferBeats * 2) * pixelsPerBeat + receptorOffset;
   const totalChartBeats = Math.max(selectedTimedChart.lastBeat, 1);
   const maxPlayfieldOffsetX = Math.max(0, (frameWidth - totalPlayfieldWidth) / 2);
@@ -613,6 +630,7 @@ function App() {
   } = useChartPlayback({
     audioSource: selectedSong?.audioUrl ?? null,
     chartIndex: selectedChartIndex,
+    chartVerticalOffset,
     events: selectedTimedChart.events,
     lastBeat: selectedTimedChart.lastBeat,
     playbackRate,
@@ -752,7 +770,13 @@ function App() {
 
       setFrameWidth(bounds.width);
       setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -nextMaxPlayfieldOffsetX, nextMaxPlayfieldOffsetX));
-      setBotWindowRect((previousRect) => clampBotWindowRect(previousRect, bounds.width, bounds.height));
+      setBotWindowRect((previousRect) => {
+        const rectToClamp = isLegacyDefaultBotWindowRect(previousRect)
+          ? getDockedBotWindowRect(bounds.width, bounds.height)
+          : previousRect;
+
+        return clampBotWindowRect(rectToClamp, bounds.width, bounds.height);
+      });
     };
 
     syncBotWindowRect();
@@ -1096,9 +1120,9 @@ function App() {
       segment.kind === 'roll'
         ? panelAssets?.rollBodyInactive ?? panelAssets?.holdBodyInactive ?? null
         : panelAssets?.holdBodyInactive ?? panelAssets?.rollBodyInactive ?? null;
-    const bodyTop = segment.startBeat * pixelsPerBeat;
+    const bodyTop = chartVerticalOffset + segment.startBeat * pixelsPerBeat;
     const capHeight = Math.max(Math.round(holdWidth / 2), 12);
-    const bodyBottom = segment.endBeat * pixelsPerBeat - capHeight / 2;
+    const bodyBottom = chartVerticalOffset + segment.endBeat * pixelsPerBeat - capHeight / 2;
     const bodyHeight = Math.max(bodyBottom - bodyTop, 8);
 
     return getSpriteBackgroundStyle(bodySprite, 0, {
@@ -1121,7 +1145,7 @@ function App() {
     const capHeight = Math.max(Math.round(holdWidth / 2), 12);
 
     return getSpriteBackgroundStyle(capSprite, 0, {
-      top: segment.endBeat * pixelsPerBeat,
+      top: chartVerticalOffset + segment.endBeat * pixelsPerBeat,
       left: '50%',
       width: holdWidth,
       height: capHeight,
@@ -1156,7 +1180,7 @@ function App() {
   };
 
   const getEventFrameStyle = (event: TimedNoteEvent): CSSProperties => ({
-    top: event.beat * pixelsPerBeat,
+    top: chartVerticalOffset + event.beat * pixelsPerBeat,
     left: '50%',
     width: receptorHeight,
     height: receptorHeight,
@@ -1383,6 +1407,7 @@ function App() {
             beginBotWindowInteraction={beginBotWindowInteraction}
           />
         }
+        chartVerticalOffset={chartVerticalOffset}
         chartContentHeight={chartContentHeight}
         displayBeat={displayBeat}
         explosionRefs={explosionRefs}

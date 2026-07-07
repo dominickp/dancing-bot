@@ -7,6 +7,7 @@ const renderWindowStepBeats = 2;
 const displayRefreshMs = 80;
 const hitWindowBeats = 0.18;
 const loadingOverlayDelayMs = 180;
+const startPreviewBeats = 0.5;
 
 export interface PlaybackClock {
   audioTime: number;
@@ -17,6 +18,7 @@ export interface PlaybackClock {
 interface UseChartPlaybackArgs {
   audioSource: string | null;
   chartIndex: number;
+  chartVerticalOffset: number;
   events: TimedNoteEvent[];
   lastBeat: number;
   playbackRate: number;
@@ -46,6 +48,12 @@ interface UseChartPlaybackResult {
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
+
+const clampDisplayBeat = (beat: number, lastBeat: number): number =>
+  clamp(beat, 0, lastBeat);
+
+const clampViewportBeat = (beat: number, lastBeat: number): number =>
+  clamp(beat, -startPreviewBeats, lastBeat);
 
 const getScrollStepBeats = (visibleBeats: number): number => {
   if (visibleBeats <= 3) {
@@ -80,6 +88,7 @@ const getWheelStepCount = (event: WheelEvent): number => {
 export function useChartPlayback({
   audioSource,
   chartIndex,
+  chartVerticalOffset,
   events,
   lastBeat,
   playbackRate,
@@ -136,10 +145,11 @@ export function useChartPlayback({
 
   const applyScrollPosition = useCallback(
     (beat: number) => {
-      const nextBeat = clamp(beat, 0, lastBeat);
+      const nextBeat = clampViewportBeat(beat, lastBeat);
       currentBeatRef.current = nextBeat;
 
-      const translateY = receptorOffset - nextBeat * pixelsPerBeat;
+      const translateY =
+        receptorOffset - chartVerticalOffset - nextBeat * pixelsPerBeat;
 
       if (measureGuideLayerRef.current) {
         measureGuideLayerRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
@@ -149,7 +159,7 @@ export function useChartPlayback({
         scrollLayerRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
       }
     },
-    [lastBeat, pixelsPerBeat, receptorOffset],
+    [chartVerticalOffset, lastBeat, pixelsPerBeat, receptorOffset],
   );
 
   const syncAudioToBeat = useCallback(
@@ -189,10 +199,10 @@ export function useChartPlayback({
 
   const refreshRenderWindow = useCallback(
     (beat: number) => {
-      const nextBeat = clamp(beat, 0, lastBeat);
+      const nextBeat = clampViewportBeat(beat, lastBeat);
       renderBeatAnchorRef.current = nextBeat;
       setRenderBeatAnchor(nextBeat);
-      setDisplayBeat(nextBeat);
+      setDisplayBeat(clampDisplayBeat(nextBeat, lastBeat));
       applyScrollPosition(nextBeat);
     },
     [applyScrollPosition, lastBeat],
@@ -200,7 +210,7 @@ export function useChartPlayback({
 
   const seekToBeat = useCallback(
     (beat: number) => {
-      const nextBeat = clamp(beat, 0, lastBeat);
+      const nextBeat = clampViewportBeat(beat, lastBeat);
       lastAnimatedBeatRef.current = nextBeat;
       triggeredHitKeysRef.current.clear();
       refreshRenderWindow(nextBeat);
@@ -343,19 +353,19 @@ export function useChartPlayback({
     setIsLoading(false);
     setIsPlaying(false);
     setPlaybackRequested(false);
-    currentBeatRef.current = 0;
-    lastAnimatedBeatRef.current = 0;
+    currentBeatRef.current = -startPreviewBeats;
+    lastAnimatedBeatRef.current = -startPreviewBeats;
     triggeredHitKeysRef.current.clear();
-    renderBeatAnchorRef.current = 0;
-    setRenderBeatAnchor(0);
+    renderBeatAnchorRef.current = -startPreviewBeats;
+    setRenderBeatAnchor(-startPreviewBeats);
     setDisplayBeat(0);
 
     if (measureGuideLayerRef.current) {
-      measureGuideLayerRef.current.style.transform = `translate3d(0, ${receptorOffset}px, 0)`;
+      measureGuideLayerRef.current.style.transform = `translate3d(0, ${receptorOffset - chartVerticalOffset}px, 0)`;
     }
 
     if (scrollLayerRef.current) {
-      scrollLayerRef.current.style.transform = `translate3d(0, ${receptorOffset}px, 0)`;
+      scrollLayerRef.current.style.transform = `translate3d(0, ${receptorOffset - chartVerticalOffset}px, 0)`;
     }
 
     const audio = audioRef.current;
@@ -377,6 +387,7 @@ export function useChartPlayback({
     }
   }, [
     audioSource,
+    chartVerticalOffset,
     chartIndex,
     simfile.bpms,
     simfile.metadata.offset,
@@ -590,7 +601,7 @@ export function useChartPlayback({
         return;
       }
 
-      const clampedBeat = clamp(nextBeat, 0, lastBeat);
+      const clampedBeat = clampViewportBeat(nextBeat, lastBeat);
       refreshRenderWindow(clampedBeat);
       syncAudioToBeat(clampedBeat);
       lastAnimatedBeatRef.current = clampedBeat;
