@@ -146,6 +146,7 @@ body {
 .toolbar-metric-chip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 24px;
   padding: 0 8px;
   border: 1px solid #313943;
@@ -155,6 +156,16 @@ body {
   box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.05);
   font-size: 0.74rem;
   letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.toolbar-metric-chip-bpm {
+  min-width: 5.7rem;
+}
+
+.toolbar-metric-chip-effective {
+  min-width: 7.3rem;
 }
 
 .toolbar-metric-chip-highlight {
@@ -315,16 +326,128 @@ body {
   flex: 1;
 }
 
-.thin-toolbar-slider {
+.thin-toolbar-slider-shell {
+  --slider-thumb-size: 14px;
+  --slider-track-height: 4px;
   flex: 1;
+}
+
+.thin-toolbar-slider-shell-rate {
+  position: relative;
+  padding-bottom: 10px;
+}
+
+.thin-toolbar-slider {
+  --slider-thumb-size: 14px;
+  --slider-track-height: 4px;
+  appearance: none;
+  width: 100%;
+  flex: 1;
+  height: var(--slider-thumb-size);
+  margin: 0;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
   accent-color: var(--accent);
+}
+
+.thin-toolbar-slider::-webkit-slider-runnable-track {
+  height: var(--slider-track-height);
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.18),
+    rgba(0, 0, 0, 0.35)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.thin-toolbar-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  margin-top: calc((var(--slider-track-height) - var(--slider-thumb-size)) / 2);
+  border: 1px solid rgba(22, 16, 8, 0.85);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 35%,
+    #fff7d5,
+    #f4bc3f 58%,
+    #6e4d0d 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(255, 220, 150, 0.16),
+    0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.thin-toolbar-slider::-moz-range-track {
+  height: var(--slider-track-height);
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.18),
+    rgba(0, 0, 0, 0.35)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.thin-toolbar-slider::-moz-range-thumb {
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border: 1px solid rgba(22, 16, 8, 0.85);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 35%,
+    #fff7d5,
+    #f4bc3f 58%,
+    #6e4d0d 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(255, 220, 150, 0.16),
+    0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.thin-toolbar-slider-ticks {
+  position: absolute;
+  left: calc(var(--slider-thumb-size) / 2);
+  right: calc(var(--slider-thumb-size) / 2);
+  top: calc(50% + 5px);
+  height: 11px;
+  pointer-events: none;
+}
+
+.thin-toolbar-slider-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.thin-toolbar-slider-tick-mark {
+  width: 1px;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 70%, transparent);
+}
+
+.thin-toolbar-slider-tick-default .thin-toolbar-slider-tick-mark {
+  width: 2px;
+  height: 11px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgba(255, 212, 117, 0.18);
 }
 
 .thin-toolbar-rate-value {
   min-width: 3.5rem;
   color: var(--text-main);
   font-variant-numeric: tabular-nums;
-  text-align: right;
   font-size: 0.76rem;
 }
 
@@ -511,7 +634,7 @@ body {
   flex-direction: column;
   border: 1px solid var(--chrome-border-strong);
   border-radius: 4px;
-  background: linear-gradient(180deg, #1b2026 0%, #0f1317 100%);
+  background: linear-gradient(180deg, #0f1216 0%, #0b0e12 100%);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.07),
     inset -1px -1px 0 rgba(0, 0, 0, 0.48),
@@ -1173,12 +1296,12 @@ body {
 .bot-window-resize::before {
   content: "";
   position: absolute;
-  right: 8px;
-  bottom: 8px;
+  right: 4px;
+  bottom: 6px;
   width: 12px;
   height: 12px;
-  border-right: 2px solid rgba(216, 221, 230, 0.6);
-  border-bottom: 2px solid rgba(216, 221, 230, 0.6);
+  border-right: 1px solid rgba(216, 221, 230, 0.6);
+  border-bottom: 1px solid rgba(216, 221, 230, 0.6);
 }
 
 @media (max-width: 900px) {
@@ -1597,6 +1720,10 @@ body {
 
   .thin-toolbar-rate-control {
     width: 100%;
+  }
+
+  .thin-toolbar-slider-shell-rate {
+    min-width: 0;
   }
 
   .notefield-panel {

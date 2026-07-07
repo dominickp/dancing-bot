@@ -37,6 +37,19 @@ const defaultVisibleBeats = 10;
 const minPlaybackRate = 0.2;
 const maxPlaybackRate = 1.5;
 const playbackRateStep = 0.1;
+const defaultPlaybackRate = 1;
+const playbackRateTicks = Array.from(
+  { length: Math.round((maxPlaybackRate - minPlaybackRate) / playbackRateStep) + 1 },
+  (_, index) => {
+    const value = Number((minPlaybackRate + index * playbackRateStep).toFixed(1));
+
+    return {
+      value,
+      offset: ((value - minPlaybackRate) / (maxPlaybackRate - minPlaybackRate)) * 100,
+      isDefault: value === defaultPlaybackRate,
+    };
+  },
+);
 const minVolume = 0;
 const maxVolume = 1;
 const volumeStep = 0.05;
@@ -649,7 +662,8 @@ function App() {
   });
   const currentBpm = getBpmAtBeat(displayBeat, simfile.bpms);
   const effectiveBpm = currentBpm * playbackRate;
-  const bpmPrecision = effectiveBpm >= 100 ? 0 : 1;
+  const currentBpmPrecision = currentBpm >= 100 ? 0 : 1;
+  const effectiveBpmPrecision = effectiveBpm >= 100 ? 0 : 1;
 
   const minimapMeasures = useMemo<MinimapMeasure[]>(() => {
     const byMeasure = new Map<number, number>();
@@ -1290,9 +1304,9 @@ function App() {
 
       <section className="thin-toolbar" aria-label="Playback controls">
         <div className="thin-toolbar-group" aria-label="Tempo metrics">
-          <span className="toolbar-metric-chip">BPM {currentBpm.toFixed(bpmPrecision)}</span>
-          <span className="toolbar-metric-chip toolbar-metric-chip-highlight">
-            Effective {effectiveBpm.toFixed(bpmPrecision)}
+          <span className="toolbar-metric-chip toolbar-metric-chip-bpm">BPM {currentBpm.toFixed(currentBpmPrecision)}</span>
+          <span className="toolbar-metric-chip toolbar-metric-chip-highlight toolbar-metric-chip-effective">
+            Effective {effectiveBpm.toFixed(effectiveBpmPrecision)}
           </span>
         </div>
 
@@ -1300,16 +1314,29 @@ function App() {
           <label className="thin-toolbar-rate" htmlFor="playback-rate-slider">
             <span className="thin-toolbar-label">Rate</span>
             <div className="thin-toolbar-rate-control">
-              <input
-                id="playback-rate-slider"
-                className="thin-toolbar-slider"
-                type="range"
-                min={minPlaybackRate}
-                max={maxPlaybackRate}
-                step={playbackRateStep}
-                value={playbackRate}
-                onChange={handlePlaybackRateChange}
-              />
+              <div className="thin-toolbar-slider-shell thin-toolbar-slider-shell-rate">
+                <input
+                  id="playback-rate-slider"
+                  className="thin-toolbar-slider"
+                  type="range"
+                  min={minPlaybackRate}
+                  max={maxPlaybackRate}
+                  step={playbackRateStep}
+                  value={playbackRate}
+                  onChange={handlePlaybackRateChange}
+                />
+                <div className="thin-toolbar-slider-ticks" aria-hidden="true">
+                  {playbackRateTicks.map((tick) => (
+                    <span
+                      key={tick.value}
+                      className={tick.isDefault ? 'thin-toolbar-slider-tick thin-toolbar-slider-tick-default' : 'thin-toolbar-slider-tick'}
+                      style={{ left: `${tick.offset}%` }}
+                    >
+                      <span className="thin-toolbar-slider-tick-mark" />
+                    </span>
+                  ))}
+                </div>
+              </div>
               <span className="thin-toolbar-rate-value">{playbackRate.toFixed(1)}x</span>
             </div>
           </label>
