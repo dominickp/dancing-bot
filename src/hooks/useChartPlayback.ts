@@ -378,7 +378,6 @@ export function useChartPlayback({
   }, [
     audioSource,
     chartIndex,
-    receptorOffset,
     simfile.bpms,
     simfile.metadata.offset,
     simfile.stops,
