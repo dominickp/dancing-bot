@@ -1649,14 +1649,126 @@ body {
   overflow: hidden;
 }
 
-.minimap-measure {
+.minimap-hold,
+.minimap-row {
   position: absolute;
+  pointer-events: none;
+}
+
+.minimap-quant-band {
+  position: absolute;
+  inset-inline: 10%;
+  z-index: 0;
+  min-height: 2px;
+  border-radius: 1px;
+  opacity: 0.22;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.minimap-hold {
+  left: 40%;
+  z-index: 1;
+  width: 20%;
+  min-height: 2px;
+  margin-top: -1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    rgba(143, 169, 196, 0.65),
+    rgba(88, 108, 131, 0.18)
+  );
+}
+
+.minimap-hold-roll {
+  background: linear-gradient(
+    180deg,
+    rgba(122, 212, 200, 0.72),
+    rgba(74, 143, 134, 0.2)
+  );
+}
+
+.minimap-pattern-marker {
+  position: absolute;
+  left: 50%;
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.minimap-pattern-marker-core {
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(9, 11, 14, 0.9);
+  background: #eed7a2;
+  box-shadow:
+    0 0 0 1px rgba(255, 244, 214, 0.08),
+    0 0 10px rgba(238, 215, 162, 0.24);
+}
+
+.minimap-pattern-marker.is-multi::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: 0.7;
+}
+
+.minimap-pattern-marker-bracket {
+  color: #e7bf73;
+}
+
+.minimap-pattern-marker-bracket .minimap-pattern-marker-core {
+  background: #e7bf73;
+}
+
+.minimap-pattern-marker-crossover {
+  color: #7fb6ff;
+}
+
+.minimap-pattern-marker-crossover .minimap-pattern-marker-core {
+  background: #7fb6ff;
+}
+
+.minimap-pattern-marker-double-step {
+  color: #ff8f70;
+}
+
+.minimap-pattern-marker-double-step .minimap-pattern-marker-core {
+  background: #ff8f70;
+}
+
+.minimap-pattern-marker-footswitch {
+  color: #74d8ae;
+}
+
+.minimap-pattern-marker-footswitch .minimap-pattern-marker-core {
+  background: #74d8ae;
+}
+
+.minimap-pattern-marker-spin {
+  color: #d59cff;
+}
+
+.minimap-pattern-marker-spin .minimap-pattern-marker-core {
+  background: #d59cff;
+}
+
+.minimap-row {
+  position: absolute;
+  z-index: 1;
   left: 16%;
   right: 16%;
-  height: max(4px, 0.42%);
+  min-height: 2px;
+  margin-top: -1px;
   border-radius: 1px;
   transform-origin: center;
   background: linear-gradient(90deg, #bca06b, #8b98a8);
+  box-shadow: 0 0 10px rgba(164, 181, 198, 0.12);
 }
 
 .minimap-playhead {

@@ -1,4 +1,6 @@
 import type { CSSProperties, MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import type { MinimapHoldBand, MinimapQuantizationSegment, MinimapRow } from '../lib/minimap';
+import type { ParityDiagnosticKind } from '../lib/parity';
 import type { Panel, TimedNoteEvent } from '../lib/simfile';
 
 interface HoldSegmentView {
@@ -6,12 +8,6 @@ interface HoldSegmentView {
   startBeat: number;
   endBeat: number;
   kind: 'hold' | 'roll';
-}
-
-interface MinimapMeasureView {
-  measureIndex: number;
-  startBeat: number;
-  density: number;
 }
 
 interface BeatGuide {
@@ -22,6 +18,7 @@ interface BeatGuide {
 interface ParityHintView {
   beat: number;
   rowIndex: number;
+  kinds: ParityDiagnosticKind[];
   labels: string[];
 }
 
@@ -40,7 +37,10 @@ interface NotefieldPreviewProps {
   handleMinimapPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleMinimapPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   measureGuideLayerRef: MutableRefObject<HTMLDivElement | null>;
-  minimapMeasures: MinimapMeasureView[];
+  minimapHoldBands: MinimapHoldBand[];
+  minimapParityHints: ParityHintView[];
+  minimapQuantizationSegments: MinimapQuantizationSegment[];
+  minimapRows: MinimapRow[];
   minimapRef: MutableRefObject<HTMLDivElement | null>;
   notefieldFrameRef: MutableRefObject<HTMLDivElement | null>;
   isLoading: boolean;
@@ -75,7 +75,10 @@ export function NotefieldPreview({
   handleMinimapPointerDown,
   handleMinimapPointerMove,
   measureGuideLayerRef,
-  minimapMeasures,
+  minimapHoldBands,
+  minimapParityHints,
+  minimapQuantizationSegments,
+  minimapRows,
   minimapRef,
   notefieldFrameRef,
   isLoading,
@@ -94,6 +97,31 @@ export function NotefieldPreview({
   visibleHolds,
   botWindow,
 }: NotefieldPreviewProps) {
+  const getMinimapHintTone = (hint: ParityHintView): string => {
+    const priority: ParityDiagnosticKind[] = ['spin', 'double-step', 'crossover', 'bracket', 'footswitch'];
+
+    for (const kind of priority) {
+      if (hint.kinds.includes(kind)) {
+        return kind;
+      }
+    }
+
+    return 'mixed';
+  };
+
+  const getQuantizationBandBackground = (segment: MinimapQuantizationSegment): string => {
+    let offset = 0;
+    const stops = segment.slices.flatMap((slice) => {
+      const start = offset;
+      offset += slice.ratio * 100;
+      const end = offset;
+
+      return [`${slice.color} ${start}%`, `${slice.color} ${end}%`];
+    });
+
+    return `linear-gradient(90deg, ${stops.join(', ')})`;
+  };
+
   return (
     <section className="notefield-panel" aria-label="Interactive notefield preview">
       <div className="notefield-layout">
@@ -206,7 +234,6 @@ export function NotefieldPreview({
         <aside className="minimap-panel" aria-label="Song minimap">
           <div className="minimap-header">
             <h3>Minimap</h3>
-            <p>Click or drag to seek</p>
           </div>
 
           <div
@@ -215,14 +242,52 @@ export function NotefieldPreview({
             onPointerDown={handleMinimapPointerDown}
             onPointerMove={handleMinimapPointerMove}
           >
-            {minimapMeasures.map((measure) => (
+            {minimapQuantizationSegments.map((segment) => (
               <div
-                key={measure.measureIndex}
-                className="minimap-measure"
+                key={`quant-${segment.startBeat}-${segment.endBeat}`}
+                className={`minimap-quant-band minimap-quant-band-${segment.dominantKind}`}
                 style={{
-                  top: `${(measure.startBeat / totalChartBeats) * 100}%`,
-                  opacity: 0.18 + measure.density * 0.82,
-                  transform: `scaleX(${0.35 + measure.density * 0.65})`,
+                  top: `${(segment.startBeat / totalChartBeats) * 100}%`,
+                  height: `${Math.max(((segment.endBeat - segment.startBeat) / totalChartBeats) * 100, 0.4)}%`,
+                  backgroundImage: getQuantizationBandBackground(segment),
+                }}
+                title={segment.slices.map((slice) => `${slice.kind} ${Math.round(slice.ratio * 100)}%`).join(' / ')}
+              />
+            ))}
+            {minimapHoldBands.map((segment) => (
+              <div
+                key={`${segment.kind}-${segment.startBeat}-${segment.endBeat}`}
+                className={`minimap-hold minimap-hold-${segment.kind}`}
+                style={{
+                  top: `${(segment.startBeat / totalChartBeats) * 100}%`,
+                  height: `${Math.max(((segment.endBeat - segment.startBeat) / totalChartBeats) * 100, 0.32)}%`,
+                  opacity: segment.intensity,
+                }}
+              />
+            ))}
+            {minimapParityHints.map((hint) => {
+              const tone = getMinimapHintTone(hint);
+
+              return (
+                <div
+                  key={`minimap-hint-${hint.rowIndex}-${hint.beat}`}
+                  className={`minimap-pattern-marker minimap-pattern-marker-${tone}${hint.kinds.length > 1 ? ' is-multi' : ''}`}
+                  style={{ top: `${(hint.beat / totalChartBeats) * 100}%` }}
+                  title={hint.labels.join(' / ')}
+                >
+                  <span className="minimap-pattern-marker-core" />
+                </div>
+              );
+            })}
+            {minimapRows.map((row) => (
+              <div
+                key={row.beat}
+                className="minimap-row"
+                style={{
+                  top: `${(row.beat / totalChartBeats) * 100}%`,
+                  height: `${Math.min(1 + row.noteCount, 4)}px`,
+                  opacity: 0.2 + row.density * 0.8,
+                  transform: `scaleX(${Math.max(row.density, 0.08)})`,
                 }}
               />
             ))}

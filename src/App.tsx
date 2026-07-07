@@ -23,7 +23,8 @@ import type { BotStep } from './components/DancingBotWindow';
 import { NotefieldPreview } from './components/NotefieldPreview';
 import { useChartPlayback } from './hooks/useChartPlayback';
 import type { PlaybackClock } from './hooks/useChartPlayback';
-import type { StepParityConfig } from './lib/parity';
+import { buildMinimapHoldBands, buildMinimapQuantizationSegments, buildMinimapRows } from './lib/minimap';
+import type { ParityDiagnosticKind, StepParityConfig } from './lib/parity';
 import { bundledSongSources, loadLocalSongSource, releaseLoadedSongSource } from './lib/songSource';
 import type { LoadedSongSource } from './lib/songSource';
 import { buildParityAssignmentMap } from './lib/parity';
@@ -74,15 +75,10 @@ interface HoldSegment {
   kind: 'hold' | 'roll';
 }
 
-interface MinimapMeasure {
-  measureIndex: number;
-  startBeat: number;
-  density: number;
-}
-
 interface NotefieldParityHint {
   beat: number;
   rowIndex: number;
+  kinds: ParityDiagnosticKind[];
   labels: string[];
 }
 
@@ -564,6 +560,7 @@ function App() {
     return result.diagnostics.map((diagnostic) => ({
       beat: diagnostic.beat,
       rowIndex: diagnostic.rowIndex,
+      kinds: diagnostic.kinds,
       labels: diagnostic.kinds.map((kind) => labelByKind[kind] ?? kind),
     }));
   }, [botParityConfig, holdEndBeatMap, isParityHintOverlayEnabled, selectedTimedChart.events, simfile]);
@@ -665,26 +662,12 @@ function App() {
   const currentBpmPrecision = currentBpm >= 100 ? 0 : 1;
   const effectiveBpmPrecision = effectiveBpm >= 100 ? 0 : 1;
 
-  const minimapMeasures = useMemo<MinimapMeasure[]>(() => {
-    const byMeasure = new Map<number, number>();
-
-    for (const event of selectedTimedChart.events) {
-      if (event.kind === 'hold-tail') {
-        continue;
-      }
-
-      byMeasure.set(event.measureIndex, (byMeasure.get(event.measureIndex) ?? 0) + 1);
-    }
-
-    const maxDensity = Math.max(...byMeasure.values(), 1);
-    const totalMeasures = selectedChart?.summary.totalMeasures ?? 0;
-
-    return Array.from({ length: totalMeasures }, (_, measureIndex) => ({
-      measureIndex,
-      startBeat: measureIndex * 4,
-      density: (byMeasure.get(measureIndex) ?? 0) / maxDensity,
-    }));
-  }, [selectedChart, selectedTimedChart.events]);
+  const minimapRows = useMemo(() => buildMinimapRows(selectedTimedChart.events), [selectedTimedChart.events]);
+  const minimapHoldBands = useMemo(() => buildMinimapHoldBands(holdSegments), [holdSegments]);
+  const minimapQuantizationSegments = useMemo(
+    () => buildMinimapQuantizationSegments(selectedTimedChart.events, totalChartBeats, 2),
+    [selectedTimedChart.events, totalChartBeats],
+  );
 
   const visibleEvents = useMemo(
     () =>
@@ -1418,7 +1401,10 @@ function App() {
         handleMinimapPointerMove={handleMinimapPointerMove}
         handlePlayfieldPointerDown={handlePlayfieldPointerDown}
         measureGuideLayerRef={measureGuideLayerRef}
-        minimapMeasures={minimapMeasures}
+        minimapHoldBands={minimapHoldBands}
+        minimapParityHints={parityHintDiagnostics}
+        minimapQuantizationSegments={minimapQuantizationSegments}
+        minimapRows={minimapRows}
         minimapRef={minimapRef}
         notefieldFrameRef={notefieldFrameRef}
         isLoading={isLoading}
