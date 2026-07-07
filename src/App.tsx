@@ -96,6 +96,7 @@ interface PersistedUiSettings {
   botWindowRect: BotWindowRect;
   isAppearanceSectionOpen: boolean;
   isBehaviorSectionOpen: boolean;
+  isToolbarHelpDismissed: boolean;
 }
 
 const bundledNoteskinOptions = getBundledNoteskinOptions();
@@ -141,6 +142,7 @@ const defaultUiSettings: PersistedUiSettings = {
   botWindowRect: defaultBotWindowRect,
   isAppearanceSectionOpen: true,
   isBehaviorSectionOpen: true,
+  isToolbarHelpDismissed: false,
 };
 
 const botFormStyleIds: readonly BotFormStyleId[] = ['straight-wide', 'straight-minimal', 'heels-out', 'toes-out', 'slanted-right'];
@@ -235,6 +237,10 @@ const readPersistedUiSettings = (): PersistedUiSettings => {
         typeof parsedValue.isBehaviorSectionOpen === 'boolean'
           ? parsedValue.isBehaviorSectionOpen
           : defaultUiSettings.isBehaviorSectionOpen,
+      isToolbarHelpDismissed:
+        typeof parsedValue.isToolbarHelpDismissed === 'boolean'
+          ? parsedValue.isToolbarHelpDismissed
+          : defaultUiSettings.isToolbarHelpDismissed,
     };
   } catch {
     return defaultUiSettings;
@@ -483,6 +489,7 @@ function App() {
   const [botWindowRect, setBotWindowRect] = useState<BotWindowRect>(persistedUiSettings.botWindowRect);
   const [isAppearanceSectionOpen, setIsAppearanceSectionOpen] = useState(persistedUiSettings.isAppearanceSectionOpen);
   const [isBehaviorSectionOpen, setIsBehaviorSectionOpen] = useState(persistedUiSettings.isBehaviorSectionOpen);
+  const [isToolbarHelpDismissed, setIsToolbarHelpDismissed] = useState(persistedUiSettings.isToolbarHelpDismissed);
   const songImportRef = useRef<HTMLInputElement | null>(null);
   const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
@@ -795,6 +802,7 @@ function App() {
         botWindowRect,
         isAppearanceSectionOpen,
         isBehaviorSectionOpen,
+        isToolbarHelpDismissed,
       } satisfies PersistedUiSettings),
     );
   }, [
@@ -807,6 +815,7 @@ function App() {
     isBotPanelGlowEnabled,
     isBotPanelLightsEnabled,
     isParityHintOverlayEnabled,
+    isToolbarHelpDismissed,
     playbackRate,
     playfieldOffsetX,
     selectedBotFootStyle,
@@ -1263,9 +1272,21 @@ function App() {
         </div>
       </header>
 
-      <p className="toolbar-help">
-        <strong>Controls:</strong> Toggle playback with <strong>SPACE</strong>. Navigate the notefield with <strong>SCROLL</strong> or the minimap. Adjust arrow spacing with <strong>CTRL + SCROLL</strong>. Drag the notefield left or right to recenter it.
-      </p>
+      {isToolbarHelpDismissed ? null : (
+        <div className="toolbar-help" role="note" aria-label="Playback controls help">
+          <p className="toolbar-help-copy">
+            <strong>Controls:</strong> Toggle playback with <strong>SPACE</strong>. Navigate the notefield with <strong>SCROLL</strong> or the minimap. Adjust arrow spacing with <strong>CTRL + SCROLL</strong>. Drag the notefield left or right to recenter it.
+          </p>
+          <button
+            type="button"
+            className="toolbar-help-dismiss"
+            aria-label="Dismiss controls help"
+            onClick={() => setIsToolbarHelpDismissed(true)}
+          >
+            X
+          </button>
+        </div>
+      )}
 
       <section className="thin-toolbar" aria-label="Playback controls">
         <div className="thin-toolbar-group" aria-label="Tempo metrics">

@@ -1,19 +1,19 @@
 :root {
   color-scheme: dark;
-  color: #d8dde6;
-  background: #11151a;
+  color: #d1d7e0;
+  background: #08090b;
   line-height: 1.4;
-  --chrome-bg: #20252c;
-  --chrome-bg-raised: #2a3038;
-  --chrome-bg-deep: #161a20;
-  --chrome-panel: #1b1f25;
-  --chrome-border: #3a434d;
-  --chrome-border-strong: #555f6c;
-  --chrome-highlight: rgba(255, 255, 255, 0.18);
-  --chrome-shadow: rgba(0, 0, 0, 0.42);
-  --text-main: #d8dde6;
-  --text-muted: #98a4b3;
-  --text-dim: #7e8997;
+  --chrome-bg: #101318;
+  --chrome-bg-raised: #171b21;
+  --chrome-bg-deep: #090b0f;
+  --chrome-panel: #0d1014;
+  --chrome-border: #242b33;
+  --chrome-border-strong: #39424c;
+  --chrome-highlight: rgba(255, 255, 255, 0.1);
+  --chrome-shadow: rgba(0, 0, 0, 0.58);
+  --text-main: #d1d7e0;
+  --text-muted: #8692a0;
+  --text-dim: #697483;
   --accent: #d4b06a;
   --accent-soft: rgba(212, 176, 106, 0.16);
   --accent-strong: #f0cb7f;
@@ -34,9 +34,9 @@ body {
   min-height: 100vh;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 36%),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px), #11151a;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 28%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px), #08090b;
   background-size:
     auto,
     4px 4px,
@@ -53,7 +53,7 @@ body {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #11151a;
+  background: #08090b;
 }
 
 .mobile-warning-card {
@@ -111,11 +111,11 @@ body {
   padding: 12px 14px;
   border: 1px solid var(--chrome-border-strong);
   border-radius: 4px;
-  background: linear-gradient(180deg, #313843 0%, #242a32 48%, #1d2229 100%);
+  background: linear-gradient(180deg, #1f242b 0%, #14181d 48%, #0d1014 100%);
   box-shadow:
     inset 1px 1px 0 var(--chrome-highlight),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.34),
-    0 10px 22px rgba(0, 0, 0, 0.2);
+    inset -1px -1px 0 rgba(0, 0, 0, 0.5),
+    0 12px 24px rgba(0, 0, 0, 0.34);
 }
 
 .toolbar-title {
@@ -125,7 +125,7 @@ body {
 
 .toolbar-title h1 {
   margin: 0;
-  color: #eef2f7;
+  color: #e5ebf2;
   font-size: clamp(1.15rem, 2.4vw, 1.55rem);
   line-height: 1;
   letter-spacing: 0.02em;
@@ -148,19 +148,19 @@ body {
   align-items: center;
   min-height: 24px;
   padding: 0 8px;
-  border: 1px solid #46515d;
+  border: 1px solid #313943;
   border-radius: 2px;
   color: var(--text-main);
-  background: linear-gradient(180deg, #272d35, #1d2228);
-  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, #191d23, #0f1317);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.05);
   font-size: 0.74rem;
   letter-spacing: 0.02em;
 }
 
 .toolbar-metric-chip-highlight {
-  border-color: #6e5c36;
+  border-color: #5a4a2b;
   color: var(--accent-strong);
-  background: linear-gradient(180deg, #332c1f, #241f17);
+  background: linear-gradient(180deg, #241d13, #15110b);
 }
 
 .toolbar-link {
@@ -204,12 +204,48 @@ body {
 
 .toolbar-help {
   margin: -4px 2px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   padding: 7px 10px;
-  border: 1px solid #303843;
-  background: rgba(18, 22, 27, 0.9);
+  border: 1px solid #252c34;
+  background: rgba(10, 12, 16, 0.92);
   color: var(--text-muted);
   font-size: 0.74rem;
-  text-align: center;
+  text-align: left;
+}
+
+.toolbar-help-copy {
+  margin: 0;
+  flex: 1;
+}
+
+.toolbar-help-dismiss {
+  flex: 0 0 auto;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 6px;
+  border: 1px solid #36404a;
+  border-radius: 2px;
+  color: var(--text-dim);
+  background: linear-gradient(180deg, #171c22, #0d1014);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.05),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.46);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.toolbar-help-dismiss:hover {
+  color: var(--text-main);
+  border-color: #46515d;
+}
+
+.toolbar-help-dismiss:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .toolbar-banner {
@@ -235,10 +271,10 @@ body {
   padding: 8px 10px;
   border: 1px solid var(--chrome-border-strong);
   border-radius: 4px;
-  background: linear-gradient(180deg, #2b323b, #1d2228);
+  background: linear-gradient(180deg, #1a1f25, #0f1317);
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.1),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.3);
+    inset 1px 1px 0 rgba(255, 255, 255, 0.06),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.44);
 }
 
 .thin-toolbar-group {
@@ -321,18 +357,18 @@ body {
 .toolbar-field select {
   min-width: 280px;
   padding: 7px 30px 7px 8px;
-  border: 1px solid #4a5561;
+  border: 1px solid #313943;
   border-radius: 2px;
   color-scheme: dark;
   color: var(--text-main);
   background:
-    linear-gradient(180deg, #2b323a, #1d2228),
+    linear-gradient(180deg, #171c22, #0e1216),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.25 6 7.5l3.5-3.25' fill='none' stroke='%23d8dde6' stroke-linecap='square' stroke-linejoin='miter' stroke-width='1.25'/%3E%3C/svg%3E")
       no-repeat right 8px center / 12px 12px,
-    #1d2228;
+    #0e1216;
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.08),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.35);
+    inset 1px 1px 0 rgba(255, 255, 255, 0.05),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.46);
   -moz-appearance: none;
   appearance: none;
   font: inherit;
@@ -344,7 +380,7 @@ body {
 
 .toolbar-field select option {
   color: var(--text-main);
-  background: #1d2228;
+  background: #0e1216;
 }
 
 .toolbar-field select:hover {
@@ -363,13 +399,13 @@ body {
 .toolbar-button {
   min-width: 160px;
   padding: 7px 10px;
-  border: 1px solid #54606d;
+  border: 1px solid #36404a;
   border-radius: 2px;
   color: var(--text-main);
-  background: linear-gradient(180deg, #313843, #232830);
+  background: linear-gradient(180deg, #1d2229, #11151a);
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.12),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.38);
+    inset 1px 1px 0 rgba(255, 255, 255, 0.08),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.48);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -379,7 +415,7 @@ body {
 .toolbar-button.is-enabled {
   border-color: #756343;
   color: #f0dfb0;
-  background: linear-gradient(180deg, #433621, #2d2418);
+  background: linear-gradient(180deg, #342919, #1d160d);
 }
 
 .toolbar-button:focus-visible {
@@ -425,7 +461,7 @@ body {
   place-items: center;
   gap: 10px;
   padding: 24px;
-  background: rgba(12, 15, 19, 0.88);
+  background: rgba(5, 6, 9, 0.9);
   pointer-events: none;
 }
 
@@ -475,11 +511,11 @@ body {
   flex-direction: column;
   border: 1px solid var(--chrome-border-strong);
   border-radius: 4px;
-  background: linear-gradient(180deg, #2c333c 0%, #1d2229 100%);
+  background: linear-gradient(180deg, #1b2026 0%, #0f1317 100%);
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.12),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.36),
-    0 18px 30px rgba(0, 0, 0, 0.32);
+    inset 1px 1px 0 rgba(255, 255, 255, 0.07),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.48),
+    0 18px 30px rgba(0, 0, 0, 0.42);
   overflow: hidden;
 }
 
@@ -489,8 +525,8 @@ body {
   align-items: start;
   gap: 14px;
   padding: 9px 12px 8px;
-  border-bottom: 1px solid #414a55;
-  background: linear-gradient(180deg, #38414c, #2a313a);
+  border-bottom: 1px solid #2b333c;
+  background: linear-gradient(180deg, #242a31, #171c22);
   cursor: grab;
   touch-action: none;
 }
@@ -516,9 +552,9 @@ body {
 
 .bot-window-beat {
   padding: 4px 8px;
-  border: 1px solid #48525f;
+  border: 1px solid #313943;
   border-radius: 2px;
-  background: linear-gradient(180deg, #222830, #171b21);
+  background: linear-gradient(180deg, #14191e, #0b0e12);
   color: var(--text-main);
   font-size: 0.72rem;
   white-space: nowrap;
@@ -539,13 +575,13 @@ body {
 }
 
 .bot-settings-section {
-  border: 1px solid #3d4650;
+  border: 1px solid #2c333c;
   border-radius: 2px;
-  background: rgba(18, 22, 28, 0.8);
+  background: rgba(10, 13, 17, 0.86);
 }
 
 .bot-settings-section[open] {
-  background: rgba(15, 19, 24, 0.92);
+  background: rgba(8, 10, 14, 0.94);
 }
 
 .bot-settings-section-summary {
@@ -556,7 +592,7 @@ body {
   padding: 7px 9px;
   cursor: pointer;
   list-style: none;
-  background: linear-gradient(180deg, #2a3139, #21272e);
+  background: linear-gradient(180deg, #1a1f25, #11151a);
 }
 
 .bot-settings-section-summary::-webkit-details-marker {
@@ -620,9 +656,9 @@ body {
   display: grid;
   justify-items: center;
   padding: 6px;
-  border: 1px solid #48525d;
+  border: 1px solid #303842;
   border-radius: 2px;
-  background: linear-gradient(180deg, #2d343d, #1d2229);
+  background: linear-gradient(180deg, #181d23, #0f1317);
   color: var(--text-main);
   font: inherit;
   cursor: pointer;
@@ -641,10 +677,10 @@ body {
   border-color: color-mix(in srgb, var(--bot-toggle-accent) 52%, #7b848e 48%);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--bot-toggle-accent) 18%, #3a4148 82%),
-    #252b32
+    color-mix(in srgb, var(--bot-toggle-accent) 14%, #21262d 86%),
+    #14181d
   );
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .bot-icon-toggle.is-selected .bot-icon-toggle-swatch {
@@ -662,7 +698,7 @@ body {
   aspect-ratio: 1;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 2px;
-  background: linear-gradient(180deg, #555d65, #3d434b);
+  background: linear-gradient(180deg, #343b43, #20252c);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.12),
     inset -1px -1px 0 rgba(0, 0, 0, 0.22);
@@ -701,13 +737,13 @@ body {
   display: grid;
   gap: 4px;
   padding: 7px 8px;
-  border: 1px solid #48525d;
+  border: 1px solid #303842;
   border-radius: 2px;
-  background: linear-gradient(180deg, #2b323b, #1d2228);
+  background: linear-gradient(180deg, #171c22, #0f1317);
   color: var(--text-main);
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.08),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.32);
+    inset 1px 1px 0 rgba(255, 255, 255, 0.05),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.46);
 }
 
 .bot-future-control-toggle {
@@ -727,7 +763,7 @@ body {
 
 .bot-future-control-toggle.is-enabled {
   border-color: #766543;
-  background: linear-gradient(180deg, #433721, #2d2519);
+  background: linear-gradient(180deg, #342919, #1f170e);
 }
 
 .bot-future-control-toggle.is-enabled .bot-future-control-value {
@@ -764,9 +800,9 @@ body {
   width: max-content;
   max-width: 220px;
   padding: 6px 8px;
-  border: 1px solid #4c5661;
+  border: 1px solid #313943;
   border-radius: 2px;
-  background: #1a1f25;
+  background: #0f1317;
   color: var(--text-main);
   font-size: 0.72rem;
   line-height: 1.35;
@@ -785,7 +821,7 @@ body {
   bottom: calc(100% + 6px);
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
-  border-top: 6px solid #1a1f25;
+  border-top: 6px solid #0f1317;
   transform: translateX(-50%);
 }
 
@@ -1346,9 +1382,9 @@ body {
   right: calc(100% + 10px);
   top: 0;
   padding: 2px 6px;
-  border: 1px solid #36404a;
+  border: 1px solid #2c343c;
   border-radius: 2px;
-  background: rgba(18, 22, 28, 0.94);
+  background: rgba(8, 10, 14, 0.94);
   color: var(--text-dim);
   font-size: 0.66rem;
   transform: translateY(-50%);
@@ -1369,7 +1405,7 @@ body {
 .parity-hint-chip {
   padding: 2px 6px;
   border-radius: 2px;
-  background: rgba(18, 22, 28, 0.94);
+  background: rgba(8, 10, 14, 0.94);
   border: 1px solid rgba(212, 176, 106, 0.28);
   color: #eed7a2;
   font-size: 0.64rem;
@@ -1454,10 +1490,10 @@ body {
   padding: 10px;
   border: 1px solid var(--chrome-border-strong);
   border-radius: 4px;
-  background: linear-gradient(180deg, #242a32, #181c22);
+  background: linear-gradient(180deg, #171c22, #0d1014);
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.08),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.34);
+    inset 1px 1px 0 rgba(255, 255, 255, 0.05),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.46);
 }
 
 .minimap-header {
@@ -1480,10 +1516,10 @@ body {
   position: relative;
   height: 100%;
   min-height: 0;
-  border: 1px solid #404a55;
+  border: 1px solid #2f3740;
   border-radius: 2px;
   cursor: ns-resize;
-  background: linear-gradient(180deg, #14181d, #0f1216);
+  background: linear-gradient(180deg, #0e1115, #080a0d);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.04),
     inset -1px -1px 0 rgba(0, 0, 0, 0.36);
