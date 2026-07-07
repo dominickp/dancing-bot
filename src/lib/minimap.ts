@@ -61,6 +61,7 @@ const quantizationKindOrder: MinimapQuantizationKind[] = [
   "twentyFourth",
   "fortyEighth",
 ];
+const defaultMaxMinimapRows = 900;
 
 const getBeatKey = (beat: number): string => beat.toFixed(6);
 
@@ -173,7 +174,7 @@ export const buildMinimapRows = (events: TimedNoteEvent[]): MinimapRow[] => {
 
   const maxLocalWeightedCount = Math.max(...localWeightedCounts, 1);
 
-  return sortedRows.map((row, index) => {
+  const rows = sortedRows.map((row, index) => {
     const localDensity = localWeightedCounts[index]! / maxLocalWeightedCount;
     const quantizationKind = getMinimapQuantizationKind(row.beat);
 
@@ -185,6 +186,63 @@ export const buildMinimapRows = (events: TimedNoteEvent[]): MinimapRow[] => {
       quantizationColor: quantizationColors[quantizationKind],
     };
   });
+
+  if (rows.length <= defaultMaxMinimapRows) {
+    return rows;
+  }
+
+  const lastBeat = rows[rows.length - 1]!.beat;
+  const bucketBeatSpan = Math.max(
+    lastBeat / Math.max(defaultMaxMinimapRows - 1, 1),
+    0.25,
+  );
+  const compressedRows: MinimapRow[] = [];
+  let bucketStartBeat = 0;
+  let bucketRows: MinimapRow[] = [];
+
+  const flushBucket = () => {
+    if (bucketRows.length === 0) {
+      return;
+    }
+
+    const representativeRow = bucketRows.reduce((best, row) => {
+      if (row.density === best.density) {
+        return row.noteCount > best.noteCount ? row : best;
+      }
+
+      return row.density > best.density ? row : best;
+    }, bucketRows[0]!);
+
+    const noteCount = bucketRows.reduce(
+      (maxCount, row) => Math.max(maxCount, row.noteCount),
+      representativeRow.noteCount,
+    );
+    const density = bucketRows.reduce(
+      (maxDensity, row) => Math.max(maxDensity, row.density),
+      representativeRow.density,
+    );
+
+    compressedRows.push({
+      ...representativeRow,
+      beat: bucketStartBeat,
+      noteCount,
+      density,
+    });
+  };
+
+  for (const row of rows) {
+    if (row.beat >= bucketStartBeat + bucketBeatSpan) {
+      flushBucket();
+      bucketRows = [];
+      bucketStartBeat = Math.floor(row.beat / bucketBeatSpan) * bucketBeatSpan;
+    }
+
+    bucketRows.push(row);
+  }
+
+  flushBucket();
+
+  return compressedRows;
 };
 
 export const buildMinimapHoldBands = (

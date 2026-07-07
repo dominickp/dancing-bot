@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { CSSProperties, MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { MinimapHoldBand, MinimapRow } from '../lib/minimap';
 import type { ParityDiagnosticKind } from '../lib/parity';
@@ -106,6 +107,60 @@ export function NotefieldPreview({
 
     return 'mixed';
   };
+
+  const minimapHoldElements = useMemo(
+    () =>
+      minimapHoldBands.map((segment) => (
+        <div
+          key={`${segment.kind}-${segment.startBeat}-${segment.endBeat}`}
+          className={`minimap-hold minimap-hold-${segment.kind}`}
+          style={{
+            top: `${(segment.startBeat / totalChartBeats) * 100}%`,
+            height: `${Math.max(((segment.endBeat - segment.startBeat) / totalChartBeats) * 100, 0.32)}%`,
+            opacity: segment.intensity,
+          }}
+        />
+      )),
+    [minimapHoldBands, totalChartBeats],
+  );
+
+  const minimapParityHintElements = useMemo(
+    () =>
+      minimapParityHints.map((hint) => {
+        const tone = getMinimapHintTone(hint);
+
+        return (
+          <div
+            key={`minimap-hint-${hint.rowIndex}-${hint.beat}`}
+            className={`minimap-pattern-marker minimap-pattern-marker-${tone}${hint.kinds.length > 1 ? ' is-multi' : ''}`}
+            style={{ top: `${(hint.beat / totalChartBeats) * 100}%` }}
+            title={hint.labels.join(' / ')}
+          >
+            <span className="minimap-pattern-marker-core" />
+          </div>
+        );
+      }),
+    [minimapParityHints, totalChartBeats],
+  );
+
+  const minimapRowElements = useMemo(
+    () =>
+      minimapRows.map((row) => (
+        <div
+          key={row.beat}
+          className="minimap-row"
+          style={{
+            top: `${(row.beat / totalChartBeats) * 100}%`,
+            height: `${Math.min(1 + row.noteCount, 4)}px`,
+            opacity: 0.2 + row.density * 0.8,
+            background: row.quantizationColor,
+            transform: `scaleX(${Math.max(row.density, 0.08)})`,
+          }}
+          title={`${row.quantizationKind} @ beat ${row.beat.toFixed(3)}`}
+        />
+      )),
+    [minimapRows, totalChartBeats],
+  );
 
   return (
     <section className="notefield-panel" aria-label="Interactive notefield preview">
@@ -227,46 +282,9 @@ export function NotefieldPreview({
             onPointerDown={handleMinimapPointerDown}
             onPointerMove={handleMinimapPointerMove}
           >
-            {minimapHoldBands.map((segment) => (
-              <div
-                key={`${segment.kind}-${segment.startBeat}-${segment.endBeat}`}
-                className={`minimap-hold minimap-hold-${segment.kind}`}
-                style={{
-                  top: `${(segment.startBeat / totalChartBeats) * 100}%`,
-                  height: `${Math.max(((segment.endBeat - segment.startBeat) / totalChartBeats) * 100, 0.32)}%`,
-                  opacity: segment.intensity,
-                }}
-              />
-            ))}
-            {minimapParityHints.map((hint) => {
-              const tone = getMinimapHintTone(hint);
-
-              return (
-                <div
-                  key={`minimap-hint-${hint.rowIndex}-${hint.beat}`}
-                  className={`minimap-pattern-marker minimap-pattern-marker-${tone}${hint.kinds.length > 1 ? ' is-multi' : ''}`}
-                  style={{ top: `${(hint.beat / totalChartBeats) * 100}%` }}
-                  title={hint.labels.join(' / ')}
-                >
-                  <span className="minimap-pattern-marker-core" />
-                </div>
-              );
-            })}
-            {minimapRows.map((row) => (
-              <div
-                key={row.beat}
-                className="minimap-row"
-                style={{
-                  top: `${(row.beat / totalChartBeats) * 100}%`,
-                  height: `${Math.min(1 + row.noteCount, 4)}px`,
-                  opacity: 0.2 + row.density * 0.8,
-                  background: row.quantizationColor,
-                  boxShadow: `0 0 10px ${row.quantizationColor}33`,
-                  transform: `scaleX(${Math.max(row.density, 0.08)})`,
-                }}
-                title={`${row.quantizationKind} @ beat ${row.beat.toFixed(3)}`}
-              />
-            ))}
+            {minimapHoldElements}
+            {minimapParityHintElements}
+            {minimapRowElements}
             <div className="minimap-playhead" style={{ top: `${(displayBeat / totalChartBeats) * 100}%` }} />
           </div>
         </aside>

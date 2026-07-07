@@ -58,6 +58,23 @@ describe("buildMinimapRows", () => {
     expect(streamMidRow!.noteCount).toBe(isolatedRow!.noteCount);
     expect(streamMidRow!.density).toBeGreaterThan(isolatedRow!.density);
   });
+
+  it("compresses very long charts into a bounded row count", () => {
+    const rows = buildMinimapRows(
+      Array.from({ length: 1400 }, (_, index) =>
+        event({
+          beat: index * 0.25,
+          panel: ["left", "down", "up", "right"][index % 4] as TimedNoteEvent["panel"],
+          kind: "tap",
+          rowIndex: index,
+        }),
+      ),
+    );
+
+    expect(rows.length).toBeLessThanOrEqual(900);
+    expect(rows[0]?.beat).toBe(0);
+    expect(rows.at(-1)?.beat).toBeLessThanOrEqual(1399 * 0.25);
+  });
 });
 
 describe("buildMinimapHoldBands", () => {
