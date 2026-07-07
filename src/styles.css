@@ -1664,16 +1664,16 @@ body {
   border-radius: 999px;
   background: linear-gradient(
     180deg,
-    rgba(143, 169, 196, 0.65),
-    rgba(88, 108, 131, 0.18)
+    rgba(111, 130, 150, 0.54),
+    rgba(55, 67, 81, 0.16)
   );
 }
 
 .minimap-hold-roll {
   background: linear-gradient(
     180deg,
-    rgba(122, 212, 200, 0.72),
-    rgba(74, 143, 134, 0.2)
+    rgba(81, 159, 149, 0.58),
+    rgba(48, 95, 89, 0.18)
   );
 }
 
@@ -1692,10 +1692,10 @@ body {
   inset: 4px;
   border-radius: 999px;
   border: 1px solid rgba(9, 11, 14, 0.9);
-  background: #eed7a2;
+  background: #c7b07f;
   box-shadow:
-    0 0 0 1px rgba(255, 244, 214, 0.08),
-    0 0 10px rgba(238, 215, 162, 0.24);
+    0 0 0 1px rgba(255, 244, 214, 0.06),
+    0 0 8px rgba(199, 176, 127, 0.16);
 }
 
 .minimap-pattern-marker.is-multi::before {
@@ -1712,7 +1712,7 @@ body {
 }
 
 .minimap-pattern-marker-bracket .minimap-pattern-marker-core {
-  background: #e7bf73;
+  background: #bf9f63;
 }
 
 .minimap-pattern-marker-crossover {
@@ -1720,7 +1720,7 @@ body {
 }
 
 .minimap-pattern-marker-crossover .minimap-pattern-marker-core {
-  background: #7fb6ff;
+  background: #6794cf;
 }
 
 .minimap-pattern-marker-double-step {
@@ -1728,7 +1728,7 @@ body {
 }
 
 .minimap-pattern-marker-double-step .minimap-pattern-marker-core {
-  background: #ff8f70;
+  background: #cb735b;
 }
 
 .minimap-pattern-marker-footswitch {
@@ -1736,7 +1736,7 @@ body {
 }
 
 .minimap-pattern-marker-footswitch .minimap-pattern-marker-core {
-  background: #74d8ae;
+  background: #5ca889;
 }
 
 .minimap-pattern-marker-spin {
@@ -1744,7 +1744,7 @@ body {
 }
 
 .minimap-pattern-marker-spin .minimap-pattern-marker-core {
-  background: #d59cff;
+  background: #a87cc8;
 }
 
 .minimap-row {

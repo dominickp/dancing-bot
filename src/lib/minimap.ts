@@ -45,12 +45,12 @@ export interface MinimapQuantizationSegment {
 
 const ticksPerBeat = 192;
 const quantizationColors: Record<MinimapQuantizationKind, string> = {
-  quarter: "#ff5d73",
-  eighth: "#51a8ff",
-  twelfth: "#d08cff",
-  sixteenth: "#63d17c",
-  twentyFourth: "#efd166",
-  fortyEighth: "#63e6d8",
+  quarter: "#c94a5d",
+  eighth: "#3f82c7",
+  twelfth: "#9f6dc2",
+  sixteenth: "#4da363",
+  twentyFourth: "#c4aa54",
+  fortyEighth: "#4cafa4",
 };
 
 const quantizationKindOrder: MinimapQuantizationKind[] = [

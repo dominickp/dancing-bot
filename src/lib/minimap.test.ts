@@ -33,7 +33,7 @@ describe("buildMinimapRows", () => {
       noteCount: 2,
       density: 1,
       quantizationKind: "quarter",
-      quantizationColor: "#ff5d73",
+      quantizationColor: "#c94a5d",
     });
     expect(rows[1]?.beat).toBe(2);
     expect(rows[1]?.noteCount).toBe(1);
@@ -64,7 +64,9 @@ describe("buildMinimapRows", () => {
       Array.from({ length: 1400 }, (_, index) =>
         event({
           beat: index * 0.25,
-          panel: ["left", "down", "up", "right"][index % 4] as TimedNoteEvent["panel"],
+          panel: ["left", "down", "up", "right"][
+            index % 4
+          ] as TimedNoteEvent["panel"],
           kind: "tap",
           rowIndex: index,
         }),
@@ -123,14 +125,14 @@ describe("buildMinimapQuantizationSegments", () => {
     expect(segments[0]?.endBeat).toBe(2);
     expect(segments[0]?.dominantKind).toBe("quarter");
     expect(segments[0]?.slices).toEqual([
-      { kind: "quarter", count: 1, ratio: 1 / 3, color: "#ff5d73" },
-      { kind: "eighth", count: 1, ratio: 1 / 3, color: "#51a8ff" },
-      { kind: "twelfth", count: 1, ratio: 1 / 3, color: "#d08cff" },
+      { kind: "quarter", count: 1, ratio: 1 / 3, color: "#c94a5d" },
+      { kind: "eighth", count: 1, ratio: 1 / 3, color: "#3f82c7" },
+      { kind: "twelfth", count: 1, ratio: 1 / 3, color: "#9f6dc2" },
     ]);
     expect(segments[1]?.dominantKind).toBe("eighth");
     expect(segments[1]?.slices).toEqual([
-      { kind: "eighth", count: 1, ratio: 0.5, color: "#51a8ff" },
-      { kind: "sixteenth", count: 1, ratio: 0.5, color: "#63d17c" },
+      { kind: "eighth", count: 1, ratio: 0.5, color: "#3f82c7" },
+      { kind: "sixteenth", count: 1, ratio: 0.5, color: "#4da363" },
     ]);
   });
 });
