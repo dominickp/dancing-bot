@@ -1199,6 +1199,12 @@ function App() {
           {songLoadError ? <p className="toolbar-message toolbar-message-error">{songLoadError}</p> : null}
         </div>
 
+        {selectedSong?.bannerUrl ? (
+          <div className="toolbar-banner" aria-hidden="true">
+            <img className="toolbar-banner-image" src={selectedSong.bannerUrl} alt="" />
+          </div>
+        ) : null}
+
         <div className="toolbar-controls">
           <a
             className="toolbar-link"
