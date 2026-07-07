@@ -20,6 +20,7 @@ interface UseChartPlaybackArgs {
   events: TimedNoteEvent[];
   lastBeat: number;
   playbackRate: number;
+  volume: number;
   pixelsPerBeat: number;
   visibleBeats: number;
   minVisibleBeats: number;
@@ -82,6 +83,7 @@ export function useChartPlayback({
   events,
   lastBeat,
   playbackRate,
+  volume,
   pixelsPerBeat,
   visibleBeats,
   minVisibleBeats,
@@ -273,6 +275,7 @@ export function useChartPlayback({
     const audio = new Audio(audioSource);
     audio.preload = "auto";
     audio.playbackRate = playbackRate;
+    audio.volume = volume;
 
     const handleLoadedMetadata = () => setAudioReady(true);
     const handleEnded = () => {
@@ -315,6 +318,16 @@ export function useChartPlayback({
       lastDisplayUpdateRef.current = 0;
     }
   }, [playbackRate]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.volume = volume;
+  }, [volume]);
 
   useEffect(() => {
     applyScrollPosition(currentBeatRef.current);

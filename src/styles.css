@@ -175,11 +175,19 @@ body {
   align-items: center;
 }
 
+.thin-toolbar-slider-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: min(560px, 100%);
+}
+
 .thin-toolbar-rate {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: min(420px, 100%);
+  min-width: min(270px, 100%);
   flex: 1;
 }
 
@@ -1500,6 +1508,13 @@ body {
   }
 
   .thin-toolbar-rate {
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .thin-toolbar-slider-group {
     width: 100%;
     min-width: 0;
     flex-direction: column;

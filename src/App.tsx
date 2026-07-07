@@ -37,6 +37,9 @@ const defaultVisibleBeats = 10;
 const minPlaybackRate = 0.2;
 const maxPlaybackRate = 1.5;
 const playbackRateStep = 0.1;
+const minVolume = 0;
+const maxVolume = 1;
+const volumeStep = 0.05;
 const renderBufferBeats = 4;
 const settingsStorageKey = 'dancing-bot:ui-settings';
 const baseLaneWidth = 72;
@@ -81,6 +84,7 @@ interface PersistedUiSettings {
   selectedBotFootStyle: BotFootStyleId;
   selectedBotPadStyle: BotPadStyleId;
   playbackRate: number;
+  volume: number;
   isBotPanelGlowEnabled: boolean;
   isBotPanelLightsEnabled: boolean;
   isBotCrossoverEnabled: boolean;
@@ -125,6 +129,7 @@ const defaultUiSettings: PersistedUiSettings = {
   selectedBotFootStyle: defaultBotFootStyle,
   selectedBotPadStyle: defaultBotPadStyle,
   playbackRate: 1,
+  volume: 0.5,
   isBotPanelGlowEnabled: true,
   isBotPanelLightsEnabled: true,
   isBotCrossoverEnabled: true,
@@ -147,6 +152,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const clampPlaybackRate = (value: number): number =>
   clamp(Math.round(value / playbackRateStep) * playbackRateStep, minPlaybackRate, maxPlaybackRate);
+const clampVolume = (value: number): number =>
+  clamp(Math.round(value / volumeStep) * volumeStep, minVolume, maxVolume);
 const getHoldSegmentKey = (panel: PanelName, startBeat: number): string => `${panel}:${startBeat.toFixed(6)}`;
 
 const readPersistedUiSettings = (): PersistedUiSettings => {
@@ -183,6 +190,7 @@ const readPersistedUiSettings = (): PersistedUiSettings => {
         typeof parsedValue.playbackRate === 'number'
           ? clampPlaybackRate(parsedValue.playbackRate)
           : defaultUiSettings.playbackRate,
+      volume: typeof parsedValue.volume === 'number' ? clampVolume(parsedValue.volume) : defaultUiSettings.volume,
       isBotPanelGlowEnabled:
         typeof parsedValue.isBotPanelGlowEnabled === 'boolean'
           ? parsedValue.isBotPanelGlowEnabled
@@ -458,6 +466,7 @@ function App() {
   const [selectedBotFootStyle, setSelectedBotFootStyle] = useState<BotFootStyleId>(persistedUiSettings.selectedBotFootStyle);
   const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(persistedUiSettings.selectedBotPadStyle);
   const [playbackRate, setPlaybackRate] = useState(persistedUiSettings.playbackRate);
+  const [volume, setVolume] = useState(persistedUiSettings.volume);
   const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(persistedUiSettings.isBotPanelGlowEnabled);
   const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(persistedUiSettings.isBotPanelLightsEnabled);
   const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(persistedUiSettings.isBotCrossoverEnabled);
@@ -590,6 +599,7 @@ function App() {
     events: selectedTimedChart.events,
     lastBeat: selectedTimedChart.lastBeat,
     playbackRate,
+    volume,
     pixelsPerBeat,
     visibleBeats,
     minVisibleBeats,
@@ -773,6 +783,7 @@ function App() {
         selectedBotFootStyle,
         selectedBotPadStyle,
         playbackRate,
+        volume,
         isBotPanelGlowEnabled,
         isBotPanelLightsEnabled,
         isBotCrossoverEnabled,
@@ -801,6 +812,7 @@ function App() {
     selectedBotFootStyle,
     selectedBotFormStyle,
     selectedBotPadStyle,
+    volume,
     visibleBeats,
   ]);
 
@@ -926,6 +938,10 @@ function App() {
 
   const handlePlaybackRateChange = (event: ChangeEvent<HTMLInputElement>) => {
     setPlaybackRate(clampPlaybackRate(Number.parseFloat(event.target.value)));
+  };
+
+  const handleVolumeChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setVolume(clampVolume(Number.parseFloat(event.target.value)));
   };
 
   const handleBotFormStyleChange = (nextStyle: BotFormStyleId) => {
@@ -1249,22 +1265,41 @@ function App() {
           </span>
         </div>
 
-        <label className="thin-toolbar-rate" htmlFor="playback-rate-slider">
-          <span className="thin-toolbar-label">Rate</span>
-          <div className="thin-toolbar-rate-control">
-            <input
-              id="playback-rate-slider"
-              className="thin-toolbar-slider"
-              type="range"
-              min={minPlaybackRate}
-              max={maxPlaybackRate}
-              step={playbackRateStep}
-              value={playbackRate}
-              onChange={handlePlaybackRateChange}
-            />
-            <span className="thin-toolbar-rate-value">{playbackRate.toFixed(1)}x</span>
-          </div>
-        </label>
+        <div className="thin-toolbar-slider-group" aria-label="Playback sliders">
+          <label className="thin-toolbar-rate" htmlFor="playback-rate-slider">
+            <span className="thin-toolbar-label">Rate</span>
+            <div className="thin-toolbar-rate-control">
+              <input
+                id="playback-rate-slider"
+                className="thin-toolbar-slider"
+                type="range"
+                min={minPlaybackRate}
+                max={maxPlaybackRate}
+                step={playbackRateStep}
+                value={playbackRate}
+                onChange={handlePlaybackRateChange}
+              />
+              <span className="thin-toolbar-rate-value">{playbackRate.toFixed(1)}x</span>
+            </div>
+          </label>
+
+          <label className="thin-toolbar-rate" htmlFor="volume-slider">
+            <span className="thin-toolbar-label">Volume</span>
+            <div className="thin-toolbar-rate-control">
+              <input
+                id="volume-slider"
+                className="thin-toolbar-slider"
+                type="range"
+                min={minVolume}
+                max={maxVolume}
+                step={volumeStep}
+                value={volume}
+                onChange={handleVolumeChange}
+              />
+              <span className="thin-toolbar-rate-value">{Math.round(volume * 100)}%</span>
+            </div>
+          </label>
+        </div>
 
         <button
           type="button"
