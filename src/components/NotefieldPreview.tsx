@@ -1,5 +1,5 @@
 import type { CSSProperties, MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-import type { MinimapHoldBand, MinimapQuantizationSegment, MinimapRow } from '../lib/minimap';
+import type { MinimapHoldBand, MinimapRow } from '../lib/minimap';
 import type { ParityDiagnosticKind } from '../lib/parity';
 import type { Panel, TimedNoteEvent } from '../lib/simfile';
 
@@ -39,7 +39,6 @@ interface NotefieldPreviewProps {
   measureGuideLayerRef: MutableRefObject<HTMLDivElement | null>;
   minimapHoldBands: MinimapHoldBand[];
   minimapParityHints: ParityHintView[];
-  minimapQuantizationSegments: MinimapQuantizationSegment[];
   minimapRows: MinimapRow[];
   minimapRef: MutableRefObject<HTMLDivElement | null>;
   notefieldFrameRef: MutableRefObject<HTMLDivElement | null>;
@@ -77,7 +76,6 @@ export function NotefieldPreview({
   measureGuideLayerRef,
   minimapHoldBands,
   minimapParityHints,
-  minimapQuantizationSegments,
   minimapRows,
   minimapRef,
   notefieldFrameRef,
@@ -107,19 +105,6 @@ export function NotefieldPreview({
     }
 
     return 'mixed';
-  };
-
-  const getQuantizationBandBackground = (segment: MinimapQuantizationSegment): string => {
-    let offset = 0;
-    const stops = segment.slices.flatMap((slice) => {
-      const start = offset;
-      offset += slice.ratio * 100;
-      const end = offset;
-
-      return [`${slice.color} ${start}%`, `${slice.color} ${end}%`];
-    });
-
-    return `linear-gradient(90deg, ${stops.join(', ')})`;
   };
 
   return (
@@ -242,18 +227,6 @@ export function NotefieldPreview({
             onPointerDown={handleMinimapPointerDown}
             onPointerMove={handleMinimapPointerMove}
           >
-            {minimapQuantizationSegments.map((segment) => (
-              <div
-                key={`quant-${segment.startBeat}-${segment.endBeat}`}
-                className={`minimap-quant-band minimap-quant-band-${segment.dominantKind}`}
-                style={{
-                  top: `${(segment.startBeat / totalChartBeats) * 100}%`,
-                  height: `${Math.max(((segment.endBeat - segment.startBeat) / totalChartBeats) * 100, 0.4)}%`,
-                  backgroundImage: getQuantizationBandBackground(segment),
-                }}
-                title={segment.slices.map((slice) => `${slice.kind} ${Math.round(slice.ratio * 100)}%`).join(' / ')}
-              />
-            ))}
             {minimapHoldBands.map((segment) => (
               <div
                 key={`${segment.kind}-${segment.startBeat}-${segment.endBeat}`}
@@ -287,8 +260,11 @@ export function NotefieldPreview({
                   top: `${(row.beat / totalChartBeats) * 100}%`,
                   height: `${Math.min(1 + row.noteCount, 4)}px`,
                   opacity: 0.2 + row.density * 0.8,
+                  background: row.quantizationColor,
+                  boxShadow: `0 0 10px ${row.quantizationColor}33`,
                   transform: `scaleX(${Math.max(row.density, 0.08)})`,
                 }}
+                title={`${row.quantizationKind} @ beat ${row.beat.toFixed(3)}`}
               />
             ))}
             <div className="minimap-playhead" style={{ top: `${(displayBeat / totalChartBeats) * 100}%` }} />

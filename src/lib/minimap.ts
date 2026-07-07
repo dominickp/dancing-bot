@@ -4,6 +4,8 @@ export interface MinimapRow {
   beat: number;
   noteCount: number;
   density: number;
+  quantizationKind: MinimapQuantizationKind;
+  quantizationColor: string;
 }
 
 export interface MinimapHoldBand {
@@ -173,11 +175,14 @@ export const buildMinimapRows = (events: TimedNoteEvent[]): MinimapRow[] => {
 
   return sortedRows.map((row, index) => {
     const localDensity = localWeightedCounts[index]! / maxLocalWeightedCount;
+    const quantizationKind = getMinimapQuantizationKind(row.beat);
 
     return {
       beat: row.beat,
       noteCount: row.noteCount,
       density: localDensity,
+      quantizationKind,
+      quantizationColor: quantizationColors[quantizationKind],
     };
   });
 };

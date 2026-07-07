@@ -28,10 +28,17 @@ describe("buildMinimapRows", () => {
     ]);
 
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toEqual({ beat: 1, noteCount: 2, density: 1 });
+    expect(rows[0]).toEqual({
+      beat: 1,
+      noteCount: 2,
+      density: 1,
+      quantizationKind: "quarter",
+      quantizationColor: "#ff5d73",
+    });
     expect(rows[1]?.beat).toBe(2);
     expect(rows[1]?.noteCount).toBe(1);
     expect(rows[1]?.density).toBeLessThan(1);
+    expect(rows[1]?.quantizationKind).toBe("quarter");
   });
 
   it("widens rows inside dense streams more than isolated rows", () => {

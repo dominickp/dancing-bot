@@ -1655,17 +1655,6 @@ body {
   pointer-events: none;
 }
 
-.minimap-quant-band {
-  position: absolute;
-  inset-inline: 10%;
-  z-index: 0;
-  min-height: 2px;
-  border-radius: 1px;
-  opacity: 0.22;
-  pointer-events: none;
-  mix-blend-mode: screen;
-}
-
 .minimap-hold {
   left: 40%;
   z-index: 1;
@@ -1767,8 +1756,7 @@ body {
   margin-top: -1px;
   border-radius: 1px;
   transform-origin: center;
-  background: linear-gradient(90deg, #bca06b, #8b98a8);
-  box-shadow: 0 0 10px rgba(164, 181, 198, 0.12);
+  background: #8b98a8;
 }
 
 .minimap-playhead {

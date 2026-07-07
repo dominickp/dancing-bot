@@ -23,7 +23,7 @@ import type { BotStep } from './components/DancingBotWindow';
 import { NotefieldPreview } from './components/NotefieldPreview';
 import { useChartPlayback } from './hooks/useChartPlayback';
 import type { PlaybackClock } from './hooks/useChartPlayback';
-import { buildMinimapHoldBands, buildMinimapQuantizationSegments, buildMinimapRows } from './lib/minimap';
+import { buildMinimapHoldBands, buildMinimapRows } from './lib/minimap';
 import type { ParityDiagnosticKind, StepParityConfig } from './lib/parity';
 import { bundledSongSources, loadLocalSongSource, releaseLoadedSongSource } from './lib/songSource';
 import type { LoadedSongSource } from './lib/songSource';
@@ -664,10 +664,6 @@ function App() {
 
   const minimapRows = useMemo(() => buildMinimapRows(selectedTimedChart.events), [selectedTimedChart.events]);
   const minimapHoldBands = useMemo(() => buildMinimapHoldBands(holdSegments), [holdSegments]);
-  const minimapQuantizationSegments = useMemo(
-    () => buildMinimapQuantizationSegments(selectedTimedChart.events, totalChartBeats, 2),
-    [selectedTimedChart.events, totalChartBeats],
-  );
 
   const visibleEvents = useMemo(
     () =>
@@ -1403,7 +1399,6 @@ function App() {
         measureGuideLayerRef={measureGuideLayerRef}
         minimapHoldBands={minimapHoldBands}
         minimapParityHints={parityHintDiagnostics}
-        minimapQuantizationSegments={minimapQuantizationSegments}
         minimapRows={minimapRows}
         minimapRef={minimapRef}
         notefieldFrameRef={notefieldFrameRef}
