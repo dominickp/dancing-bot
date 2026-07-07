@@ -163,6 +163,13 @@ body {
   gap: 8px;
 }
 
+.toolbar-help {
+  margin: -4px 2px 0;
+  color: rgba(248, 244, 233, 0.72);
+  font-size: 0.84rem;
+  text-align: center;
+}
+
 .toolbar-banner {
   flex: 0 0 clamp(180px, 22vw, 280px);
   align-self: stretch;

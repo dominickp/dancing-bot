@@ -1263,6 +1263,10 @@ function App() {
         </div>
       </header>
 
+      <p className="toolbar-help">
+        <strong>Controls:</strong> Toggle playback with <strong>SPACE</strong>. Navigate the notefield with <strong>SCROLL</strong> or the minimap. Adjust arrow spacing with <strong>CTRL + SCROLL</strong>. Drag the notefield left or right to recenter it.
+      </p>
+
       <section className="thin-toolbar" aria-label="Playback controls">
         <div className="thin-toolbar-group" aria-label="Tempo metrics">
           <span className="toolbar-metric-chip">BPM {currentBpm.toFixed(bpmPrecision)}</span>
