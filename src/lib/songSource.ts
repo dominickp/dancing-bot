@@ -8,6 +8,8 @@ import ferrariBannerUrl from "../../example-simfiles/Ferrari/ferrari.png";
 import ferrariSimfileText from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
 import groovyAudioUrl from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.ogg";
 import groovySimfileText from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.sm?raw";
+import groovyBannerUrl from "../../example-simfiles/Groovy Rollercoaster Acid Trip/srpg3z65bn.png";
+
 import { buildTimedChart, parseSimfile } from "./simfile";
 import type { SimfileDocument, TimedChart } from "./simfile";
 
@@ -168,6 +170,7 @@ export const bundledSongSources: LoadedSongSource[] = [
     simfileText: groovySimfileText,
     resolver: createBundledResolver({
       "Groovy Rollercoaster Acid Trip.ogg": groovyAudioUrl,
+      "srpg3z65bn.png": groovyBannerUrl,
     }),
   }),
 ];
