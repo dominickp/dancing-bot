@@ -251,12 +251,7 @@ describe("buildParityAssignmentMap", () => {
   });
 
   it("keeps an established LD bracket anchored when expanding into LDR and LDUR", () => {
-    const source = createSimfile([
-      "1000",
-      "1100",
-      "1101",
-      "1111",
-    ]);
+    const source = createSimfile(["1000", "1100", "1101", "1111"]);
     const simfile = parseSimfile(source);
     const chart = simfile.charts[0];
 
