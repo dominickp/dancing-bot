@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import ferrariSource from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
-import { buildParityAssignmentMap, getFootSideFromFootPart } from "./parity";
+import {
+  buildParityAssignmentMap,
+  getFootSideFromFootPart,
+  getTimedEventKey,
+} from "./parity";
 import { buildTimedChart, parseSimfile } from "./simfile";
 
 const createSimfile = (measureRows: string[]): string =>
@@ -197,7 +201,7 @@ describe("buildParityAssignmentMap", () => {
     );
   });
 
-  it("keeps Ferrari beat 10 LD bracket as toe-left heel-down", () => {
+  it("keeps Ferrari's DR bracket as heel-down toe-right", () => {
     const simfile = parseSimfile(ferrariSource);
     const chart = simfile.charts[0];
 
@@ -216,11 +220,33 @@ describe("buildParityAssignmentMap", () => {
       },
     );
 
-    expect(result.assignments.get(getAssignmentKey("left", 10, 4, 2))).toBe(
-      "left-toe",
+    const downBracketEvent = timedChart.events.find(
+      (event, index, events) =>
+        event.kind === "tap" &&
+        event.panel === "down" &&
+        events.some(
+          (candidate, candidateIndex) =>
+            candidateIndex !== index &&
+            candidate.kind === "tap" &&
+            candidate.beat === event.beat &&
+            candidate.panel === "right",
+        ),
     );
-    expect(result.assignments.get(getAssignmentKey("down", 10, 4, 2))).toBe(
-      "left-heel",
+    const rightBracketEvent = timedChart.events.find(
+      (event) =>
+        downBracketEvent !== undefined &&
+        event.kind === "tap" &&
+        event.beat === downBracketEvent.beat &&
+        event.panel === "right",
+    );
+
+    expect(downBracketEvent).toBeTruthy();
+    expect(rightBracketEvent).toBeTruthy();
+    expect(result.assignments.get(getTimedEventKey(downBracketEvent!))).toBe(
+      "right-heel",
+    );
+    expect(result.assignments.get(getTimedEventKey(rightBracketEvent!))).toBe(
+      "right-toe",
     );
   });
 

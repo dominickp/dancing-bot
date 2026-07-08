@@ -60,21 +60,27 @@ const getAngleDelta = (fromAngle: number, toAngle: number): number => {
 };
 
 describe("DancingBotWindow animation sampling", () => {
-  it("keeps Ferrari beat 10 LD bracket sourced as heel-down toe-left", () => {
+  it("keeps Ferrari's DR bracket sourced as heel-down toe-right", () => {
     const { simfile, botTimeline } = buildFerrariSnapshot();
-    const beatTenStep = botTimeline.left.find((step) => step.hitBeat === 10);
+    const ferrariDrBracketStep = botTimeline.right.find(
+      (step) => step.heelPanel === "down" && step.toePanel === "right",
+    );
 
-    expect(beatTenStep).toBeTruthy();
-    expect(beatTenStep).toMatchObject({
+    expect(ferrariDrBracketStep).toBeTruthy();
+    expect(ferrariDrBracketStep).toMatchObject({
       heelPanel: "down",
-      toePanel: "left",
-      toPanel: "down",
+      toePanel: "right",
+      toPanel: "right",
     });
 
-    const snapshot = sampleBotStateAtBeat(botTimeline, simfile, 10.05);
+    const snapshot = sampleBotStateAtBeat(
+      botTimeline,
+      simfile,
+      ferrariDrBracketStep!.hitBeat + 0.05,
+    );
 
-    expect(snapshot.feet.left.panel).toBe("down");
-    expect(snapshot.feet.left.angle).toBeLessThan(0);
+    expect(snapshot.feet.right.panel).toBe("right");
+    expect(snapshot.feet.right.angle).toBeGreaterThan(0);
   });
 
   it("keeps the first crossover entry on left-up-right instead of spinning into right-left-right", () => {
