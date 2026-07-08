@@ -9,9 +9,12 @@ import type { SimfileDocument } from "../lib/simfile";
 const simfile: SimfileDocument = {
   metadata: {
     title: "Test",
+    subtitle: "",
     artist: "",
     credit: "",
-    music: null,
+    banner: "",
+    background: "",
+    music: "",
     offset: 0,
   },
   bpms: [{ beat: 0, bpm: 120 }],
