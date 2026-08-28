@@ -57,3 +57,5 @@ npm run perf:compare
 
 The baseline lives at `coverage/benchmarks.json`; record it on the same machine and with the same Node version as the comparison.
 
+## Notes
+- partity algorithm referenced from https://github.com/itgmania/itgmania/blob/release/src/StepParityGenerator.h
