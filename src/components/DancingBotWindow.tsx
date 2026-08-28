@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react';
 import { getPanelRotation } from '../lib/noteskin';
 import type { ResolvedDanceNoteskin, ResolvedSpriteAsset } from '../lib/noteskin';
 import {
@@ -1548,6 +1552,12 @@ interface DancingBotWindowProps {
     event: ReactPointerEvent<HTMLElement>,
     mode: BotWindowInteraction['mode'],
   ) => void;
+  /** Arrow-key support so the window can be moved without a mouse/trackpad drag. */
+  onKeyboardMove: (deltaX: number, deltaY: number) => void;
+  /** Arrow-key support so the window can be resized without a mouse/trackpad drag. */
+  onKeyboardResize: (deltaWidth: number, deltaHeight: number) => void;
+  /** Restores the default docked position/size. */
+  onResetPosition: () => void;
 }
 
 export function DancingBotWindow({
@@ -1579,6 +1589,9 @@ export function DancingBotWindow({
   onAppearanceSectionOpenChange,
   onBehaviorSectionOpenChange,
   beginBotWindowInteraction,
+  onKeyboardMove,
+  onKeyboardResize,
+  onResetPosition,
 }: DancingBotWindowProps) {
   const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
     beat: currentBeat,
@@ -1661,6 +1674,40 @@ export function DancingBotWindow({
     [botFootAngles, botFootTargets, botPanelTimeline, botTimeline, playbackSnapshot.timeSeconds],
   );
 
+  const getArrowKeyDelta = (event: ReactKeyboardEvent): [number, number] | null => {
+    const step = event.shiftKey ? 2 : 12;
+    const deltaByKey: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    };
+
+    return deltaByKey[event.key] ?? null;
+  };
+
+  const handleHeaderKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const delta = getArrowKeyDelta(event);
+
+    if (!delta) {
+      return;
+    }
+
+    event.preventDefault();
+    onKeyboardMove(delta[0], delta[1]);
+  };
+
+  const handleResizeKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const delta = getArrowKeyDelta(event);
+
+    if (!delta) {
+      return;
+    }
+
+    event.preventDefault();
+    onKeyboardResize(delta[0], delta[1]);
+  };
+
   return (
     <aside
       className="bot-window"
@@ -1672,11 +1719,29 @@ export function DancingBotWindow({
       }}
       aria-label="Dancing bot preview"
     >
-      <header className="bot-window-header" onPointerDown={(event) => beginBotWindowInteraction(event, 'drag')}>
+      <header
+        className="bot-window-header"
+        tabIndex={0}
+        data-keyboard-local="true"
+        aria-label="Dancing bot window. Drag or press the arrow keys to move; hold SHIFT for fine steps."
+        onPointerDown={(event) => beginBotWindowInteraction(event, 'drag')}
+        onKeyDown={handleHeaderKeyDown}
+      >
         <div>
           <h3>Dancing Bot</h3>
         </div>
-        <span className="bot-window-beat">Beat {playbackSnapshot.beat.toFixed(2)}</span>
+        <div className="bot-window-header-actions">
+          <button
+            type="button"
+            className="bot-window-reset"
+            onClick={onResetPosition}
+            onPointerDown={(event) => event.stopPropagation()}
+            aria-label="Reset dancing bot window position and size"
+          >
+            Reset
+          </button>
+          <span className="bot-window-beat">Beat {playbackSnapshot.beat.toFixed(2)}</span>
+        </div>
       </header>
 
       <div className="bot-window-body">
@@ -1872,8 +1937,10 @@ export function DancingBotWindow({
       <button
         type="button"
         className="bot-window-resize"
-        aria-label="Resize dancing bot window"
+        aria-label="Resize dancing bot window. Press the arrow keys to resize; hold SHIFT for fine steps."
+        data-keyboard-local="true"
         onPointerDown={(event) => beginBotWindowInteraction(event, 'resize')}
+        onKeyDown={handleResizeKeyDown}
       />
     </aside>
   );

@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, ChangeEvent, FocusEvent } from 'react';
+import type {
+  CSSProperties,
+  ChangeEvent,
+  FocusEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+} from 'react';
 import type { SimfileDocument, TimedChart, TimedNoteEvent } from './lib/simfile';
 import { getBpmAtBeat } from './lib/simfile';
 import {
@@ -21,7 +28,7 @@ import {
 import type { BotFootStyleId, BotFormStyleId, BotPadStyleId } from './components/DancingBotWindow';
 import type { BotStep } from './components/DancingBotWindow';
 import { NotefieldPreview } from './components/NotefieldPreview';
-import { useChartPlayback } from './hooks/useChartPlayback';
+import { isEditableOrLocalKeyboardTarget, useChartPlayback } from './hooks/useChartPlayback';
 import type { PlaybackClock } from './hooks/useChartPlayback';
 import { buildMinimapHoldBands, buildMinimapRows } from './lib/minimap';
 import type { ParityDiagnosticKind, StepParityConfig } from './lib/parity';
@@ -173,6 +180,68 @@ const defaultUiSettings: PersistedUiSettings = {
 const botFormStyleIds: readonly BotFormStyleId[] = ['straight-wide', 'straight-minimal', 'heels-out', 'toes-out', 'slanted-right'];
 const botFootStyleIds: readonly BotFootStyleId[] = ['default', 'silhouette-white', 'shoe'];
 const botPadStyleIds: readonly BotPadStyleId[] = ['itg', 'ddr'];
+
+interface ControlsDialogRow {
+  action: string;
+  keyboard: ReactNode;
+  mouse: string;
+}
+
+interface ControlsDialogSection {
+  heading: string;
+  rows: ControlsDialogRow[];
+}
+
+const controlsDialogSections: ControlsDialogSection[] = [
+  {
+    heading: 'Playback',
+    rows: [
+      { action: 'Play / pause', keyboard: <kbd>SPACE</kbd>, mouse: '—' },
+    ],
+  },
+  {
+    heading: 'Chart navigation',
+    rows: [
+      { action: 'Step through chart', keyboard: <><kbd>↑</kbd> <kbd>↓</kbd></>, mouse: 'Scroll wheel' },
+      { action: 'Bigger jumps', keyboard: <><kbd>PgUp</kbd> <kbd>PgDn</kbd></>, mouse: '—' },
+      { action: 'Jump to start / end', keyboard: <><kbd>Home</kbd> <kbd>End</kbd></>, mouse: '—' },
+      { action: 'Seek to any beat', keyboard: '—', mouse: 'Click or drag the minimap (focus it for arrow keys)' },
+    ],
+  },
+  {
+    heading: 'Zoom (arrow spacing)',
+    rows: [
+      { action: 'Zoom in', keyboard: <><kbd>+</kbd> or <kbd>=</kbd></>, mouse: 'CTRL + scroll up' },
+      { action: 'Zoom out', keyboard: <><kbd>−</kbd> or <kbd>_</kbd></>, mouse: 'CTRL + scroll down' },
+    ],
+  },
+  {
+    heading: 'Notefield position',
+    rows: [
+      {
+        action: 'Shift left / right',
+        keyboard: <><kbd>←</kbd> <kbd>→</kbd> <span>(SHIFT for fine steps)</span></>,
+        mouse: 'Drag the notefield',
+      },
+    ],
+  },
+  {
+    heading: 'Bot window',
+    rows: [
+      {
+        action: 'Move window',
+        keyboard: <><span>Focus header, then</span> <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd> <span>(SHIFT fine)</span></>,
+        mouse: 'Drag the header',
+      },
+      {
+        action: 'Resize window',
+        keyboard: <><span>Focus corner grip, then</span> <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd> <span>(SHIFT fine)</span></>,
+        mouse: 'Drag the corner grip',
+      },
+      { action: 'Reset position / size', keyboard: '—', mouse: 'Reset button in the window header' },
+    ],
+  },
+];
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
@@ -515,9 +584,12 @@ function App() {
   const [isAppearanceSectionOpen, setIsAppearanceSectionOpen] = useState(persistedUiSettings.isAppearanceSectionOpen);
   const [isBehaviorSectionOpen, setIsBehaviorSectionOpen] = useState(persistedUiSettings.isBehaviorSectionOpen);
   const [isToolbarHelpDismissed, setIsToolbarHelpDismissed] = useState(persistedUiSettings.isToolbarHelpDismissed);
+  const [isControlsDialogOpen, setIsControlsDialogOpen] = useState(false);
   const songImportRef = useRef<HTMLInputElement | null>(null);
   const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
+  const controlsDialogRef = useRef<HTMLDivElement | null>(null);
+  const controlsDialogReturnFocusRef = useRef<HTMLElement | null>(null);
   const playfieldInteractionRef = useRef<PlayfieldInteraction | null>(null);
   const botWindowInteractionRef = useRef<BotWindowInteraction | null>(null);
   const receptorRefs = useRef<Record<PanelName, HTMLDivElement | null>>({
@@ -912,6 +984,51 @@ function App() {
   }, [maxPlayfieldOffsetX]);
 
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Leave browser/OS shortcuts untouched.
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      if (isEditableOrLocalKeyboardTarget(event.target)) {
+        return;
+      }
+
+      if (event.key === '?') {
+        event.preventDefault();
+        setIsControlsDialogOpen(true);
+        return;
+      }
+
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+        return;
+      }
+
+      event.preventDefault();
+
+      const direction = event.key === 'ArrowRight' ? 1 : -1;
+      const step = event.shiftKey ? 6 : 24;
+
+      setPlayfieldOffsetX((previousOffsetX) =>
+        clamp(
+          previousOffsetX + direction * step,
+          -maxPlayfieldOffsetX,
+          maxPlayfieldOffsetX,
+        ),
+      );
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [maxPlayfieldOffsetX]);
+
+  useEffect(() => {
+    if (isControlsDialogOpen) {
+      controlsDialogRef.current?.focus();
+    }
+  }, [isControlsDialogOpen]);
+
+  useEffect(() => {
     let isDisposed = false;
 
     if (!selectedNoteskinOption) {
@@ -1032,6 +1149,24 @@ function App() {
     setIsBehaviorSectionOpen(isOpen);
   };
 
+  const openControlsDialog = () => {
+    controlsDialogReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setIsControlsDialogOpen(true);
+  };
+
+  const closeControlsDialog = () => {
+    setIsControlsDialogOpen(false);
+    controlsDialogReturnFocusRef.current?.focus();
+    controlsDialogReturnFocusRef.current = null;
+  };
+
+  const handleDialogBackdropPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      closeControlsDialog();
+    }
+  };
+
   const handleImportSongFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     event.target.value = '';
@@ -1090,6 +1225,74 @@ function App() {
       startOffsetX: playfieldOffsetX,
     };
     setIsPlayfieldDragging(true);
+  };
+
+  const handleMinimapKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const stepBeatsByKey: Record<string, number> = {
+      ArrowUp: -1,
+      ArrowDown: 1,
+      PageUp: -4,
+      PageDown: 4,
+    };
+
+    if (event.key in stepBeatsByKey) {
+      event.preventDefault();
+      seekToBeat(displayBeat + stepBeatsByKey[event.key]);
+      return;
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault();
+      seekToBeat(0);
+      return;
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault();
+      seekToBeat(selectedTimedChart.lastBeat);
+    }
+  };
+
+  const adjustBotWindowRectByKeyboard = (
+    adjustRect: (rect: BotWindowRect) => BotWindowRect,
+  ) => {
+    const frame = notefieldFrameRef.current;
+
+    if (!frame) {
+      return;
+    }
+
+    const bounds = frame.getBoundingClientRect();
+
+    setBotWindowRect((previousRect) => clampBotWindowRect(adjustRect(previousRect), bounds.width, bounds.height));
+  };
+
+  const moveBotWindowByKeyboard = (deltaX: number, deltaY: number) => {
+    adjustBotWindowRectByKeyboard((rect) => ({
+      ...rect,
+      x: rect.x + deltaX,
+      y: rect.y + deltaY,
+    }));
+  };
+
+  const resizeBotWindowByKeyboard = (deltaWidth: number, deltaHeight: number) => {
+    adjustBotWindowRectByKeyboard((rect) => ({
+      ...rect,
+      width: rect.width + deltaWidth,
+      height: rect.height + deltaHeight,
+    }));
+  };
+
+  const resetBotWindowPosition = () => {
+    const frame = notefieldFrameRef.current;
+
+    if (!frame) {
+      return;
+    }
+
+    const bounds = frame.getBoundingClientRect();
+
+    setBotWindowRect(getDockedBotWindowRect(bounds.width, bounds.height));
   };
 
   const beginBotWindowInteraction = (
@@ -1291,8 +1494,16 @@ function App() {
 
       {isToolbarHelpDismissed ? null : (
         <div className="toolbar-help" role="note" aria-label="Playback controls help">
-          <p className="toolbar-help-copy">
-            <strong>Controls:</strong> Toggle playback with <strong>SPACE</strong>. Navigate the notefield with <strong>SCROLL</strong> or the minimap. Adjust arrow spacing with <strong>CTRL + SCROLL</strong>. Drag the notefield left or right to recenter it.
+          <p className="toolbar-help-line">
+            <kbd>SPACE</kbd> play · <kbd>↑</kbd>/<kbd>↓</kbd> navigate · <kbd>−</kbd>/<kbd>+</kbd> zoom ·{' '}
+            <button
+              type="button"
+              className="toolbar-help-link"
+              onClick={openControlsDialog}
+              aria-haspopup="dialog"
+            >
+              ? all controls
+            </button>
           </p>
           <button
             type="button"
@@ -1364,6 +1575,15 @@ function App() {
 
         <button
           type="button"
+          className="toolbar-button thin-toolbar-button"
+          aria-haspopup="dialog"
+          onClick={openControlsDialog}
+        >
+          Controls
+        </button>
+
+        <button
+          type="button"
           className={`toolbar-button thin-toolbar-button${isParityHintOverlayEnabled ? ' is-enabled' : ''}`}
           aria-pressed={isParityHintOverlayEnabled}
           onClick={handleParityHintOverlayToggle}
@@ -1405,6 +1625,9 @@ function App() {
             onAppearanceSectionOpenChange={handleAppearanceSectionOpenChange}
             onBehaviorSectionOpenChange={handleBehaviorSectionOpenChange}
             beginBotWindowInteraction={beginBotWindowInteraction}
+            onKeyboardMove={moveBotWindowByKeyboard}
+            onKeyboardResize={resizeBotWindowByKeyboard}
+            onResetPosition={resetBotWindowPosition}
           />
         }
         chartVerticalOffset={chartVerticalOffset}
@@ -1420,6 +1643,7 @@ function App() {
         getReceptorStyle={getReceptorStyle}
         handleMinimapPointerDown={handleMinimapPointerDown}
         handleMinimapPointerMove={handleMinimapPointerMove}
+        handleMinimapKeyDown={handleMinimapKeyDown}
         handlePlayfieldPointerDown={handlePlayfieldPointerDown}
         measureGuideLayerRef={measureGuideLayerRef}
         minimapHoldBands={minimapHoldBands}
@@ -1442,6 +1666,67 @@ function App() {
         visibleEvents={visibleEvents}
         visibleHolds={visibleHolds}
       />
+
+      {isControlsDialogOpen ? (
+        <div className="controls-dialog-overlay" onPointerDown={handleDialogBackdropPointerDown}>
+          <div
+            className="controls-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="controls-dialog-title"
+            tabIndex={-1}
+            data-keyboard-local="true"
+            ref={controlsDialogRef}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeControlsDialog();
+              }
+            }}
+          >
+            <header className="controls-dialog-header">
+              <h2 id="controls-dialog-title">Controls</h2>
+              <button
+                type="button"
+                className="toolbar-help-dismiss"
+                aria-label="Close controls dialog"
+                onClick={closeControlsDialog}
+              >
+                X
+              </button>
+            </header>
+            <div className="controls-dialog-body">
+              {controlsDialogSections.map((section) => (
+                <section key={section.heading} className="controls-dialog-section">
+                  <h3>{section.heading}</h3>
+                  <table className="controls-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Action</th>
+                        <th scope="col">Keyboard</th>
+                        <th scope="col">Mouse / Trackpad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {section.rows.map((row) => (
+                        <tr key={row.action}>
+                          <th scope="row">{row.action}</th>
+                          <td>{row.keyboard}</td>
+                          <td>{row.mouse}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </section>
+              ))}
+              <p className="controls-dialog-footnote">
+                Press <kbd>?</kbd> to open this dialog anytime · <kbd>ESC</kbd> closes it
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

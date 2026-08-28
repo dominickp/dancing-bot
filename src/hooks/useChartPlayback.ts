@@ -49,6 +49,8 @@ interface UseChartPlaybackResult {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
+const keyboardZoomFactor = Math.exp(0.25);
+
 const clampDisplayBeat = (beat: number, lastBeat: number): number =>
   clamp(beat, 0, lastBeat);
 
@@ -83,6 +85,31 @@ const getWheelStepCount = (event: WheelEvent): number => {
   }
 
   return Math.max(1, Math.round(deltaMagnitude / 120));
+};
+
+/**
+ * Shared guard for global keyboard/wheel shortcuts.
+ * Input widgets handle their own keys, and elements marked with
+ * `data-keyboard-local` implement their own arrow-key behavior
+ * (e.g. the minimap slider and the dancing bot window).
+ */
+export const isEditableOrLocalKeyboardTarget = (target: EventTarget | null): boolean => {
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  ) {
+    return true;
+  }
+
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target.isContentEditable ||
+    target.closest("[data-keyboard-local]") !== null
+  );
 };
 
 export function useChartPlayback({
@@ -217,6 +244,28 @@ export function useChartPlayback({
       syncAudioToBeat(nextBeat);
     },
     [lastBeat, refreshRenderWindow, syncAudioToBeat],
+  );
+
+  const scrollByBeats = useCallback(
+    (deltaBeats: number) => {
+      if (deltaBeats === 0) {
+        return;
+      }
+
+      const nextBeat = currentBeatRef.current + deltaBeats;
+
+      if (playbackRequestedRef.current) {
+        seekToBeat(nextBeat);
+        return;
+      }
+
+      const clampedBeat = clampViewportBeat(nextBeat, lastBeat);
+      refreshRenderWindow(clampedBeat);
+      syncAudioToBeat(clampedBeat);
+      lastAnimatedBeatRef.current = clampedBeat;
+      triggeredHitKeysRef.current.clear();
+    },
+    [lastBeat, refreshRenderWindow, seekToBeat, syncAudioToBeat],
   );
 
   const updateHitFeedback = (previousBeat: number, nextBeat: number) => {
@@ -560,14 +609,7 @@ export function useChartPlayback({
 
   useEffect(() => {
     const handleWheel = (event: WheelEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isEditableTarget =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        target?.isContentEditable;
-
-      if (isEditableTarget) {
+      if (isEditableOrLocalKeyboardTarget(event.target)) {
         return;
       }
 
@@ -590,21 +632,9 @@ export function useChartPlayback({
         return;
       }
 
-      const scrollStepBeats = getScrollStepBeats(visibleBeats);
-      const stepCount = getWheelStepCount(event);
-      const nextBeat =
-        currentBeatRef.current + scrollDirection * scrollStepBeats * stepCount;
-
-      if (playbackRequestedRef.current) {
-        seekToBeat(nextBeat);
-        return;
-      }
-
-      const clampedBeat = clampViewportBeat(nextBeat, lastBeat);
-      refreshRenderWindow(clampedBeat);
-      syncAudioToBeat(clampedBeat);
-      lastAnimatedBeatRef.current = clampedBeat;
-      triggeredHitKeysRef.current.clear();
+      scrollByBeats(
+        scrollDirection * getScrollStepBeats(visibleBeats) * getWheelStepCount(event),
+      );
     };
 
     window.addEventListener("wheel", handleWheel, { passive: false });
@@ -613,13 +643,77 @@ export function useChartPlayback({
       window.removeEventListener("wheel", handleWheel);
     };
   }, [
+    maxVisibleBeats,
+    minVisibleBeats,
+    scrollByBeats,
+    setVisibleBeats,
+    visibleBeats,
+  ]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Leave browser/OS shortcuts (e.g. CTRL/⌘ +/-, ALT+arrow) untouched.
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      if (isEditableOrLocalKeyboardTarget(event.target)) {
+        return;
+      }
+
+      switch (event.key) {
+        case "ArrowUp":
+          event.preventDefault();
+          scrollByBeats(-getScrollStepBeats(visibleBeats));
+          break;
+        case "ArrowDown":
+          event.preventDefault();
+          scrollByBeats(getScrollStepBeats(visibleBeats));
+          break;
+        case "PageUp":
+          event.preventDefault();
+          scrollByBeats(-visibleBeats / 2);
+          break;
+        case "PageDown":
+          event.preventDefault();
+          scrollByBeats(visibleBeats / 2);
+          break;
+        case "Home":
+          event.preventDefault();
+          seekToBeat(0);
+          break;
+        case "End":
+          event.preventDefault();
+          seekToBeat(lastBeat);
+          break;
+        case "+":
+        case "=":
+          event.preventDefault();
+          setVisibleBeats((value) =>
+            clamp(value / keyboardZoomFactor, minVisibleBeats, maxVisibleBeats),
+          );
+          break;
+        case "-":
+        case "_":
+          event.preventDefault();
+          setVisibleBeats((value) =>
+            clamp(value * keyboardZoomFactor, minVisibleBeats, maxVisibleBeats),
+          );
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
     lastBeat,
     maxVisibleBeats,
     minVisibleBeats,
-    refreshRenderWindow,
+    scrollByBeats,
     seekToBeat,
     setVisibleBeats,
-    syncAudioToBeat,
     visibleBeats,
   ]);
 

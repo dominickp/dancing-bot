@@ -113,4 +113,62 @@ describe("useChartPlayback zoom behavior", () => {
     expect(snapshot!.displayBeat).toBe(12);
     expect(snapshot!.renderBeatAnchor).toBe(12);
   });
+
+  it("scrolls the chart with the arrow keys", () => {
+    let snapshot: HookSnapshot | null = null;
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root!.render(<HookHarness onSnapshot={(nextSnapshot) => {
+        snapshot = nextSnapshot;
+      }} />);
+    });
+
+    act(() => {
+      snapshot!.seekToBeat(12);
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true }),
+      );
+    });
+
+    // visibleBeats = 10 -> keyboard scroll step is 1 beat.
+    expect(snapshot!.displayBeat).toBe(13);
+    expect(snapshot!.renderBeatAnchor).toBe(13);
+  });
+
+  it("ignores arrow keys while focus is inside an input", () => {
+    let snapshot: HookSnapshot | null = null;
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+
+    act(() => {
+      root!.render(<HookHarness onSnapshot={(nextSnapshot) => {
+        snapshot = nextSnapshot;
+      }} />);
+    });
+
+    act(() => {
+      snapshot!.seekToBeat(12);
+    });
+
+    act(() => {
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(snapshot!.displayBeat).toBe(12);
+  });
 });

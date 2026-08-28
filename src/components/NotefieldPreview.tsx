@@ -1,5 +1,11 @@
 import { useMemo } from 'react';
-import type { CSSProperties, MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  MutableRefObject,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+} from 'react';
 import type { MinimapHoldBand, MinimapRow } from '../lib/minimap';
 import type { ParityDiagnosticKind } from '../lib/parity';
 import type { Panel, TimedNoteEvent } from '../lib/simfile';
@@ -38,6 +44,7 @@ interface NotefieldPreviewProps {
   getReceptorStyle: (panel: Panel) => CSSProperties;
   handleMinimapPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleMinimapPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  handleMinimapKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
   measureGuideLayerRef: MutableRefObject<HTMLDivElement | null>;
   minimapHoldBands: MinimapHoldBand[];
   minimapParityHints: ParityHintView[];
@@ -76,6 +83,7 @@ export function NotefieldPreview({
   getReceptorStyle,
   handleMinimapPointerDown,
   handleMinimapPointerMove,
+  handleMinimapKeyDown,
   measureGuideLayerRef,
   minimapHoldBands,
   minimapParityHints,
@@ -285,8 +293,18 @@ export function NotefieldPreview({
           <div
             className="minimap-track"
             ref={minimapRef}
+            role="slider"
+            tabIndex={0}
+            aria-label="Chart seek position"
+            aria-orientation="vertical"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(totalChartBeats * 100) / 100}
+            aria-valuenow={Number(displayBeat.toFixed(2))}
+            aria-valuetext={`Beat ${displayBeat.toFixed(2)}`}
+            data-keyboard-local="true"
             onPointerDown={handleMinimapPointerDown}
             onPointerMove={handleMinimapPointerMove}
+            onKeyDown={handleMinimapKeyDown}
           >
             {minimapHoldElements}
             {minimapParityHintElements}
