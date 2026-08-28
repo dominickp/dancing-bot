@@ -1525,6 +1525,7 @@ export const sampleBotStateAtBeat = (
 interface DancingBotWindowProps {
   botTimeline: Record<FootName, BotStep[]>;
   botWindowRect: BotWindowRect;
+  isDocked: boolean;
   currentBeat: number;
   isPlaying: boolean;
   simfile: SimfileDocument;
@@ -1567,6 +1568,7 @@ interface DancingBotWindowProps {
 export function DancingBotWindow({
   botTimeline,
   botWindowRect,
+  isDocked,
   currentBeat,
   isPlaying,
   simfile,
@@ -1831,7 +1833,7 @@ export function DancingBotWindow({
 
   return (
     <aside
-      className="bot-window"
+      className={`bot-window${isDocked ? ' is-docked' : ''}`}
       style={{
         left: botWindowRect.x,
         top: botWindowRect.y,
@@ -1842,25 +1844,27 @@ export function DancingBotWindow({
     >
       <header
         className="bot-window-header"
-        tabIndex={0}
-        data-keyboard-local="true"
-        aria-label="Dancing bot window. Drag or press the arrow keys to move; hold SHIFT for fine steps."
-        onPointerDown={(event) => beginBotWindowInteraction(event, 'drag')}
-        onKeyDown={handleHeaderKeyDown}
+        tabIndex={isDocked ? -1 : 0}
+        data-keyboard-local={isDocked ? undefined : 'true'}
+        aria-label={isDocked ? 'Dancing bot preview' : 'Dancing bot window. Drag or press the arrow keys to move; hold SHIFT for fine steps.'}
+        onPointerDown={isDocked ? undefined : (event) => beginBotWindowInteraction(event, 'drag')}
+        onKeyDown={isDocked ? undefined : handleHeaderKeyDown}
       >
         <div>
           <h3>Dancing Bot</h3>
         </div>
         <div className="bot-window-header-actions">
-          <button
-            type="button"
-            className="bot-window-reset"
-            onClick={onResetPosition}
-            onPointerDown={(event) => event.stopPropagation()}
-            aria-label="Reset dancing bot window position and size"
-          >
-            Reset
-          </button>
+          {isDocked ? null : (
+            <button
+              type="button"
+              className="bot-window-reset"
+              onClick={onResetPosition}
+              onPointerDown={(event) => event.stopPropagation()}
+              aria-label="Reset dancing bot window position and size"
+            >
+              Reset
+            </button>
+          )}
           <span className="bot-window-beat" ref={beatReadoutRef}>
             Beat {playbackSnapshot.beat.toFixed(2)}
           </span>
@@ -2078,14 +2082,16 @@ export function DancingBotWindow({
         </div>
       </div>
 
-      <button
-        type="button"
-        className="bot-window-resize"
-        aria-label="Resize dancing bot window. Press the arrow keys to resize; hold SHIFT for fine steps."
-        data-keyboard-local="true"
-        onPointerDown={(event) => beginBotWindowInteraction(event, 'resize')}
-        onKeyDown={handleResizeKeyDown}
-      />
+      {isDocked ? null : (
+        <button
+          type="button"
+          className="bot-window-resize"
+          aria-label="Resize dancing bot window. Press the arrow keys to resize; hold SHIFT for fine steps."
+          data-keyboard-local="true"
+          onPointerDown={(event) => beginBotWindowInteraction(event, 'resize')}
+          onKeyDown={handleResizeKeyDown}
+        />
+      )}
     </aside>
   );
 }
