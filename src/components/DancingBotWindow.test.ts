@@ -2,17 +2,22 @@ import { describe, expect, it } from "vitest";
 import ferrariSource from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
 import { buildTimedChart, parseSimfile, secondsToBeat } from "../lib/simfile";
 import { buildBotTimeline, sampleBotStateAtBeat } from "./DancingBotWindow";
+import { buildSteppingScenario } from "../test/steppingScenario";
 
-const createSimfile = (measureRows: string[]): string =>
-  `#TITLE:Animation Test;\n#OFFSET:0;\n#BPMS:0.000=120.000;\n#STOPS:;\n#NOTES:\n     dance-single:\n     test:\n     Challenge:\n     9:\n     0,0,0,0,0:\n${measureRows.join("\n")}\n;`;
+const panelSymbols = ["L", "D", "U", "R"];
 
 const buildAnimationSnapshot = (measureRows: string[]) => {
-  const simfile = parseSimfile(createSimfile(measureRows));
-  const chart = simfile.charts[0];
+  const steps = measureRows.flatMap((row, rowIndex) => {
+    const notes = row
+      .split("")
+      .flatMap((value, panelIndex) => value === "1" ? panelSymbols[panelIndex]! : [])
+      .join("");
 
-  expect(chart).toBeTruthy();
-
-  const timedChart = buildTimedChart(simfile, chart!);
+    return notes
+      ? [{ beat: (rowIndex * 4) / measureRows.length, notes }]
+      : [];
+  });
+  const { document: simfile, timedChart } = buildSteppingScenario({ steps });
   const botTimeline = buildBotTimeline(timedChart.events, new Map(), simfile, {
     allowBrackets: true,
     allowCrossovers: true,

@@ -46,5 +46,14 @@ npm run test:coverage
 npm run perf
 ```
 
-Use `src/test/steppingScenario.ts` for compact, table-driven parity and bot-motion scenarios. The performance suite measures production hot paths against bundled charts and labels each chart with its event count.
+Use `src/test/steppingScenario.ts` for compact, table-driven parity and bot-motion scenarios. It supports taps, holds, rolls, mines, BPM changes, and stops. The performance suite measures production hot paths against bundled charts and labels each chart with its event count.
+
+To compare an optimization, record a local baseline and then compare against it:
+
+```bash
+npm run perf:record
+npm run perf:compare
+```
+
+The baseline lives at `coverage/benchmarks.json`; record it on the same machine and with the same Node version as the comparison.
 

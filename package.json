@@ -9,6 +9,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "perf": "vitest bench",
+    "perf:record": "vitest bench --outputJson coverage/benchmarks.json",
+    "perf:compare": "vitest bench --compare coverage/benchmarks.json",
     "preview": "vite preview"
   },
   "dependencies": {
