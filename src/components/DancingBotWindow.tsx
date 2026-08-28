@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -1611,6 +1611,26 @@ export function DancingBotWindow({
     return undefined;
   }, [currentBeat, isPlaying, simfile]);
 
+  const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
+  const botFootAngles = useMemo(() => getBotFootAngles(selectedFormStyle), [selectedFormStyle]);
+  const botPanelTimeline = useMemo(() => buildBotPanelTimeline(botTimeline), [botTimeline]);
+
+  // Refs for imperative per-frame updates during playback. Driving the DOM
+  // directly avoids a full React re-render (and the resulting style recalc /
+  // repaint of the masked, drop-shadowed pad sprites) at 60fps on the main
+  // thread, which was the source of shudder on low-end systems.
+  const footElementRefs = useRef<Record<FootName, HTMLDivElement | null>>({
+    left: null,
+    right: null,
+  });
+  const panelElementRefs = useRef<Record<Panel, HTMLDivElement | null>>({
+    left: null,
+    down: null,
+    up: null,
+    right: null,
+  });
+  const beatReadoutRef = useRef<HTMLSpanElement | null>(null);
+
   useEffect(() => {
     if (!isPlaying) {
       return undefined;
@@ -1625,7 +1645,44 @@ export function DancingBotWindow({
         : 0;
       const beat = secondsToBeat(timeSeconds, simfile.bpms, simfile.stops, simfile.metadata.offset);
 
-      setPlaybackSnapshot({ beat, timeSeconds });
+      const state = sampleBotState(
+        botTimeline,
+        botPanelTimeline,
+        botFootTargets,
+        botFootAngles,
+        timeSeconds,
+      );
+
+      // Imperatively update feet.
+      for (const footName of footNames) {
+        const element = footElementRefs.current[footName];
+        const foot = state.feet[footName];
+
+        if (!element) {
+          continue;
+        }
+
+        element.style.left = `${foot.x}%`;
+        element.style.top = `${foot.y}%`;
+        element.style.transform = getBotFootTransform(foot);
+        element.classList.toggle('is-holding', foot.isHolding);
+        element.classList.toggle('is-pressing', foot.isPressing);
+        element.classList.toggle('is-lifted', foot.isLifted);
+      }
+
+      // Imperatively update panel active state.
+      for (const panel of panelOrder) {
+        const element = panelElementRefs.current[panel];
+
+        if (element) {
+          element.classList.toggle('is-active', state.activePanels[panel]);
+        }
+      }
+
+      if (beatReadoutRef.current) {
+        beatReadoutRef.current.textContent = `Beat ${beat.toFixed(2)}`;
+      }
+
       animationFrameId = requestAnimationFrame(tick);
     };
 
@@ -1636,7 +1693,15 @@ export function DancingBotWindow({
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [isPlaying, playbackClockRef, simfile]);
+  }, [
+    isPlaying,
+    playbackClockRef,
+    simfile,
+    botTimeline,
+    botPanelTimeline,
+    botFootTargets,
+    botFootAngles,
+  ]);
 
   useEffect(() => {
     const preloadTargets = botFootStyleOptions
@@ -1662,13 +1727,12 @@ export function DancingBotWindow({
     };
   }, []);
 
-  const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
-  const botFootAngles = useMemo(() => getBotFootAngles(selectedFormStyle), [selectedFormStyle]);
-  const botPanelTimeline = useMemo(() => buildBotPanelTimeline(botTimeline), [botTimeline]);
   const selectedFootStyleOption = useMemo(
     () => botFootStyleOptions.find((option) => option.id === selectedFootStyle) ?? botFootStyleOptions[0],
     [selectedFootStyle],
   );
+  // During playback the rAF loop drives the DOM imperatively; this memoized
+  // state only reflects the paused/resting pose (updated when not playing).
   const botState = useMemo(
     () => sampleBotState(botTimeline, botPanelTimeline, botFootTargets, botFootAngles, playbackSnapshot.timeSeconds),
     [botFootAngles, botFootTargets, botPanelTimeline, botTimeline, playbackSnapshot.timeSeconds],
@@ -1740,7 +1804,9 @@ export function DancingBotWindow({
           >
             Reset
           </button>
-          <span className="bot-window-beat">Beat {playbackSnapshot.beat.toFixed(2)}</span>
+          <span className="bot-window-beat" ref={beatReadoutRef}>
+            Beat {playbackSnapshot.beat.toFixed(2)}
+          </span>
         </div>
       </header>
 
@@ -1876,6 +1942,9 @@ export function DancingBotWindow({
             {panelOrder.map((panel) => (
               <div
                 key={panel}
+                ref={(element) => {
+                  panelElementRefs.current[panel] = element;
+                }}
                 className={`bot-pad-panel bot-pad-panel-${panel}${botState.activePanels[panel] ? ' is-active' : ''}${isPanelGlowEnabled ? ' is-glow-enabled' : ''}${isPanelLightsEnabled ? ' is-lights-enabled' : ''}`}
                 style={getBotPanelEffectStyle(panel, selectedPadStyle)}
               >
@@ -1910,6 +1979,9 @@ export function DancingBotWindow({
               return (
                 <div
                   key={footName}
+                  ref={(element) => {
+                    footElementRefs.current[footName] = element;
+                  }}
                   className={`bot-foot bot-foot-${footName}${foot.isHolding ? ' is-holding' : ''}${foot.isPressing ? ' is-pressing' : ''}${foot.isLifted ? ' is-lifted' : ''}${isImageFoot ? ' is-image-foot' : ''}`}
                   style={{
                     left: `${foot.x}%`,
