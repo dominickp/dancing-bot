@@ -31,6 +31,25 @@ describe("HitFeedbackTracker", () => {
     ]);
   });
 
+  it("marks three- and four-arrow bracket rows as jumps", () => {
+    const tracker = new HitFeedbackTracker([
+      event({ beat: 1, panel: "left" }),
+      event({ beat: 1, panel: "down" }),
+      event({ beat: 1, panel: "up" }),
+      event({ beat: 2, panel: "left" }),
+      event({ beat: 2, panel: "down" }),
+      event({ beat: 2, panel: "up" }),
+      event({ beat: 2, panel: "right" }),
+    ]);
+    const threeArrowBracket = tracker.advance(0.9, 1.1);
+    const fourArrowBracket = tracker.advance(1.9, 2.1);
+
+    expect(threeArrowBracket).toHaveLength(3);
+    expect(threeArrowBracket.every(({ isJump }) => isJump)).toBe(true);
+    expect(fourArrowBracket).toHaveLength(4);
+    expect(fourArrowBracket.every(({ isJump }) => isJump)).toBe(true);
+  });
+
   it("allows a note to fire again after the tracker is reset for a seek", () => {
     const tracker = new HitFeedbackTracker([event({ beat: 4 })]);
 
