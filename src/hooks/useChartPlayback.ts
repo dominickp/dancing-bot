@@ -16,6 +16,7 @@ export interface PlaybackClock {
 }
 
 interface UseChartPlaybackArgs {
+  assistTicksEnabled?: boolean;
   audioSource: string | null;
   chartIndex: number;
   chartVerticalOffset: number;
@@ -113,6 +114,7 @@ export const isEditableOrLocalKeyboardTarget = (target: EventTarget | null): boo
 };
 
 export function useChartPlayback({
+  assistTicksEnabled = false,
   audioSource,
   chartIndex,
   chartVerticalOffset,
@@ -137,6 +139,7 @@ export function useChartPlayback({
   const [playbackRequested, setPlaybackRequested] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const assistTickAudioContextRef = useRef<AudioContext | null>(null);
   const measureGuideLayerRef = useRef<HTMLDivElement | null>(null);
   const scrollLayerRef = useRef<HTMLDivElement | null>(null);
   const currentBeatRef = useRef(0);
@@ -146,11 +149,61 @@ export function useChartPlayback({
   const lastDisplayUpdateRef = useRef(0);
   const lastAnimatedBeatRef = useRef(0);
   const triggeredHitKeysRef = useRef(new Set<string>());
+  const triggeredAssistRowsRef = useRef(new Set<string>());
   const isPlayingRef = useRef(isPlaying);
   const playbackRequestedRef = useRef(playbackRequested);
   const panelFeedbackRef = useRef(onTriggerPanelFeedback);
+  const assistTicksEnabledRef = useRef(assistTicksEnabled);
+
+  const getAssistTickAudioContext = (): AudioContext => {
+    const audioContext =
+      assistTickAudioContextRef.current ??
+      new AudioContext();
+    assistTickAudioContextRef.current = audioContext;
+
+    if (audioContext.state === "suspended") {
+      void audioContext.resume().catch(() => undefined);
+    }
+
+    return audioContext;
+  };
+
+  const playAssistTick = (isJump: boolean) => {
+    if (!assistTicksEnabledRef.current) {
+      return;
+    }
+
+    const audioContext = getAssistTickAudioContext();
+    const noiseLength = Math.floor(audioContext.sampleRate * 0.075);
+    const noiseBuffer = audioContext.createBuffer(1, noiseLength, audioContext.sampleRate);
+    const noise = noiseBuffer.getChannelData(0);
+    const gain = audioContext.createGain();
+    const filter = audioContext.createBiquadFilter();
+    const source = audioContext.createBufferSource();
+    const startTime = audioContext.currentTime;
+
+    for (let index = 0; index < noiseLength; index += 1) {
+      noise[index] = Math.random() * 2 - 1;
+    }
+
+    source.buffer = noiseBuffer;
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(isJump ? 2600 : 1800, startTime);
+    filter.Q.setValueAtTime(0.7, startTime);
+    gain.gain.setValueAtTime(isJump ? 1.8 : 1.4, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.07);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioContext.destination);
+    source.start(startTime);
+    source.stop(startTime + 0.075);
+  };
 
   const setPlaybackIntent = useCallback((value: SetStateAction<boolean>) => {
+    if (assistTicksEnabledRef.current) {
+      getAssistTickAudioContext();
+    }
+
     setPlaybackRequested((previousValue) => {
       const nextValue =
         typeof value === "function"
@@ -240,6 +293,7 @@ export function useChartPlayback({
       const nextBeat = clampViewportBeat(beat, lastBeat);
       lastAnimatedBeatRef.current = nextBeat;
       triggeredHitKeysRef.current.clear();
+      triggeredAssistRowsRef.current.clear();
       refreshRenderWindow(nextBeat);
       syncAudioToBeat(nextBeat);
     },
@@ -264,6 +318,7 @@ export function useChartPlayback({
       syncAudioToBeat(clampedBeat);
       lastAnimatedBeatRef.current = clampedBeat;
       triggeredHitKeysRef.current.clear();
+      triggeredAssistRowsRef.current.clear();
     },
     [lastBeat, refreshRenderWindow, seekToBeat, syncAudioToBeat],
   );
@@ -289,6 +344,18 @@ export function useChartPlayback({
 
       triggeredHitKeysRef.current.add(hitKey);
       panelFeedbackRef.current(event);
+      const assistRowKey = `${event.measureIndex}-${event.rowIndex}`;
+      const isJump = events.filter(
+        (rowEvent) =>
+          rowEvent.measureIndex === event.measureIndex &&
+          rowEvent.rowIndex === event.rowIndex &&
+          rowEvent.kind !== "mine",
+      ).length > 1;
+
+      if (!isJump || !triggeredAssistRowsRef.current.has(assistRowKey)) {
+        triggeredAssistRowsRef.current.add(assistRowKey);
+        playAssistTick(isJump);
+      }
     }
 
     for (const event of events) {
@@ -307,6 +374,14 @@ export function useChartPlayback({
   useEffect(() => {
     panelFeedbackRef.current = onTriggerPanelFeedback;
   }, [onTriggerPanelFeedback]);
+
+  useEffect(() => {
+    assistTicksEnabledRef.current = assistTicksEnabled;
+  }, [assistTicksEnabled]);
+
+  useEffect(() => () => {
+    void assistTickAudioContextRef.current?.close();
+  }, []);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -360,6 +435,18 @@ export function useChartPlayback({
     const audio = audioRef.current;
 
     if (!audio) {
+      const previousClock = playbackClockRef.current;
+
+      if (previousClock) {
+        playbackClockRef.current = {
+          audioTime:
+            previousClock.audioTime +
+            ((performance.now() - previousClock.perfTime) / 1000) * previousClock.playbackRate,
+          perfTime: performance.now(),
+          playbackRate,
+        };
+      }
+
       return;
     }
 
@@ -405,6 +492,7 @@ export function useChartPlayback({
     currentBeatRef.current = -startPreviewBeats;
     lastAnimatedBeatRef.current = -startPreviewBeats;
     triggeredHitKeysRef.current.clear();
+    triggeredAssistRowsRef.current.clear();
     renderBeatAnchorRef.current = -startPreviewBeats;
     setRenderBeatAnchor(-startPreviewBeats);
     setDisplayBeat(0);
@@ -468,7 +556,7 @@ export function useChartPlayback({
       return;
     }
 
-    if (!audio) {
+    if (!audio && !assistTicksEnabled) {
       if (loadingTimeoutRef.current !== null) {
         window.clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = null;
@@ -480,37 +568,55 @@ export function useChartPlayback({
       return;
     }
 
-    syncAudioToBeat(currentBeatRef.current);
+    if (audio) {
+      syncAudioToBeat(currentBeatRef.current);
+    } else {
+      playbackClockRef.current = {
+        audioTime: Math.max(
+          0,
+          beatToSeconds(
+            currentBeatRef.current,
+            simfile.bpms,
+            simfile.stops,
+            simfile.metadata.offset,
+          ),
+        ),
+        perfTime: performance.now(),
+        playbackRate,
+      };
+    }
     lastAnimatedBeatRef.current = currentBeatRef.current;
 
-    loadingTimeoutRef.current = window.setTimeout(() => {
-      if (playbackRequestedRef.current && !isPlayingRef.current) {
-        setIsLoading(true);
-      }
+    if (audio) {
+      loadingTimeoutRef.current = window.setTimeout(() => {
+        if (playbackRequestedRef.current && !isPlayingRef.current) {
+          setIsLoading(true);
+        }
 
-      loadingTimeoutRef.current = null;
-    }, loadingOverlayDelayMs);
+        loadingTimeoutRef.current = null;
+      }, loadingOverlayDelayMs);
+    }
 
     let isCancelled = false;
 
     const tick = (timestamp: number) => {
       const previousClock = playbackClockRef.current ?? {
-        audioTime: audio.currentTime,
+        audioTime: audio?.currentTime ?? 0,
         perfTime: timestamp,
-        playbackRate: audio.playbackRate,
+        playbackRate: audio?.playbackRate ?? playbackRate,
       };
       let estimatedAudioTime =
         previousClock.audioTime +
         ((timestamp - previousClock.perfTime) / 1000) *
           previousClock.playbackRate;
-      const actualAudioTime = audio.currentTime;
+      const actualAudioTime = audio?.currentTime ?? estimatedAudioTime;
 
       if (Math.abs(actualAudioTime - estimatedAudioTime) > 0.03) {
         estimatedAudioTime = actualAudioTime;
         playbackClockRef.current = {
           audioTime: actualAudioTime,
           perfTime: timestamp,
-          playbackRate: audio.playbackRate,
+          playbackRate: audio?.playbackRate ?? playbackRate,
         };
       } else {
         playbackClockRef.current = {
@@ -531,6 +637,14 @@ export function useChartPlayback({
       lastAnimatedBeatRef.current = nextBeat;
       applyScrollPosition(nextBeat);
 
+      if (!audio && nextBeat >= lastBeat) {
+        setPlaybackRequested(false);
+        setIsLoading(false);
+        setIsPlaying(false);
+        refreshRenderWindow(lastBeat);
+        return;
+      }
+
       if (timestamp - lastDisplayUpdateRef.current >= displayRefreshMs) {
         setDisplayBeat(clamp(nextBeat, 0, lastBeat));
         lastDisplayUpdateRef.current = timestamp;
@@ -546,6 +660,20 @@ export function useChartPlayback({
 
       animationFrameRef.current = requestAnimationFrame(tick);
     };
+
+    if (!audio) {
+      setIsPlaying(true);
+      setIsLoading(false);
+      animationFrameRef.current = requestAnimationFrame(tick);
+
+      return () => {
+        isCancelled = true;
+
+        if (animationFrameRef.current !== null) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+      };
+    }
 
     void audio
       .play()
@@ -598,13 +726,16 @@ export function useChartPlayback({
     };
   }, [
     applyScrollPosition,
+    assistTicksEnabled,
     events,
     lastBeat,
     playbackRequested,
     playbackRate,
     pixelsPerBeat,
     receptorOffset,
+    refreshRenderWindow,
     simfile,
+    syncAudioToBeat,
   ]);
 
   useEffect(() => {

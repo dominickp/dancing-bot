@@ -101,6 +101,7 @@ interface PersistedUiSettings {
   selectedBotPadStyle: BotPadStyleId;
   playbackRate: number;
   volume: number;
+  assistTicksEnabled: boolean;
   isBotPanelGlowEnabled: boolean;
   isBotPanelLightsEnabled: boolean;
   isBotCrossoverEnabled: boolean;
@@ -164,6 +165,7 @@ const defaultUiSettings: PersistedUiSettings = {
   selectedBotPadStyle: defaultBotPadStyle,
   playbackRate: 1,
   volume: 0.5,
+  assistTicksEnabled: false,
   isBotPanelGlowEnabled: true,
   isBotPanelLightsEnabled: true,
   isBotCrossoverEnabled: true,
@@ -289,6 +291,10 @@ const readPersistedUiSettings = (): PersistedUiSettings => {
           ? clampPlaybackRate(parsedValue.playbackRate)
           : defaultUiSettings.playbackRate,
       volume: typeof parsedValue.volume === 'number' ? clampVolume(parsedValue.volume) : defaultUiSettings.volume,
+      assistTicksEnabled:
+        typeof parsedValue.assistTicksEnabled === 'boolean'
+          ? parsedValue.assistTicksEnabled
+          : defaultUiSettings.assistTicksEnabled,
       isBotPanelGlowEnabled:
         typeof parsedValue.isBotPanelGlowEnabled === 'boolean'
           ? parsedValue.isBotPanelGlowEnabled
@@ -573,6 +579,7 @@ function App() {
   const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(persistedUiSettings.selectedBotPadStyle);
   const [playbackRate, setPlaybackRate] = useState(persistedUiSettings.playbackRate);
   const [volume, setVolume] = useState(persistedUiSettings.volume);
+  const [assistTicksEnabled, setAssistTicksEnabled] = useState(persistedUiSettings.assistTicksEnabled);
   const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(persistedUiSettings.isBotPanelGlowEnabled);
   const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(persistedUiSettings.isBotPanelLightsEnabled);
   const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(persistedUiSettings.isBotCrossoverEnabled);
@@ -714,6 +721,7 @@ function App() {
     lastBeat: selectedTimedChart.lastBeat,
     playbackRate,
     volume,
+    assistTicksEnabled,
     pixelsPerBeat,
     visibleBeats,
     minVisibleBeats,
@@ -887,6 +895,7 @@ function App() {
         selectedBotPadStyle,
         playbackRate,
         volume,
+        assistTicksEnabled,
         isBotPanelGlowEnabled,
         isBotPanelLightsEnabled,
         isBotCrossoverEnabled,
@@ -903,6 +912,7 @@ function App() {
       } satisfies PersistedUiSettings),
     );
   }, [
+    assistTicksEnabled,
     botWindowRect,
     isAppearanceSectionOpen,
     isBehaviorSectionOpen,
@@ -1094,6 +1104,10 @@ function App() {
 
   const handleVolumeChange = (event: ChangeEvent<HTMLInputElement>) => {
     setVolume(clampVolume(Number.parseFloat(event.target.value)));
+  };
+
+  const handleAssistTicksToggle = () => {
+    setAssistTicksEnabled((currentValue) => !currentValue);
   };
 
   const handleBotFormStyleChange = (nextStyle: BotFormStyleId) => {
@@ -1585,6 +1599,7 @@ function App() {
               <span className="thin-toolbar-rate-value">{Math.round(volume * 100)}%</span>
             </div>
           </label>
+
         </div>
 
         <button
@@ -1605,6 +1620,15 @@ function App() {
           {isParityHintOverlayEnabled
             ? `Pattern hints on (${parityHintDiagnostics.length})`
             : 'Pattern hints off'}
+        </button>
+
+        <button
+          type="button"
+          className={`toolbar-button thin-toolbar-button${assistTicksEnabled ? ' is-enabled' : ''}`}
+          aria-pressed={assistTicksEnabled}
+          onClick={handleAssistTicksToggle}
+        >
+          {assistTicksEnabled ? 'Assist tick on' : 'Assist tick off'}
         </button>
       </section>
 
