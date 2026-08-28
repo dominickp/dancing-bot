@@ -3,8 +3,12 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { reconcilePlaybackAudioTime, useChartPlayback } from "./useChartPlayback";
-import type { SimfileDocument } from "../lib/simfile";
+import {
+  buildAssistHitEvents,
+  reconcilePlaybackAudioTime,
+  useChartPlayback,
+} from "./useChartPlayback";
+import type { SimfileDocument, TimedNoteEvent } from "../lib/simfile";
 
 const simfile: SimfileDocument = {
   metadata: {
@@ -31,6 +35,17 @@ interface HookSnapshot {
 interface HarnessProps {
   onSnapshot: (snapshot: HookSnapshot) => void;
 }
+
+const noteEvent = (overrides: Partial<TimedNoteEvent>): TimedNoteEvent => ({
+  beat: 0,
+  timeSeconds: 0,
+  panel: "left",
+  kind: "tap",
+  measureIndex: 0,
+  rowIndex: 0,
+  rowCount: 4,
+  ...overrides,
+});
 
 function HookHarness({ onSnapshot }: HarnessProps) {
   const [visibleBeats, setVisibleBeats] = React.useState(10);
@@ -88,6 +103,16 @@ describe("useChartPlayback zoom behavior", () => {
 
   it("catches up when the media clock has genuinely advanced", () => {
     expect(reconcilePlaybackAudioTime(9, 9.2, false)).toBe(9.2);
+  });
+
+  it("creates assist hits for every bot roll retrigger", () => {
+    const assistHits = buildAssistHitEvents([
+      noteEvent({ kind: "roll-head", beat: 4, panel: "down" }),
+      noteEvent({ kind: "hold-tail", beat: 5.5, panel: "down", rowIndex: 3 }),
+    ]);
+
+    expect(assistHits.map((event) => event.beat)).toEqual([4, 4.5, 5, 5.5]);
+    expect(assistHits.every((event) => event.kind === "roll-head")).toBe(true);
   });
 
   it("keeps the current beat when ctrl-wheel zoom changes visible beat spacing", () => {

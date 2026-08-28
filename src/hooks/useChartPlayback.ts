@@ -10,6 +10,7 @@ const loadingOverlayDelayMs = 180;
 const startPreviewBeats = 0.5;
 const audioClockForwardCorrectionSeconds = 0.05;
 const seekCompletionToleranceSeconds = 0.01;
+const rollRetriggerBeats = 0.5;
 
 export interface PlaybackClock {
   audioTime: number;
@@ -60,8 +61,48 @@ const clampDisplayBeat = (beat: number, lastBeat: number): number =>
 const clampViewportBeat = (beat: number, lastBeat: number): number =>
   clamp(beat, -startPreviewBeats, lastBeat);
 
-const getEventRowKey = (event: TimedNoteEvent): string =>
-  `${event.measureIndex}-${event.rowIndex}`;
+const getAssistTickKey = (event: TimedNoteEvent): string =>
+  event.beat.toFixed(6);
+
+export const buildAssistHitEvents = (
+  events: TimedNoteEvent[],
+): TimedNoteEvent[] => {
+  const rollHeads = new Map<Panel, TimedNoteEvent>();
+  const assistHits = events.filter((event) => event.kind !== "hold-tail");
+
+  for (const event of events) {
+    if (event.kind === "roll-head") {
+      rollHeads.set(event.panel, event);
+      continue;
+    }
+
+    if (event.kind !== "hold-tail") {
+      continue;
+    }
+
+    const rollHead = rollHeads.get(event.panel);
+
+    if (!rollHead) {
+      continue;
+    }
+
+    for (
+      let beat = rollHead.beat + rollRetriggerBeats;
+      beat < event.beat - 0.000001;
+      beat += rollRetriggerBeats
+    ) {
+      assistHits.push({ ...rollHead, beat });
+    }
+
+    if (event.beat > rollHead.beat) {
+      assistHits.push({ ...rollHead, beat: event.beat });
+    }
+
+    rollHeads.delete(event.panel);
+  }
+
+  return assistHits.sort((left, right) => left.beat - right.beat);
+};
 
 const findFirstEventAtOrAfter = (
   events: TimedNoteEvent[],
@@ -195,20 +236,14 @@ export function useChartPlayback({
   const playbackRequestedRef = useRef(playbackRequested);
   const panelFeedbackRef = useRef(onTriggerPanelFeedback);
   const assistTicksEnabledRef = useRef(assistTicksEnabled);
-  const hitEvents = useMemo(
-    () =>
-      events
-        .filter((event) => event.kind !== "hold-tail")
-        .sort((left, right) => left.beat - right.beat),
-    [events],
-  );
+  const hitEvents = useMemo(() => buildAssistHitEvents(events), [events]);
   const assistRowNoteCounts = useMemo(() => {
     const counts = new Map<string, number>();
 
     for (const event of hitEvents) {
       if (event.kind !== "mine") {
-        const rowKey = getEventRowKey(event);
-        counts.set(rowKey, (counts.get(rowKey) ?? 0) + 1);
+        const tickKey = getAssistTickKey(event);
+        counts.set(tickKey, (counts.get(tickKey) ?? 0) + 1);
       }
     }
 
@@ -395,7 +430,7 @@ export function useChartPlayback({
     ) {
       const event = hitEvents[eventIndex];
 
-      const hitKey = `${event.panel}-${event.measureIndex}-${event.rowIndex}-${event.kind}`;
+      const hitKey = `${event.panel}-${event.beat.toFixed(6)}-${event.kind}`;
 
       if (triggeredHitKeysRef.current.has(hitKey)) {
         continue;
@@ -403,11 +438,11 @@ export function useChartPlayback({
 
       triggeredHitKeysRef.current.set(hitKey, event.beat);
       panelFeedbackRef.current(event);
-      const assistRowKey = getEventRowKey(event);
-      const isJump = (assistRowNoteCounts.get(assistRowKey) ?? 0) > 1;
+      const assistTickKey = getAssistTickKey(event);
+      const isJump = (assistRowNoteCounts.get(assistTickKey) ?? 0) > 1;
 
-      if (!isJump || !triggeredAssistRowsRef.current.has(assistRowKey)) {
-        triggeredAssistRowsRef.current.add(assistRowKey);
+      if (!isJump || !triggeredAssistRowsRef.current.has(assistTickKey)) {
+        triggeredAssistRowsRef.current.add(assistTickKey);
         playAssistTick(isJump);
       }
     }
