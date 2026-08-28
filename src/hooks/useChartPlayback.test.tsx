@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { useChartPlayback } from "./useChartPlayback";
+import { reconcilePlaybackAudioTime, useChartPlayback } from "./useChartPlayback";
 import type { SimfileDocument } from "../lib/simfile";
 
 const simfile: SimfileDocument = {
@@ -76,6 +76,18 @@ describe("useChartPlayback zoom behavior", () => {
     container?.remove();
     root = null;
     container = null;
+  });
+
+  it("does not move the visual clock backward to a stale media sample", () => {
+    expect(reconcilePlaybackAudioTime(12.1, 12, false)).toBe(12.1);
+  });
+
+  it("keeps the visual clock smooth while an audio seek is in progress", () => {
+    expect(reconcilePlaybackAudioTime(42.2, 18, true)).toBe(42.2);
+  });
+
+  it("catches up when the media clock has genuinely advanced", () => {
+    expect(reconcilePlaybackAudioTime(9, 9.2, false)).toBe(9.2);
   });
 
   it("keeps the current beat when ctrl-wheel zoom changes visible beat spacing", () => {

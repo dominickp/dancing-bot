@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { beatToSeconds, secondsToBeat } from "../lib/simfile";
 import type { Panel, SimfileDocument, TimedNoteEvent } from "../lib/simfile";
@@ -8,6 +8,8 @@ const displayRefreshMs = 80;
 const hitWindowBeats = 0.18;
 const loadingOverlayDelayMs = 180;
 const startPreviewBeats = 0.5;
+const audioClockForwardCorrectionSeconds = 0.05;
+const seekCompletionToleranceSeconds = 0.01;
 
 export interface PlaybackClock {
   audioTime: number;
@@ -57,6 +59,44 @@ const clampDisplayBeat = (beat: number, lastBeat: number): number =>
 
 const clampViewportBeat = (beat: number, lastBeat: number): number =>
   clamp(beat, -startPreviewBeats, lastBeat);
+
+const getEventRowKey = (event: TimedNoteEvent): string =>
+  `${event.measureIndex}-${event.rowIndex}`;
+
+const findFirstEventAtOrAfter = (
+  events: TimedNoteEvent[],
+  beat: number,
+): number => {
+  let low = 0;
+  let high = events.length;
+
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+
+    if (events[middle].beat < beat) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+
+  return low;
+};
+
+export const reconcilePlaybackAudioTime = (
+  estimatedAudioTime: number,
+  actualAudioTime: number,
+  isSeekPending: boolean,
+): number => {
+  if (
+    isSeekPending ||
+    actualAudioTime <= estimatedAudioTime + audioClockForwardCorrectionSeconds
+  ) {
+    return estimatedAudioTime;
+  }
+
+  return actualAudioTime;
+};
 
 const getScrollStepBeats = (visibleBeats: number): number => {
   if (visibleBeats <= 3) {
@@ -145,15 +185,35 @@ export function useChartPlayback({
   const currentBeatRef = useRef(0);
   const renderBeatAnchorRef = useRef(0);
   const playbackClockRef = useRef<PlaybackClock | null>(null);
+  const pendingAudioSeekTimeRef = useRef<number | null>(null);
   const loadingTimeoutRef = useRef<number | null>(null);
   const lastDisplayUpdateRef = useRef(0);
   const lastAnimatedBeatRef = useRef(0);
-  const triggeredHitKeysRef = useRef(new Set<string>());
+  const triggeredHitKeysRef = useRef(new Map<string, number>());
   const triggeredAssistRowsRef = useRef(new Set<string>());
   const isPlayingRef = useRef(isPlaying);
   const playbackRequestedRef = useRef(playbackRequested);
   const panelFeedbackRef = useRef(onTriggerPanelFeedback);
   const assistTicksEnabledRef = useRef(assistTicksEnabled);
+  const hitEvents = useMemo(
+    () =>
+      events
+        .filter((event) => event.kind !== "hold-tail")
+        .sort((left, right) => left.beat - right.beat),
+    [events],
+  );
+  const assistRowNoteCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const event of hitEvents) {
+      if (event.kind !== "mine") {
+        const rowKey = getEventRowKey(event);
+        counts.set(rowKey, (counts.get(rowKey) ?? 0) + 1);
+      }
+    }
+
+    return counts;
+  }, [hitEvents]);
 
   const getAssistTickAudioContext = (): AudioContext => {
     const audioContext =
@@ -260,16 +320,17 @@ export function useChartPlayback({
         ),
       );
 
-      if (Number.isFinite(audio.duration)) {
-        audio.currentTime = clamp(nextTime, 0, audio.duration);
-      } else {
-        audio.currentTime = nextTime;
-      }
+      const targetTime = Number.isFinite(audio.duration)
+        ? clamp(nextTime, 0, audio.duration)
+        : nextTime;
+
+      pendingAudioSeekTimeRef.current = targetTime;
+      audio.currentTime = targetTime;
 
       audio.playbackRate = playbackRate;
 
       playbackClockRef.current = {
-        audioTime: audio.currentTime,
+        audioTime: targetTime,
         perfTime: performance.now(),
         playbackRate,
       };
@@ -327,14 +388,12 @@ export function useChartPlayback({
     const minBeat = Math.min(previousBeat, nextBeat) - hitWindowBeats * 0.35;
     const maxBeat = Math.max(previousBeat, nextBeat) + hitWindowBeats * 0.35;
 
-    for (const event of events) {
-      if (
-        event.kind === "hold-tail" ||
-        event.beat < minBeat ||
-        event.beat > maxBeat
-      ) {
-        continue;
-      }
+    for (
+      let eventIndex = findFirstEventAtOrAfter(hitEvents, minBeat);
+      eventIndex < hitEvents.length && hitEvents[eventIndex].beat <= maxBeat;
+      eventIndex += 1
+    ) {
+      const event = hitEvents[eventIndex];
 
       const hitKey = `${event.panel}-${event.measureIndex}-${event.rowIndex}-${event.kind}`;
 
@@ -342,15 +401,10 @@ export function useChartPlayback({
         continue;
       }
 
-      triggeredHitKeysRef.current.add(hitKey);
+      triggeredHitKeysRef.current.set(hitKey, event.beat);
       panelFeedbackRef.current(event);
-      const assistRowKey = `${event.measureIndex}-${event.rowIndex}`;
-      const isJump = events.filter(
-        (rowEvent) =>
-          rowEvent.measureIndex === event.measureIndex &&
-          rowEvent.rowIndex === event.rowIndex &&
-          rowEvent.kind !== "mine",
-      ).length > 1;
+      const assistRowKey = getEventRowKey(event);
+      const isJump = (assistRowNoteCounts.get(assistRowKey) ?? 0) > 1;
 
       if (!isJump || !triggeredAssistRowsRef.current.has(assistRowKey)) {
         triggeredAssistRowsRef.current.add(assistRowKey);
@@ -358,14 +412,8 @@ export function useChartPlayback({
       }
     }
 
-    for (const event of events) {
-      if (event.beat < nextBeat - 2 || event.beat > nextBeat + 2) {
-        continue;
-      }
-
-      const hitKey = `${event.panel}-${event.measureIndex}-${event.rowIndex}-${event.kind}`;
-
-      if (event.beat < nextBeat - hitWindowBeats * 2) {
+    for (const [hitKey, beat] of triggeredHitKeysRef.current) {
+      if (beat < nextBeat - hitWindowBeats * 2) {
         triggeredHitKeysRef.current.delete(hitKey);
       }
     }
@@ -403,6 +451,7 @@ export function useChartPlayback({
       setIsPlaying(false);
       setPlaybackRequested(false);
       audioRef.current = null;
+      pendingAudioSeekTimeRef.current = null;
       return undefined;
     }
 
@@ -428,6 +477,7 @@ export function useChartPlayback({
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("ended", handleEnded);
       audioRef.current = null;
+      pendingAudioSeekTimeRef.current = null;
     };
   }, [audioSource, lastBeat, refreshRenderWindow]);
 
@@ -493,6 +543,7 @@ export function useChartPlayback({
     lastAnimatedBeatRef.current = -startPreviewBeats;
     triggeredHitKeysRef.current.clear();
     triggeredAssistRowsRef.current.clear();
+    pendingAudioSeekTimeRef.current = null;
     renderBeatAnchorRef.current = -startPreviewBeats;
     setRenderBeatAnchor(-startPreviewBeats);
     setDisplayBeat(0);
@@ -610,21 +661,26 @@ export function useChartPlayback({
         ((timestamp - previousClock.perfTime) / 1000) *
           previousClock.playbackRate;
       const actualAudioTime = audio?.currentTime ?? estimatedAudioTime;
+      const pendingSeekTime = pendingAudioSeekTimeRef.current;
+      const isSeekPending =
+        audio?.seeking === true ||
+        (pendingSeekTime !== null &&
+          Math.abs(actualAudioTime - pendingSeekTime) > seekCompletionToleranceSeconds);
 
-      if (Math.abs(actualAudioTime - estimatedAudioTime) > 0.03) {
-        estimatedAudioTime = actualAudioTime;
-        playbackClockRef.current = {
-          audioTime: actualAudioTime,
-          perfTime: timestamp,
-          playbackRate: audio?.playbackRate ?? playbackRate,
-        };
-      } else {
-        playbackClockRef.current = {
-          audioTime: estimatedAudioTime,
-          perfTime: timestamp,
-          playbackRate: previousClock.playbackRate,
-        };
+      if (!isSeekPending) {
+        pendingAudioSeekTimeRef.current = null;
       }
+
+      estimatedAudioTime = reconcilePlaybackAudioTime(
+        estimatedAudioTime,
+        actualAudioTime,
+        isSeekPending,
+      );
+      playbackClockRef.current = {
+        audioTime: estimatedAudioTime,
+        perfTime: timestamp,
+        playbackRate: audio?.playbackRate ?? previousClock.playbackRate,
+      };
 
       const nextBeat = secondsToBeat(
         estimatedAudioTime,
@@ -727,7 +783,8 @@ export function useChartPlayback({
   }, [
     applyScrollPosition,
     assistTicksEnabled,
-    events,
+    assistRowNoteCounts,
+    hitEvents,
     lastBeat,
     playbackRequested,
     playbackRate,
