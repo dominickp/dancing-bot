@@ -218,6 +218,8 @@ const botHoldScale = 1.06;
 const botPressScale = 1.12;
 const botTravelLiftScale = 0.08;
 const botFootswitchLiftHeight = 9;
+const frameProbeReportIntervalMs = 1000;
+const frameProbeJankThresholdMs = 1000 / 30;
 const botPadArrowColorsByStyle: Record<BotPadStyleId, Record<Panel, string>> = {
   itg: {
     left: '#51a8ff',
@@ -1536,6 +1538,7 @@ interface DancingBotWindowProps {
   isCrossoverEnabled: boolean;
   isBracketEnabled: boolean;
   isFootswitchEnabled: boolean;
+  isFrameProbeEnabled: boolean;
   isAppearanceSectionOpen: boolean;
   isBehaviorSectionOpen: boolean;
   onFormStyleChange: (nextStyle: BotFormStyleId) => void;
@@ -1546,6 +1549,7 @@ interface DancingBotWindowProps {
   onCrossoverToggle: () => void;
   onBracketToggle: () => void;
   onFootswitchToggle: () => void;
+  onFrameProbeToggle: () => void;
   onAppearanceSectionOpenChange: (isOpen: boolean) => void;
   onBehaviorSectionOpenChange: (isOpen: boolean) => void;
   beginBotWindowInteraction: (
@@ -1576,6 +1580,7 @@ export function DancingBotWindow({
   isCrossoverEnabled,
   isBracketEnabled,
   isFootswitchEnabled,
+  isFrameProbeEnabled,
   isAppearanceSectionOpen,
   isBehaviorSectionOpen,
   onFormStyleChange,
@@ -1586,6 +1591,7 @@ export function DancingBotWindow({
   onCrossoverToggle,
   onBracketToggle,
   onFootswitchToggle,
+  onFrameProbeToggle,
   onAppearanceSectionOpenChange,
   onBehaviorSectionOpenChange,
   beginBotWindowInteraction,
@@ -1630,6 +1636,57 @@ export function DancingBotWindow({
     right: null,
   });
   const beatReadoutRef = useRef<HTMLSpanElement | null>(null);
+  const frameProbeReadoutRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isFrameProbeEnabled) {
+      return undefined;
+    }
+
+    let animationFrameId: number | null = null;
+    let previousTimestamp: number | null = null;
+    let reportStartTimestamp: number | null = null;
+    let frameCount = 0;
+    let frameTimeTotal = 0;
+    let worstFrameTime = 0;
+    let jankCount = 0;
+
+    const tick = (timestamp: number) => {
+      if (previousTimestamp !== null) {
+        const frameTime = timestamp - previousTimestamp;
+
+        frameCount += 1;
+        frameTimeTotal += frameTime;
+        worstFrameTime = Math.max(worstFrameTime, frameTime);
+        jankCount += Number(frameTime > frameProbeJankThresholdMs);
+      }
+
+      previousTimestamp = timestamp;
+      reportStartTimestamp ??= timestamp;
+
+      const elapsed = timestamp - reportStartTimestamp;
+      if (elapsed >= frameProbeReportIntervalMs && frameCount > 0 && frameProbeReadoutRef.current) {
+        const fps = (frameCount * 1000) / elapsed;
+        const averageFrameTime = frameTimeTotal / frameCount;
+        frameProbeReadoutRef.current.textContent = `${fps.toFixed(0)} FPS | avg ${averageFrameTime.toFixed(1)} ms | worst ${worstFrameTime.toFixed(1)} ms | jank ${jankCount}`;
+        reportStartTimestamp = timestamp;
+        frameCount = 0;
+        frameTimeTotal = 0;
+        worstFrameTime = 0;
+        jankCount = 0;
+      }
+
+      animationFrameId = requestAnimationFrame(tick);
+    };
+
+    animationFrameId = requestAnimationFrame(tick);
+
+    return () => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isFrameProbeEnabled]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -1928,12 +1985,27 @@ export function DancingBotWindow({
                   <span className="bot-future-control-label">{botParityToggleOptions[2].label}</span>
                   <span className="bot-future-control-value">{isFootswitchEnabled ? 'On' : 'Off'}</span>
                 </button>
+
+                <button
+                  type="button"
+                  className={`bot-future-control-slot bot-future-control-toggle${isFrameProbeEnabled ? ' is-enabled' : ''}`}
+                  aria-pressed={isFrameProbeEnabled}
+                  onClick={onFrameProbeToggle}
+                >
+                  <span className="bot-future-control-label">Frame probe</span>
+                  <span className="bot-future-control-value">{isFrameProbeEnabled ? 'On' : 'Off'}</span>
+                </button>
               </div>
             </div>
           </details>
         </section>
 
         <div className="bot-pad-stage">
+          {isFrameProbeEnabled ? (
+            <div className="bot-frame-probe" role="status" aria-label="Frame-time probe" ref={frameProbeReadoutRef}>
+              Measuring frame time...
+            </div>
+          ) : null}
           <div className="bot-pad-surface">
             {botStaticPadTiles.map((tile) => (
               <div key={tile} className={`bot-pad-static-tile bot-pad-static-tile-${tile}`} aria-hidden="true" />

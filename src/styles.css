@@ -860,7 +860,10 @@ kbd {
   border-radius: 2px;
   background: linear-gradient(180deg, #14191e, #0b0e12);
   color: var(--text-main);
+  font-family: ui-monospace, "Cascadia Code", "Roboto Mono", monospace;
   font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -1033,7 +1036,7 @@ kbd {
 }
 
 .bot-future-control-grid-behavior {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .bot-future-control-slot {
@@ -1153,6 +1156,23 @@ kbd {
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.06),
     inset -1px -1px 0 rgba(0, 0, 0, 0.42);
+}
+
+.bot-frame-probe {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  padding: 4px 6px;
+  border: 1px solid rgba(191, 226, 255, 0.48);
+  border-radius: 2px;
+  background: rgba(5, 8, 11, 0.84);
+  color: #d9efff;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.62rem;
+  line-height: 1.3;
+  pointer-events: none;
 }
 
 .bot-pad-surface {

@@ -106,6 +106,7 @@ interface PersistedUiSettings {
   isBotCrossoverEnabled: boolean;
   isBotBracketEnabled: boolean;
   isBotFootswitchEnabled: boolean;
+  isBotFrameProbeEnabled: boolean;
   isParityHintOverlayEnabled: boolean;
   visibleBeats: number;
   playfieldOffsetX: number;
@@ -168,6 +169,7 @@ const defaultUiSettings: PersistedUiSettings = {
   isBotCrossoverEnabled: true,
   isBotBracketEnabled: true,
   isBotFootswitchEnabled: true,
+  isBotFrameProbeEnabled: false,
   isParityHintOverlayEnabled: true,
   visibleBeats: defaultVisibleBeats,
   playfieldOffsetX: 0,
@@ -205,7 +207,7 @@ const controlsDialogSections: ControlsDialogSection[] = [
       { action: 'Step through chart', keyboard: <><kbd>↑</kbd> <kbd>↓</kbd></>, mouse: 'Scroll wheel' },
       { action: 'Bigger jumps', keyboard: <><kbd>PgUp</kbd> <kbd>PgDn</kbd></>, mouse: '—' },
       { action: 'Jump to start / end', keyboard: <><kbd>Home</kbd> <kbd>End</kbd></>, mouse: '—' },
-      { action: 'Seek to any beat', keyboard: '—', mouse: 'Click or drag the minimap (focus it for arrow keys)' },
+      { action: 'Seek to any beat', keyboard: '—', mouse: 'Click or drag the minimap' },
     ],
   },
   {
@@ -230,12 +232,12 @@ const controlsDialogSections: ControlsDialogSection[] = [
     rows: [
       {
         action: 'Move window',
-        keyboard: <><span>Focus header, then</span> <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd> <span>(SHIFT fine)</span></>,
+        keyboard: '—',
         mouse: 'Drag the header',
       },
       {
         action: 'Resize window',
-        keyboard: <><span>Focus corner grip, then</span> <kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd> <span>(SHIFT fine)</span></>,
+        keyboard: '—',
         mouse: 'Drag the corner grip',
       },
       { action: 'Reset position / size', keyboard: '—', mouse: 'Reset button in the window header' },
@@ -307,6 +309,10 @@ const readPersistedUiSettings = (): PersistedUiSettings => {
         typeof parsedValue.isBotFootswitchEnabled === 'boolean'
           ? parsedValue.isBotFootswitchEnabled
           : defaultUiSettings.isBotFootswitchEnabled,
+      isBotFrameProbeEnabled:
+        typeof parsedValue.isBotFrameProbeEnabled === 'boolean'
+          ? parsedValue.isBotFrameProbeEnabled
+          : defaultUiSettings.isBotFrameProbeEnabled,
       isParityHintOverlayEnabled:
         typeof parsedValue.isParityHintOverlayEnabled === 'boolean'
           ? parsedValue.isParityHintOverlayEnabled
@@ -572,6 +578,7 @@ function App() {
   const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(persistedUiSettings.isBotCrossoverEnabled);
   const [isBotBracketEnabled, setIsBotBracketEnabled] = useState(persistedUiSettings.isBotBracketEnabled);
   const [isBotFootswitchEnabled, setIsBotFootswitchEnabled] = useState(persistedUiSettings.isBotFootswitchEnabled);
+  const [isBotFrameProbeEnabled, setIsBotFrameProbeEnabled] = useState(persistedUiSettings.isBotFrameProbeEnabled);
   const [isParityHintOverlayEnabled, setIsParityHintOverlayEnabled] = useState(persistedUiSettings.isParityHintOverlayEnabled);
   const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
@@ -885,6 +892,7 @@ function App() {
         isBotCrossoverEnabled,
         isBotBracketEnabled,
         isBotFootswitchEnabled,
+        isBotFrameProbeEnabled,
         isParityHintOverlayEnabled,
         visibleBeats,
         playfieldOffsetX,
@@ -901,6 +909,7 @@ function App() {
     isBotBracketEnabled,
     isBotCrossoverEnabled,
     isBotFootswitchEnabled,
+    isBotFrameProbeEnabled,
     isBotPanelGlowEnabled,
     isBotPanelLightsEnabled,
     isParityHintOverlayEnabled,
@@ -1134,6 +1143,11 @@ function App() {
 
   const handleBotFootswitchToggle = () => {
     setIsBotFootswitchEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
+  const handleBotFrameProbeToggle = () => {
+    setIsBotFrameProbeEnabled((currentValue) => !currentValue);
     restoreNotefieldFocus();
   };
 
@@ -1612,6 +1626,7 @@ function App() {
             isCrossoverEnabled={isBotCrossoverEnabled}
             isBracketEnabled={isBotBracketEnabled}
             isFootswitchEnabled={isBotFootswitchEnabled}
+            isFrameProbeEnabled={isBotFrameProbeEnabled}
             isAppearanceSectionOpen={isAppearanceSectionOpen}
             isBehaviorSectionOpen={isBehaviorSectionOpen}
             onFormStyleChange={handleBotFormStyleChange}
@@ -1622,6 +1637,7 @@ function App() {
             onCrossoverToggle={handleBotCrossoverToggle}
             onBracketToggle={handleBotBracketToggle}
             onFootswitchToggle={handleBotFootswitchToggle}
+            onFrameProbeToggle={handleBotFrameProbeToggle}
             onAppearanceSectionOpenChange={handleAppearanceSectionOpenChange}
             onBehaviorSectionOpenChange={handleBehaviorSectionOpenChange}
             beginBotWindowInteraction={beginBotWindowInteraction}
