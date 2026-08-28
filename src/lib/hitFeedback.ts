@@ -10,7 +10,9 @@ export const buildAssistHitEvents = (
   events: TimedNoteEvent[],
 ): TimedNoteEvent[] => {
   const rollHeads = new Map<Panel, TimedNoteEvent>();
-  const assistHits = events.filter((event) => event.kind !== "hold-tail");
+  const assistHits = events.filter(
+    (event) => event.kind !== "hold-tail" && event.kind !== "mine",
+  );
 
   for (const event of events) {
     if (event.kind === "roll-head") {

@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
+import chiaroscuroSource from "../../example-simfiles/Chiaroscuro/Chiaroscuro.sm?raw";
 import ferrariSource from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
+import glitterSource from "../../example-simfiles/Glitter/Glitter.sm?raw";
 import {
   buildParityAssignmentMap,
   getFootSideFromFootPart,
   getTimedEventKey,
 } from "./parity";
-import { buildTimedChart, parseSimfile } from "./simfile";
+import {
+  buildTimedChart,
+  parseSimfile,
+  type Panel,
+  type TimedNoteEvent,
+} from "./simfile";
 import { buildSteppingScenario } from "../test/steppingScenario";
 
 const createSimfile = (measureRows: string[]): string =>
@@ -23,6 +30,35 @@ const parityConfig = {
   allowCrossovers: true,
   allowFootswitches: true,
   favorJumpsOverBrackets: false,
+};
+
+const buildHoldEndBeatMap = (
+  events: readonly TimedNoteEvent[],
+): Map<string, number> => {
+  const activeHeads = new Map<Panel, number>();
+  const holdEndBeats = new Map<string, number>();
+
+  for (const event of events) {
+    if (event.kind === "hold-head" || event.kind === "roll-head") {
+      activeHeads.set(event.panel, event.beat);
+      continue;
+    }
+
+    if (event.kind !== "hold-tail") {
+      continue;
+    }
+
+    const startBeat = activeHeads.get(event.panel);
+    if (startBeat !== undefined) {
+      holdEndBeats.set(
+        `${event.panel}:${startBeat.toFixed(6)}`,
+        event.beat,
+      );
+      activeHeads.delete(event.panel);
+    }
+  }
+
+  return holdEndBeats;
 };
 
 describe.each([
@@ -58,6 +94,156 @@ describe.each([
 });
 
 describe("buildParityAssignmentMap", () => {
+  it("keeps the right hold stationary through Chiaroscuro Hard 12's mine run", () => {
+    const simfile = parseSimfile(chiaroscuroSource);
+    const chart = simfile.charts.find(
+      ({ difficulty, meter }) => difficulty === "Hard" && meter === 12,
+    );
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const result = buildParityAssignmentMap(
+      timedChart.events,
+      buildHoldEndBeatMap(timedChart.events),
+      simfile,
+      parityConfig,
+    );
+    const rightHoldHead = timedChart.events.find(
+      (event) =>
+        event.kind === "hold-head" &&
+        event.panel === "right" &&
+        event.beat === 127.5,
+    );
+    const leftTapAfterMineRun = timedChart.events.find(
+      (event) =>
+        event.kind === "tap" && event.panel === "left" && event.beat === 132,
+    );
+
+    expect(rightHoldHead).toBeTruthy();
+    expect(leftTapAfterMineRun).toBeTruthy();
+    expect(
+      getFootSideFromFootPart(
+        result.assignments.get(getTimedEventKey(rightHoldHead!))!,
+      ),
+    ).toBe("right");
+    expect(
+      getFootSideFromFootPart(
+        result.assignments.get(getTimedEventKey(leftTapAfterMineRun!))!,
+      ),
+    ).toBe("left");
+    expect(
+      result.diagnostics
+        .filter((diagnostic) => diagnostic.beat >= 127.5 && diagnostic.beat <= 132)
+        .some((diagnostic) =>
+          diagnostic.kinds.some(
+            (kind) => kind === "crossover" || kind === "double-step",
+          ),
+        ),
+    ).toBe(false);
+  });
+
+  it("does not infer footswitches in Chiaroscuro measure 25's mine jumps", () => {
+    const simfile = parseSimfile(chiaroscuroSource);
+    const chart = simfile.charts[0];
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const result = buildParityAssignmentMap(
+      timedChart.events,
+      new Map(),
+      simfile,
+      parityConfig,
+    );
+    const measureDiagnostics = result.diagnostics.filter(
+      (diagnostic) => diagnostic.beat >= 96 && diagnostic.beat < 100,
+    );
+
+    expect(measureDiagnostics).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kinds: expect.arrayContaining(["footswitch"]),
+        }),
+      ]),
+    );
+  });
+
+  it("does not report Glitter's right-hold transition to down as a footswitch", () => {
+    const simfile = parseSimfile(glitterSource);
+    const chart = simfile.charts.find(
+      ({ difficulty, meter }) => difficulty === "Challenge" && meter === 12,
+    );
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const result = buildParityAssignmentMap(
+      timedChart.events,
+      buildHoldEndBeatMap(timedChart.events),
+      simfile,
+      parityConfig,
+    );
+
+    expect(
+      result.diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.beat === 120.5 && diagnostic.kinds.includes("footswitch"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not flag Glitter Challenge 12's first row after the mine intro", () => {
+    const simfile = parseSimfile(glitterSource);
+    const chart = simfile.charts.find(
+      ({ difficulty, meter }) => difficulty === "Challenge" && meter === 12,
+    );
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const result = buildParityAssignmentMap(
+      timedChart.events,
+      buildHoldEndBeatMap(timedChart.events),
+      simfile,
+      parityConfig,
+    );
+    const beat24Diagnostics = result.diagnostics.filter(
+      (diagnostic) => diagnostic.beat === 24 || diagnostic.beat === 24.5,
+    );
+
+    expect(beat24Diagnostics).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kinds: expect.arrayContaining(["crossover"]),
+        }),
+      ]),
+    );
+    expect(beat24Diagnostics).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kinds: expect.arrayContaining(["footswitch"]),
+        }),
+      ]),
+    );
+
+    const firstRowTaps = timedChart.events.filter(
+      (event) => event.kind === "tap" && event.beat === 24,
+    );
+
+    expect(firstRowTaps.map((event) => event.panel)).toEqual(["left", "down"]);
+    expect(
+      result.assignments.get(
+        getTimedEventKey(firstRowTaps.find((event) => event.panel === "left")!),
+      ),
+    ).toBe("left-heel");
+    expect(
+      result.assignments.get(
+        getTimedEventKey(firstRowTaps.find((event) => event.panel === "down")!),
+      ),
+    ).toBe("right-heel");
+  });
+
   it("keeps adjacent left-side pairs free of double-step regressions", () => {
     const source = createSimfile([
       "0001",

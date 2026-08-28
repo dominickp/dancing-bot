@@ -1,10 +1,43 @@
 import { describe, expect, it } from "vitest";
+import chiaroscuroSource from "../../example-simfiles/Chiaroscuro/Chiaroscuro.sm?raw";
 import ferrariSource from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
-import { buildTimedChart, parseSimfile, secondsToBeat } from "../lib/simfile";
+import {
+  buildTimedChart,
+  parseSimfile,
+  secondsToBeat,
+  type Panel,
+  type TimedNoteEvent,
+} from "../lib/simfile";
 import { buildBotTimeline, sampleBotStateAtBeat } from "./DancingBotWindow";
 import { buildSteppingScenario } from "../test/steppingScenario";
 
 const panelSymbols = ["L", "D", "U", "R"];
+
+const buildHoldEndBeatMap = (
+  events: readonly TimedNoteEvent[],
+): Map<string, number> => {
+  const activeHeads = new Map<Panel, number>();
+  const holdEndBeats = new Map<string, number>();
+
+  for (const event of events) {
+    if (event.kind === "hold-head" || event.kind === "roll-head") {
+      activeHeads.set(event.panel, event.beat);
+      continue;
+    }
+
+    if (event.kind !== "hold-tail") {
+      continue;
+    }
+
+    const startBeat = activeHeads.get(event.panel);
+    if (startBeat !== undefined) {
+      holdEndBeats.set(`${event.panel}:${startBeat.toFixed(6)}`, event.beat);
+      activeHeads.delete(event.panel);
+    }
+  }
+
+  return holdEndBeats;
+};
 
 const buildAnimationSnapshot = (measureRows: string[]) => {
   const steps = measureRows.flatMap((row, rowIndex) => {
@@ -65,6 +98,95 @@ const getAngleDelta = (fromAngle: number, toAngle: number): number => {
 };
 
 describe("DancingBotWindow animation sampling", () => {
+  it("briefly lifts a foot for an isolated mine before returning to its panel", () => {
+    const { document: simfile, timedChart } = buildSteppingScenario({
+      steps: [
+        { beat: 0, taps: "L" },
+        { beat: 1, mines: "L" },
+      ],
+    });
+    const botTimeline = buildBotTimeline(timedChart.events, new Map(), simfile);
+
+    expect(sampleBotStateAtBeat(botTimeline, simfile, 1).feet.left).toMatchObject({
+      panel: "left",
+      isLifted: true,
+      isCentered: false,
+    });
+    expect(sampleBotStateAtBeat(botTimeline, simfile, 1.25).feet.left).toMatchObject({
+      panel: "left",
+      isLifted: false,
+      isCentered: false,
+    });
+  });
+
+  it("moves feet to center for Chiaroscuro's rapid all-panel mine run", () => {
+    const simfile = parseSimfile(chiaroscuroSource);
+    const chart = simfile.charts[0];
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const botTimeline = buildBotTimeline(timedChart.events, new Map(), simfile);
+    const mineEvents = timedChart.events.filter(
+      (event) => event.kind === "mine" && event.measureIndex === 28,
+    );
+
+    expect(mineEvents).toHaveLength(14);
+
+    for (const mineEvent of mineEvents) {
+      const snapshot = sampleBotStateAtBeat(botTimeline, simfile, mineEvent.beat);
+
+      for (const foot of Object.values(snapshot.feet)) {
+        if (foot.panel === mineEvent.panel) {
+          expect(foot.isLifted || foot.isCentered).toBe(true);
+          expect(foot.isPressing).toBe(false);
+        }
+      }
+    }
+
+    expect(sampleBotStateAtBeat(botTimeline, simfile, mineEvents[0]!.beat).feet.left.isCentered).toBe(true);
+    expect(sampleBotStateAtBeat(botTimeline, simfile, mineEvents.at(-1)!.beat + 0.25).feet.left.isCentered).toBe(false);
+  });
+
+  it("holds the right foot still while the left foot centers through Hard 12's mine run", () => {
+    const simfile = parseSimfile(chiaroscuroSource);
+    const chart = simfile.charts.find(
+      ({ difficulty, meter }) => difficulty === "Hard" && meter === 12,
+    );
+
+    expect(chart).toBeTruthy();
+
+    const timedChart = buildTimedChart(simfile, chart!);
+    const botTimeline = buildBotTimeline(
+      timedChart.events,
+      buildHoldEndBeatMap(timedChart.events),
+      simfile,
+    );
+    const snapshots = [127.5, 128, 128.5, 129, 129.5, 130, 130.5, 131, 131.5]
+      .map((beat) => sampleBotStateAtBeat(botTimeline, simfile, beat));
+    const preMineSnapshot = sampleBotStateAtBeat(botTimeline, simfile, 127);
+    const centerTransitionSnapshot = sampleBotStateAtBeat(botTimeline, simfile, 127.25);
+    const initialSnapshot = snapshots[0]!;
+
+    expect(centerTransitionSnapshot.feet.left).toMatchObject({ isCentered: true });
+    expect(centerTransitionSnapshot.feet.left.y).toBeGreaterThan(preMineSnapshot.feet.left.y);
+    expect(centerTransitionSnapshot.feet.left.y).toBeLessThan(initialSnapshot.feet.left.y);
+
+    for (const snapshot of snapshots) {
+      expect(snapshot.feet.left.isCentered).toBe(true);
+      expect(snapshot.feet.right).toMatchObject({
+        panel: "right",
+        isHolding: true,
+        x: initialSnapshot.feet.right.x,
+        y: initialSnapshot.feet.right.y,
+      });
+      expect(snapshot.feet.left).toMatchObject({
+        x: initialSnapshot.feet.left.x,
+        y: initialSnapshot.feet.left.y,
+      });
+    }
+  });
+
   it("keeps Ferrari's DR bracket sourced as heel-down toe-right", () => {
     const { simfile, botTimeline } = buildFerrariSnapshot();
     const ferrariDrBracketStep = botTimeline.right.find(

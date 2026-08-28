@@ -142,6 +142,7 @@ const SLOW_BRACKET = 300;
 const TWISTED_FOOT = 100000;
 const BRACKETTAP = 400;
 const HOLDSWITCH = 55;
+const HOLD_CROSSOVER = 850;
 const MINE = 10000;
 const FOOTSWITCH = 325;
 const MISSED_FOOTSWITCH = 500;
@@ -149,6 +150,7 @@ const FACING = 2;
 const DISTANCE = 6;
 const SPIN = 1000;
 const SIDESWITCH = 130;
+const CROSSOVER = 150;
 const JACK_THRESHOLD = 0.1;
 const SLOW_BRACKET_THRESHOLD = 0.15;
 const SLOW_FOOTSWITCH_THRESHOLD = 0.2;
@@ -518,7 +520,7 @@ const buildRows = (
       }
     }
 
-    if (playableEvents.length > 0) {
+    if (playableEvents.length > 0 || mineEvents.length > 0) {
       const notes = Array.from({ length: COLUMN_COUNT }, () =>
         createEmptyNote(),
       );
@@ -601,7 +603,6 @@ const buildRows = (
         columnCount: COLUMN_COUNT,
         noteCount: playableEvents.length,
       });
-
       pendingMines.fill(0);
     } else {
       for (const mineEvent of mineEvents) {
@@ -652,6 +653,13 @@ const initResultState = (
   columns: FootValue[],
 ): State => {
   const resultState = createEmptyState();
+  const rowHasHold =
+    row.holdMask !== 0 ||
+    row.notes.some(
+      (note) =>
+        (note.type === "hold-head" || note.type === "roll-head") &&
+        note.holdLength > EPSILON,
+    );
 
   for (let column = 0; column < columns.length; column += 1) {
     const foot = columns[column];
@@ -677,13 +685,18 @@ const initResultState = (
       continue;
     }
 
-    if (row.holds[column].type !== "empty") {
+    const isHolding =
+      row.holds[column].type !== "empty" ||
+      ((row.notes[column].type === "hold-head" ||
+        row.notes[column].type === "roll-head") &&
+        row.notes[column].holdLength > EPSILON);
+    if (isHolding) {
       resultState.isTheFootHolding[foot] = true;
     }
 
     const bit = 1 << column;
     const footMask = footMasks[foot];
-    if ((row.holdMask & bit) !== 0) {
+    if (isHolding) {
       resultState.holdingMask |= footMask;
     }
     if (
@@ -702,6 +715,13 @@ const initResultState = (
     }
 
     const initialFoot = initialState.combinedColumns[column];
+    const isMinedUnheldFoot =
+      (row.noteCount === 0 || rowHasHold) &&
+      (row.mineMask & (1 << column)) !== 0 &&
+      !initialState.isTheFootHolding[initialFoot];
+    if (isMinedUnheldFoot) {
+      continue;
+    }
     if (
       initialFoot === FootValue.LeftHeel ||
       initialFoot === FootValue.RightHeel
@@ -757,6 +777,9 @@ const setFootPlacement = (row: Row, state: State): void => {
 
 const getFootPlacementPermutations = (row: Row): FootValue[][] => {
   const fullKey = row.noteMask | row.holdMask;
+  if (fullKey === 0 && row.mineMask !== 0) {
+    return [new Array<FootValue>(COLUMN_COUNT).fill(FootValue.None)];
+  }
   const fullPlacements = layout.permuteCache.get(fullKey);
   if (fullPlacements) {
     return fullPlacements;
@@ -930,13 +953,25 @@ const isCrossoverState = (resultState: State): boolean => {
   return rightPosition.x < leftPosition.x;
 };
 
+const wasColumnActiveInPreviousRow = (
+  previousRow: Row | undefined,
+  column: number,
+): boolean =>
+  previousRow !== undefined &&
+  (previousRow.notes[column].type !== "empty" ||
+    previousRow.holds[column].type !== "empty");
+
 const didFootswitch = (
   initialState: State,
   resultState: State,
   row: Row,
+  previousRow: Row | undefined,
 ): boolean => {
   for (let column = 0; column < row.columnCount; column += 1) {
-    if (row.notes[column].type === "empty") {
+    if (
+      row.notes[column].type === "empty" ||
+      !wasColumnActiveInPreviousRow(previousRow, column)
+    ) {
       continue;
     }
 
@@ -1007,7 +1042,7 @@ const getRowDiagnosticKinds = (
     kinds.push("bracket");
   }
 
-  if (didFootswitch(initialState, resultState, row)) {
+  if (didFootswitch(initialState, resultState, row, rows[rowIndex - 1])) {
     kinds.push("footswitch");
   }
 
@@ -1091,6 +1126,7 @@ class StepParityCostCalculator {
 
     let cost = 0;
     cost += this.calcMineCost(resultState, row);
+    cost += this.calcHoldCrossoverCost(resultState, row);
     cost += this.calcHoldSwitchCost(initialState, resultState, row);
     cost += this.calcBracketTapCost(
       initialState,
@@ -1125,7 +1161,13 @@ class StepParityCostCalculator {
     cost += this.calcTwistedFootCost(resultState);
     cost += this.calcFacingCosts(resultState);
     cost += this.calcSpinCosts(initialState, resultState);
-    cost += this.calcFootswitchCost(initialState, columns, row, elapsedTime);
+    cost += this.calcFootswitchCost(
+      initialState,
+      columns,
+      row,
+      rows[rowIndex - 1],
+      elapsedTime,
+    );
     cost += this.calcSideSwitchCost(initialState, resultState, columns);
     cost += this.calcMissedFootswitchCost(row, jackedLeft, jackedRight);
     cost += this.calcJackCost(
@@ -1147,6 +1189,12 @@ class StepParityCostCalculator {
 
     if (!this.config.allowCrossovers && isCrossoverState(resultState)) {
       cost += HARD_DISABLE_PENALTY;
+    } else if (isCrossoverState(resultState)) {
+      // Even when crossovers are allowed, prefer the natural stance when the
+      // cost is otherwise comparable. A fully-airborne foot (e.g. after dodging
+      // a mine run) incurs no facing penalty, which would otherwise make an
+      // unnecessary crossover artificially cheap.
+      cost += CROSSOVER;
     }
 
     return cost;
@@ -1167,6 +1215,29 @@ class StepParityCostCalculator {
     }
 
     return 0;
+  }
+
+  private calcHoldCrossoverCost(resultState: State, row: Row): number {
+    let cost = 0;
+
+    for (let column = 0; column < row.columnCount; column += 1) {
+      const note = row.notes[column];
+      if (note.type !== "hold-head" && note.type !== "roll-head") {
+        continue;
+      }
+
+      const foot = resultState.combinedColumns[column];
+      const isOppositeSideHold =
+        (column === panelIndexByName.left &&
+          (foot === FootValue.RightHeel || foot === FootValue.RightToe)) ||
+        (column === panelIndexByName.right &&
+          (foot === FootValue.LeftHeel || foot === FootValue.LeftToe));
+      if (isOppositeSideHold) {
+        cost += HOLD_CROSSOVER;
+      }
+    }
+
+    return cost;
   }
 
   private calcHoldSwitchCost(
@@ -1451,10 +1522,15 @@ class StepParityCostCalculator {
     initialState: State,
     columns: FootValue[],
     row: Row,
+    previousRow: Row | undefined,
     elapsedTime: number,
   ): number {
     if (!this.config.allowFootswitches) {
       for (let column = 0; column < row.columnCount; column += 1) {
+        if (!wasColumnActiveInPreviousRow(previousRow, column)) {
+          continue;
+        }
+
         if (
           initialState.combinedColumns[column] === FootValue.None ||
           columns[column] === FootValue.None
@@ -1472,16 +1548,23 @@ class StepParityCostCalculator {
       }
     }
 
-    if (
-      elapsedTime < SLOW_FOOTSWITCH_THRESHOLD ||
-      elapsedTime >= SLOW_FOOTSWITCH_IGNORE ||
-      row.mineMask !== 0
-    ) {
+    if (elapsedTime >= SLOW_FOOTSWITCH_IGNORE) {
       return 0;
     }
 
-    const timeScaled = elapsedTime - SLOW_FOOTSWITCH_THRESHOLD;
+    const footswitchCost =
+      elapsedTime < SLOW_FOOTSWITCH_THRESHOLD
+        ? row.noteCount > 1
+          ? FOOTSWITCH
+          : 0
+        : ((elapsedTime - SLOW_FOOTSWITCH_THRESHOLD) /
+            elapsedTime) *
+          FOOTSWITCH;
     for (let column = 0; column < row.columnCount; column += 1) {
+      if (!wasColumnActiveInPreviousRow(previousRow, column)) {
+        continue;
+      }
+
       if (
         initialState.combinedColumns[column] === FootValue.None ||
         columns[column] === FootValue.None
@@ -1494,9 +1577,7 @@ class StepParityCostCalculator {
         initialState.combinedColumns[column] !==
           otherPartOfFoot[columns[column]]
       ) {
-        return (
-          (timeScaled / (SLOW_FOOTSWITCH_THRESHOLD + timeScaled)) * FOOTSWITCH
-        );
+        return footswitchCost;
       }
     }
 

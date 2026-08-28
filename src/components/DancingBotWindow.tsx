@@ -47,6 +47,7 @@ export interface BotStep {
   fromPanel: Panel;
   toPanel: Panel;
   isLifted: boolean;
+  isCentered?: boolean;
   heelPanel: Panel | null;
   toePanel: Panel | null;
   activePanels: Panel[];
@@ -74,6 +75,7 @@ interface BotFootPose {
   isHolding: boolean;
   isPressing: boolean;
   isLifted: boolean;
+  isCentered: boolean;
   lastStepBeat: number;
 }
 
@@ -218,6 +220,10 @@ const botHoldScale = 1.06;
 const botPressScale = 1.12;
 const botTravelLiftScale = 0.08;
 const botFootswitchLiftHeight = 9;
+const botMineLiftDurationSeconds = 0.1;
+const botMineClusterGapSeconds = 0.16;
+const botMineCenterRecoverySeconds = 0.02;
+const botMineCenterPanelCoverage = 3;
 const frameProbeReportIntervalMs = 1000;
 const frameProbeJankThresholdMs = 1000 / 30;
 const botPadArrowColorsByStyle: Record<BotPadStyleId, Record<Panel, string>> = {
@@ -692,11 +698,65 @@ const getBracketCenter = (heelTarget: BotPanelTarget, toeTarget: BotPanelTarget)
   y: heelTarget.y + (toeTarget.y - heelTarget.y) * 0.36,
 });
 
+const getMineCluster = (mineEvents: TimedNoteEvent[], mineIndex: number): {
+  endTimeSeconds: number;
+  blocksAllArrows: boolean;
+} => {
+  let firstMineIndex = mineIndex;
+  let lastMineIndex = mineIndex;
+
+  while (
+    firstMineIndex > 0 &&
+    mineEvents[firstMineIndex]!.timeSeconds - mineEvents[firstMineIndex - 1]!.timeSeconds <= botMineClusterGapSeconds
+  ) {
+    firstMineIndex -= 1;
+  }
+
+  while (
+    lastMineIndex < mineEvents.length - 1 &&
+    mineEvents[lastMineIndex + 1]!.timeSeconds - mineEvents[lastMineIndex]!.timeSeconds <= botMineClusterGapSeconds
+  ) {
+    lastMineIndex += 1;
+  }
+
+  const firstMine = mineEvents[firstMineIndex]!;
+  const lastMine = mineEvents[lastMineIndex]!;
+  const minedPanels = new Set(
+    mineEvents
+      .slice(firstMineIndex, lastMineIndex + 1)
+      .map((mineEvent) => mineEvent.panel),
+  );
+
+  return {
+    endTimeSeconds: lastMine.timeSeconds,
+    blocksAllArrows:
+      lastMine.timeSeconds - firstMine.timeSeconds >= botMineLiftDurationSeconds &&
+      minedPanels.size >= botMineCenterPanelCoverage,
+  };
+};
+
+const getOccupiedPanels = (step: BotStep): Panel[] => {
+  if (step.isLifted || step.isCentered) {
+    return [];
+  }
+
+  return step.activePanels.length > 0 ? step.activePanels : [step.toPanel];
+};
+
 const getStepPoseTarget = (
-  step: Pick<BotStep, 'foot' | 'fromPanel' | 'toPanel' | 'heelPanel' | 'toePanel'>,
+  step: Pick<BotStep, 'foot' | 'fromPanel' | 'toPanel' | 'heelPanel' | 'toePanel' | 'isCentered'>,
   footTargets: BotFootTargetMap,
   footAngles: BotFootAngleMap,
 ): { x: number; y: number; angle: number; panel: Panel } => {
+  if (step.isCentered) {
+    return {
+      x: 50,
+      y: 50,
+      angle: footAngles[step.foot][step.toPanel],
+      panel: step.toPanel,
+    };
+  }
+
   const heelTarget = step.heelPanel ? footTargets[step.foot][step.heelPanel] : null;
   const toeTarget = step.toePanel ? footTargets[step.foot][step.toePanel] : null;
   const heelAngle = step.heelPanel ? footAngles[step.foot][step.heelPanel] : null;
@@ -959,6 +1019,113 @@ const addFootswitchReleaseSteps = (stepsByFoot: Record<FootName, BotStep[]>): Re
   return stepsByFoot;
 };
 
+const addMineAvoidanceSteps = (
+  stepsByFoot: Record<FootName, BotStep[]>,
+  events: TimedNoteEvent[],
+  simfile: SimfileDocument,
+): Record<FootName, BotStep[]> => {
+  const mineEvents = events
+    .filter((event) => event.kind === 'mine')
+    .sort((left, right) => left.timeSeconds - right.timeSeconds);
+
+  for (const mineEvent of mineEvents) {
+    for (const footName of footNames) {
+      const occupiedStep = stepsByFoot[footName].reduce<BotStep | null>(
+        (latestStep, step) =>
+          step.hitTimeSeconds <= mineEvent.timeSeconds &&
+          step.hitTimeSeconds > (latestStep?.hitTimeSeconds ?? Number.NEGATIVE_INFINITY)
+            ? step
+            : latestStep,
+        null,
+      );
+
+      if (!occupiedStep || !getOccupiedPanels(occupiedStep).includes(mineEvent.panel)) {
+        continue;
+      }
+
+      const mineIndex = mineEvents.indexOf(mineEvent);
+      const mineCluster = getMineCluster(mineEvents, mineIndex);
+      const isCentered = mineCluster.blocksAllArrows;
+      const recoveryTimeSeconds = isCentered
+        ? mineCluster.endTimeSeconds + botMineCenterRecoverySeconds
+        : mineEvent.timeSeconds + botMineLiftDurationSeconds;
+      const upcomingPress = stepsByFoot[footName].find(
+        (step) =>
+          step.activePanels.length > 0 &&
+          step.hitTimeSeconds > mineEvent.timeSeconds &&
+          step.hitTimeSeconds <= recoveryTimeSeconds,
+      );
+      const hasUpcomingPress = upcomingPress !== undefined;
+      const avoidanceMoveStartTimeSeconds = Math.max(
+        occupiedStep.moveEndTimeSeconds,
+        mineEvent.timeSeconds - botMoveLeadSeconds,
+      );
+
+      if (isCentered && upcomingPress) {
+        const avoidanceEndTimeSeconds = Math.min(
+          mineCluster.endTimeSeconds,
+          upcomingPress.hitTimeSeconds,
+        );
+        upcomingPress.moveStartTimeSeconds = Math.max(
+          upcomingPress.moveStartTimeSeconds,
+          avoidanceEndTimeSeconds,
+        );
+        upcomingPress.moveEndTimeSeconds = Math.max(
+          upcomingPress.moveEndTimeSeconds,
+          upcomingPress.moveStartTimeSeconds,
+        );
+      }
+
+      stepsByFoot[footName].push({
+        foot: footName,
+        footPart: null,
+        fromPanel: occupiedStep.toPanel,
+        toPanel: occupiedStep.toPanel,
+        isLifted: !isCentered,
+        isCentered,
+        heelPanel: null,
+        toePanel: null,
+        activePanels: [],
+        hitBeat: mineEvent.beat,
+        hitTimeSeconds: mineEvent.timeSeconds,
+        moveStartTimeSeconds: avoidanceMoveStartTimeSeconds,
+        moveEndTimeSeconds: mineEvent.timeSeconds,
+        holdUntilTimeSeconds: null,
+      });
+
+      if (!hasUpcomingPress) {
+        stepsByFoot[footName].push({
+          foot: footName,
+          footPart: null,
+          fromPanel: occupiedStep.toPanel,
+          toPanel: occupiedStep.toPanel,
+          isLifted: false,
+          isCentered: false,
+          heelPanel: null,
+          toePanel: null,
+          activePanels: [],
+          hitBeat: secondsToBeat(
+            recoveryTimeSeconds,
+            simfile.bpms,
+            simfile.stops,
+            simfile.metadata.offset,
+          ),
+          hitTimeSeconds: recoveryTimeSeconds,
+          moveStartTimeSeconds: recoveryTimeSeconds,
+          moveEndTimeSeconds: recoveryTimeSeconds,
+          holdUntilTimeSeconds: null,
+        });
+      }
+    }
+  }
+
+  for (const footName of footNames) {
+    stepsByFoot[footName].sort((left, right) => left.hitTimeSeconds - right.hitTimeSeconds);
+  }
+
+  return stepsByFoot;
+};
+
 const sampleBotState = (
   stepsByFoot: Record<FootName, BotStep[]>,
   panelTimeline: BotPanelTimeline,
@@ -997,6 +1164,7 @@ const sampleBotState = (
     let panel = restingTarget.panel;
     let scale = 1;
     let isLifted = completedStep?.isLifted ?? false;
+    let isCentered = completedStep?.isCentered ?? false;
     let moveProgress = 0;
     const isHolding =
       completedStep !== null &&
@@ -1034,6 +1202,7 @@ const sampleBotState = (
       angle = lerp(fromTarget.angle, toTarget.angle, nextMoveProgress);
       panel = toTarget.panel;
       isLifted = upcomingStep.isLifted;
+      isCentered = upcomingStep.isCentered ?? false;
       moveProgress = nextMoveProgress;
       scale = Math.max(scale, 1 + Math.sin(nextMoveProgress * Math.PI) * botTravelLiftScale * liftStrength);
 
@@ -1068,6 +1237,7 @@ const sampleBotState = (
         isHolding,
         isPressing,
         isLifted,
+        isCentered,
         lastStepBeat: completedStep?.hitBeat ?? Number.NEGATIVE_INFINITY,
       },
       completedStep,
@@ -1311,7 +1481,7 @@ const buildGreedyBotTimeline = (
     }
   }
 
-  return stepsByFoot;
+  return addMineAvoidanceSteps(stepsByFoot, events, simfile);
 };
 
 interface PlannedBotHit {
@@ -1496,7 +1666,7 @@ const buildParityBotTimeline = (
     }
   }
 
-  return addFootswitchReleaseSteps(stepsByFoot);
+  return addMineAvoidanceSteps(addFootswitchReleaseSteps(stepsByFoot), events, simfile);
 };
 
 export const buildBotTimeline = (
@@ -2064,7 +2234,7 @@ export function DancingBotWindow({
                     top: `${foot.y}%`,
                     transform: getBotFootTransform(foot),
                   }}
-                  title={`${footName} foot on ${foot.panel}`}
+                  title={`${footName} foot on ${foot.isCentered ? 'center' : foot.panel}`}
                 >
                   {selectedFootStyleOption.image ? (
                     <img

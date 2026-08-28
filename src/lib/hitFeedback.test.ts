@@ -60,6 +60,15 @@ describe("HitFeedbackTracker", () => {
 });
 
 describe("buildAssistHitEvents", () => {
+  it("excludes mines from assist tick events", () => {
+    const hits = buildAssistHitEvents([
+      event({ beat: 1, panel: "left" }),
+      event({ beat:2, panel: "right", kind: "mine" }),
+    ]);
+
+    expect(hits).toMatchObject([{ beat: 1, panel: "left", kind: "tap" }]);
+  });
+
   it("creates retriggers only for matching roll heads and tails", () => {
     const hits = buildAssistHitEvents([
       event({ beat: 2, panel: "down", kind: "roll-head" }),
