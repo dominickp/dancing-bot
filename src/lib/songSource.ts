@@ -2,10 +2,22 @@ import bossyAudioUrl from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bossy
 import bossyBackgroundUrl from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bg.png";
 import bossyBannerUrl from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bn.png";
 import bossySimfileText from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bossyremix.ssc?raw";
+import cherryBlossomAudioUrl from "../../example-simfiles/Cherry Blossom/music.ogg";
+import cherryBlossomBackgroundUrl from "../../example-simfiles/Cherry Blossom/BG.png";
+import cherryBlossomBannerUrl from "../../example-simfiles/Cherry Blossom/BN.png";
+import cherryBlossomSimfileText from "../../example-simfiles/Cherry Blossom/steps.sm?raw";
+import chiaroscuroAudioUrl from "../../example-simfiles/Chiaroscuro/chiaroscuro.ogg";
+import chiaroscuroBackgroundUrl from "../../example-simfiles/Chiaroscuro/chiaroscuro bg.png";
+import chiaroscuroBannerUrl from "../../example-simfiles/Chiaroscuro/chiaroscuro bn.png";
+import chiaroscuroSimfileText from "../../example-simfiles/Chiaroscuro/Chiaroscuro.sm?raw";
 import ferrariAudioUrl from "../../example-simfiles/Ferrari/Ferrari.ogg";
 import ferrariBackgroundUrl from "../../example-simfiles/Ferrari/ferrari-bg.png";
 import ferrariBannerUrl from "../../example-simfiles/Ferrari/ferrari.png";
 import ferrariSimfileText from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
+import glitterAudioUrl from "../../example-simfiles/Glitter/Glitter.ogg";
+import glitterBackgroundUrl from "../../example-simfiles/Glitter/BG.png";
+import glitterBannerUrl from "../../example-simfiles/Glitter/BN.png";
+import glitterSimfileText from "../../example-simfiles/Glitter/Glitter.sm?raw";
 import groovyAudioUrl from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.ogg";
 import groovySimfileText from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.sm?raw";
 import groovyBannerUrl from "../../example-simfiles/Groovy Rollercoaster Acid Trip/srpg3z65bn.png";
@@ -155,6 +167,26 @@ export const bundledSongSources: LoadedSongSource[] = [
     }),
   }),
   createSongSource({
+    id: "cherry-blossom",
+    sourceType: "bundled",
+    simfileText: cherryBlossomSimfileText,
+    resolver: createBundledResolver({
+      "music.ogg": cherryBlossomAudioUrl,
+      "BG.png": cherryBlossomBackgroundUrl,
+      "BN.png": cherryBlossomBannerUrl,
+    }),
+  }),
+  createSongSource({
+    id: "chiaroscuro",
+    sourceType: "bundled",
+    simfileText: chiaroscuroSimfileText,
+    resolver: createBundledResolver({
+      "chiaroscuro.ogg": chiaroscuroAudioUrl,
+      "chiaroscuro bg.png": chiaroscuroBackgroundUrl,
+      "chiaroscuro bn.png": chiaroscuroBannerUrl,
+    }),
+  }),
+  createSongSource({
     id: "bossy-jorts-speedy-mix",
     sourceType: "bundled",
     simfileText: bossySimfileText,
@@ -162,6 +194,16 @@ export const bundledSongSources: LoadedSongSource[] = [
       "bossyremix.ogg": bossyAudioUrl,
       "bg.png": bossyBackgroundUrl,
       "bn.png": bossyBannerUrl,
+    }),
+  }),
+  createSongSource({
+    id: "glitter",
+    sourceType: "bundled",
+    simfileText: glitterSimfileText,
+    resolver: createBundledResolver({
+      "Glitter.ogg": glitterAudioUrl,
+      "BG.png": glitterBackgroundUrl,
+      "BN.png": glitterBannerUrl,
     }),
   }),
   createSongSource({

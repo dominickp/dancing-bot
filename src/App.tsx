@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, ChangeEvent, FocusEvent } from 'react';
+import type {
+  CSSProperties,
+  ChangeEvent,
+  FocusEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+} from 'react';
 import type { SimfileDocument, TimedChart, TimedNoteEvent } from './lib/simfile';
 import { getBpmAtBeat } from './lib/simfile';
 import {
@@ -21,7 +28,7 @@ import {
 import type { BotFootStyleId, BotFormStyleId, BotPadStyleId } from './components/DancingBotWindow';
 import type { BotStep } from './components/DancingBotWindow';
 import { NotefieldPreview } from './components/NotefieldPreview';
-import { useChartPlayback } from './hooks/useChartPlayback';
+import { isEditableOrLocalKeyboardTarget, useChartPlayback } from './hooks/useChartPlayback';
 import type { PlaybackClock } from './hooks/useChartPlayback';
 import { buildMinimapHoldBands, buildMinimapRows } from './lib/minimap';
 import type { ParityDiagnosticKind, StepParityConfig } from './lib/parity';
@@ -39,6 +46,7 @@ const minPlaybackRate = 0.2;
 const maxPlaybackRate = 1.5;
 const playbackRateStep = 0.1;
 const defaultPlaybackRate = 1;
+const mobileZoomFactor = Math.exp(0.25);
 const playbackRateTicks = Array.from(
   { length: Math.round((maxPlaybackRate - minPlaybackRate) / playbackRateStep) + 1 },
   (_, index) => {
@@ -88,17 +96,36 @@ interface PlayfieldInteraction {
   startOffsetX: number;
 }
 
+interface MobileNotefieldGesture {
+  points: Map<number, { x: number; y: number }>;
+  startBeat: number;
+  startX: number;
+  startY: number;
+  startOffsetX: number;
+  startVisibleBeats: number;
+  startDistance: number | null;
+  lastMoveY: number;
+  lastMoveTime: number;
+  velocityY: number;
+  lastSeekBeat: number;
+  mode: 'pending' | 'pan' | 'seek';
+}
+
+type MobileView = 'chart' | 'bot' | 'settings';
+
 interface PersistedUiSettings {
   selectedBotFormStyle: BotFormStyleId;
   selectedBotFootStyle: BotFootStyleId;
   selectedBotPadStyle: BotPadStyleId;
   playbackRate: number;
   volume: number;
+  assistTicksEnabled: boolean;
   isBotPanelGlowEnabled: boolean;
   isBotPanelLightsEnabled: boolean;
   isBotCrossoverEnabled: boolean;
   isBotBracketEnabled: boolean;
   isBotFootswitchEnabled: boolean;
+  isBotFrameProbeEnabled: boolean;
   isParityHintOverlayEnabled: boolean;
   visibleBeats: number;
   playfieldOffsetX: number;
@@ -156,23 +183,87 @@ const defaultUiSettings: PersistedUiSettings = {
   selectedBotPadStyle: defaultBotPadStyle,
   playbackRate: 1,
   volume: 0.5,
+  assistTicksEnabled: false,
   isBotPanelGlowEnabled: true,
   isBotPanelLightsEnabled: true,
   isBotCrossoverEnabled: true,
   isBotBracketEnabled: true,
   isBotFootswitchEnabled: true,
+  isBotFrameProbeEnabled: false,
   isParityHintOverlayEnabled: true,
   visibleBeats: defaultVisibleBeats,
   playfieldOffsetX: 0,
   botWindowRect: defaultBotWindowRect,
-  isAppearanceSectionOpen: true,
-  isBehaviorSectionOpen: true,
+  isAppearanceSectionOpen: false,
+  isBehaviorSectionOpen: false,
   isToolbarHelpDismissed: false,
 };
 
 const botFormStyleIds: readonly BotFormStyleId[] = ['straight-wide', 'straight-minimal', 'heels-out', 'toes-out', 'slanted-right'];
 const botFootStyleIds: readonly BotFootStyleId[] = ['default', 'silhouette-white', 'shoe'];
 const botPadStyleIds: readonly BotPadStyleId[] = ['itg', 'ddr'];
+
+interface ControlsDialogRow {
+  action: string;
+  keyboard: ReactNode;
+  mouse: string;
+}
+
+interface ControlsDialogSection {
+  heading: string;
+  rows: ControlsDialogRow[];
+}
+
+const controlsDialogSections: ControlsDialogSection[] = [
+  {
+    heading: 'Playback',
+    rows: [
+      { action: 'Play / pause', keyboard: <kbd>SPACE</kbd>, mouse: '—' },
+    ],
+  },
+  {
+    heading: 'Chart navigation',
+    rows: [
+      { action: 'Step through chart', keyboard: <><kbd>↑</kbd> <kbd>↓</kbd></>, mouse: 'Scroll wheel' },
+      { action: 'Bigger jumps', keyboard: <><kbd>PgUp</kbd> <kbd>PgDn</kbd></>, mouse: '—' },
+      { action: 'Jump to start / end', keyboard: <><kbd>Home</kbd> <kbd>End</kbd></>, mouse: '—' },
+      { action: 'Seek to any beat', keyboard: '—', mouse: 'Click or drag the minimap' },
+    ],
+  },
+  {
+    heading: 'Zoom (arrow spacing)',
+    rows: [
+      { action: 'Zoom in', keyboard: <><kbd>+</kbd> or <kbd>=</kbd></>, mouse: 'CTRL + scroll up' },
+      { action: 'Zoom out', keyboard: <><kbd>−</kbd> or <kbd>_</kbd></>, mouse: 'CTRL + scroll down' },
+    ],
+  },
+  {
+    heading: 'Notefield position',
+    rows: [
+      {
+        action: 'Shift left / right',
+        keyboard: <><kbd>←</kbd> <kbd>→</kbd> <span>(SHIFT for fine steps)</span></>,
+        mouse: 'Drag the notefield',
+      },
+    ],
+  },
+  {
+    heading: 'Bot window',
+    rows: [
+      {
+        action: 'Move window',
+        keyboard: '—',
+        mouse: 'Drag the header',
+      },
+      {
+        action: 'Resize window',
+        keyboard: '—',
+        mouse: 'Drag the corner grip',
+      },
+      { action: 'Reset position / size', keyboard: '—', mouse: 'Reset button in the window header' },
+    ],
+  },
+];
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
@@ -218,6 +309,10 @@ const readPersistedUiSettings = (): PersistedUiSettings => {
           ? clampPlaybackRate(parsedValue.playbackRate)
           : defaultUiSettings.playbackRate,
       volume: typeof parsedValue.volume === 'number' ? clampVolume(parsedValue.volume) : defaultUiSettings.volume,
+      assistTicksEnabled:
+        typeof parsedValue.assistTicksEnabled === 'boolean'
+          ? parsedValue.assistTicksEnabled
+          : defaultUiSettings.assistTicksEnabled,
       isBotPanelGlowEnabled:
         typeof parsedValue.isBotPanelGlowEnabled === 'boolean'
           ? parsedValue.isBotPanelGlowEnabled
@@ -238,6 +333,10 @@ const readPersistedUiSettings = (): PersistedUiSettings => {
         typeof parsedValue.isBotFootswitchEnabled === 'boolean'
           ? parsedValue.isBotFootswitchEnabled
           : defaultUiSettings.isBotFootswitchEnabled,
+      isBotFrameProbeEnabled:
+        typeof parsedValue.isBotFrameProbeEnabled === 'boolean'
+          ? parsedValue.isBotFrameProbeEnabled
+          : defaultUiSettings.isBotFrameProbeEnabled,
       isParityHintOverlayEnabled:
         typeof parsedValue.isParityHintOverlayEnabled === 'boolean'
           ? parsedValue.isParityHintOverlayEnabled
@@ -490,7 +589,8 @@ const buildHoldSegments = (events: TimedNoteEvent[]): HoldSegment[] => {
 
 function App() {
   const persistedUiSettings = useMemo(readPersistedUiSettings, []);
-  const [isMobileUnsupported, setIsMobileUnsupported] = useState(false);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
+  const [mobileView, setMobileView] = useState<MobileView>('chart');
   const [selectedSongId, setSelectedSongId] = useState(bundledSongSources[0]?.id ?? '');
   const [selectedChartIndex, setSelectedChartIndex] = useState(0);
   const [selectedBotFormStyle, setSelectedBotFormStyle] = useState<BotFormStyleId>(persistedUiSettings.selectedBotFormStyle);
@@ -498,11 +598,13 @@ function App() {
   const [selectedBotPadStyle, setSelectedBotPadStyle] = useState<BotPadStyleId>(persistedUiSettings.selectedBotPadStyle);
   const [playbackRate, setPlaybackRate] = useState(persistedUiSettings.playbackRate);
   const [volume, setVolume] = useState(persistedUiSettings.volume);
+  const [assistTicksEnabled, setAssistTicksEnabled] = useState(persistedUiSettings.assistTicksEnabled);
   const [isBotPanelGlowEnabled, setIsBotPanelGlowEnabled] = useState(persistedUiSettings.isBotPanelGlowEnabled);
   const [isBotPanelLightsEnabled, setIsBotPanelLightsEnabled] = useState(persistedUiSettings.isBotPanelLightsEnabled);
   const [isBotCrossoverEnabled, setIsBotCrossoverEnabled] = useState(persistedUiSettings.isBotCrossoverEnabled);
   const [isBotBracketEnabled, setIsBotBracketEnabled] = useState(persistedUiSettings.isBotBracketEnabled);
   const [isBotFootswitchEnabled, setIsBotFootswitchEnabled] = useState(persistedUiSettings.isBotFootswitchEnabled);
+  const [isBotFrameProbeEnabled, setIsBotFrameProbeEnabled] = useState(persistedUiSettings.isBotFrameProbeEnabled);
   const [isParityHintOverlayEnabled, setIsParityHintOverlayEnabled] = useState(persistedUiSettings.isParityHintOverlayEnabled);
   const [localSongSource, setLocalSongSource] = useState<LoadedSongSource | null>(null);
   const [resolvedNoteskin, setResolvedNoteskin] = useState<ResolvedDanceNoteskin | null>(null);
@@ -515,10 +617,15 @@ function App() {
   const [isAppearanceSectionOpen, setIsAppearanceSectionOpen] = useState(persistedUiSettings.isAppearanceSectionOpen);
   const [isBehaviorSectionOpen, setIsBehaviorSectionOpen] = useState(persistedUiSettings.isBehaviorSectionOpen);
   const [isToolbarHelpDismissed, setIsToolbarHelpDismissed] = useState(persistedUiSettings.isToolbarHelpDismissed);
+  const [isControlsDialogOpen, setIsControlsDialogOpen] = useState(false);
   const songImportRef = useRef<HTMLInputElement | null>(null);
   const notefieldFrameRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
+  const controlsDialogRef = useRef<HTMLDivElement | null>(null);
+  const controlsDialogReturnFocusRef = useRef<HTMLElement | null>(null);
   const playfieldInteractionRef = useRef<PlayfieldInteraction | null>(null);
+  const mobileNotefieldGestureRef = useRef<MobileNotefieldGesture | null>(null);
+  const mobileInertiaFrameRef = useRef<number | null>(null);
   const botWindowInteractionRef = useRef<BotWindowInteraction | null>(null);
   const receptorRefs = useRef<Record<PanelName, HTMLDivElement | null>>({
     left: null,
@@ -584,7 +691,7 @@ function App() {
   const visualScale = clamp(Math.sqrt(defaultVisibleBeats / visibleBeats), minVisualScale, maxVisualScale);
   const laneGap = Math.round(baseLaneGap * visualScale);
   const sidePadding = Math.round(baseSidePadding * visualScale);
-  const measureGuideGutter = Math.max(Math.round(64 * visualScale), 48);
+  const measureGuideGutter = isCompactViewport ? 0 : Math.max(Math.round(64 * visualScale), 48);
   const playfieldWidth = Math.round(
     baseLaneWidth * visualScale * panelOrder.length + laneGap * (panelOrder.length - 1) + sidePadding * 2,
   );
@@ -599,7 +706,9 @@ function App() {
   const chartVerticalOffset = renderBufferBeats * pixelsPerBeat;
   const chartContentHeight = (selectedTimedChart.lastBeat + renderBufferBeats * 2) * pixelsPerBeat + receptorOffset;
   const totalChartBeats = Math.max(selectedTimedChart.lastBeat, 1);
-  const maxPlayfieldOffsetX = Math.max(0, (frameWidth - totalPlayfieldWidth) / 2);
+  const maxPlayfieldOffsetX = isCompactViewport
+    ? Math.max(0, totalPlayfieldWidth - frameWidth)
+    : Math.max(0, (frameWidth - totalPlayfieldWidth) / 2);
   const playfieldStyle = {
     '--playfield-width': `${totalPlayfieldWidth}px`,
     '--lane-track-width': `${playfieldWidth}px`,
@@ -635,6 +744,7 @@ function App() {
     lastBeat: selectedTimedChart.lastBeat,
     playbackRate,
     volume,
+    assistTicksEnabled,
     pixelsPerBeat,
     visibleBeats,
     minVisibleBeats,
@@ -724,16 +834,15 @@ function App() {
   );
 
   useEffect(() => {
-    const updateUnsupportedState = () => {
-      const hasCoarsePointer = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-      setIsMobileUnsupported(hasCoarsePointer || window.innerWidth <= 900);
+    const updateCompactViewport = () => {
+      setIsCompactViewport(window.innerWidth <= 900);
     };
 
-    updateUnsupportedState();
-    window.addEventListener('resize', updateUnsupportedState);
+    updateCompactViewport();
+    window.addEventListener('resize', updateCompactViewport);
 
     return () => {
-      window.removeEventListener('resize', updateUnsupportedState);
+      window.removeEventListener('resize', updateCompactViewport);
     };
   }, []);
 
@@ -766,7 +875,9 @@ function App() {
 
     const syncBotWindowRect = () => {
       const bounds = frame.getBoundingClientRect();
-      const nextMaxPlayfieldOffsetX = Math.max(0, (bounds.width - totalPlayfieldWidth) / 2);
+      const nextMaxPlayfieldOffsetX = isCompactViewport
+        ? Math.max(0, totalPlayfieldWidth - bounds.width)
+        : Math.max(0, (bounds.width - totalPlayfieldWidth) / 2);
 
       setFrameWidth(bounds.width);
       setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -nextMaxPlayfieldOffsetX, nextMaxPlayfieldOffsetX));
@@ -785,7 +896,7 @@ function App() {
     return () => {
       window.removeEventListener('resize', syncBotWindowRect);
     };
-  }, [totalPlayfieldWidth]);
+  }, [isCompactViewport, totalPlayfieldWidth]);
 
   useEffect(() => {
     if (frameWidth <= 0) {
@@ -794,6 +905,14 @@ function App() {
 
     setPlayfieldOffsetX((previousOffsetX) => clamp(previousOffsetX, -maxPlayfieldOffsetX, maxPlayfieldOffsetX));
   }, [frameWidth, maxPlayfieldOffsetX]);
+
+  useEffect(() => {
+    return () => {
+      if (mobileInertiaFrameRef.current !== null) {
+        window.cancelAnimationFrame(mobileInertiaFrameRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -808,11 +927,13 @@ function App() {
         selectedBotPadStyle,
         playbackRate,
         volume,
+        assistTicksEnabled,
         isBotPanelGlowEnabled,
         isBotPanelLightsEnabled,
         isBotCrossoverEnabled,
         isBotBracketEnabled,
         isBotFootswitchEnabled,
+        isBotFrameProbeEnabled,
         isParityHintOverlayEnabled,
         visibleBeats,
         playfieldOffsetX,
@@ -823,12 +944,14 @@ function App() {
       } satisfies PersistedUiSettings),
     );
   }, [
+    assistTicksEnabled,
     botWindowRect,
     isAppearanceSectionOpen,
     isBehaviorSectionOpen,
     isBotBracketEnabled,
     isBotCrossoverEnabled,
     isBotFootswitchEnabled,
+    isBotFrameProbeEnabled,
     isBotPanelGlowEnabled,
     isBotPanelLightsEnabled,
     isParityHintOverlayEnabled,
@@ -912,6 +1035,51 @@ function App() {
   }, [maxPlayfieldOffsetX]);
 
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Leave browser/OS shortcuts untouched.
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      if (isEditableOrLocalKeyboardTarget(event.target)) {
+        return;
+      }
+
+      if (event.key === '?') {
+        event.preventDefault();
+        setIsControlsDialogOpen(true);
+        return;
+      }
+
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+        return;
+      }
+
+      event.preventDefault();
+
+      const direction = event.key === 'ArrowRight' ? 1 : -1;
+      const step = event.shiftKey ? 6 : 24;
+
+      setPlayfieldOffsetX((previousOffsetX) =>
+        clamp(
+          previousOffsetX + direction * step,
+          -maxPlayfieldOffsetX,
+          maxPlayfieldOffsetX,
+        ),
+      );
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [maxPlayfieldOffsetX]);
+
+  useEffect(() => {
+    if (isControlsDialogOpen) {
+      controlsDialogRef.current?.focus();
+    }
+  }, [isControlsDialogOpen]);
+
+  useEffect(() => {
     let isDisposed = false;
 
     if (!selectedNoteskinOption) {
@@ -970,6 +1138,10 @@ function App() {
     setVolume(clampVolume(Number.parseFloat(event.target.value)));
   };
 
+  const handleAssistTicksToggle = () => {
+    setAssistTicksEnabled((currentValue) => !currentValue);
+  };
+
   const handleBotFormStyleChange = (nextStyle: BotFormStyleId) => {
     setSelectedBotFormStyle(nextStyle);
     restoreNotefieldFocus();
@@ -1020,6 +1192,11 @@ function App() {
     restoreNotefieldFocus();
   };
 
+  const handleBotFrameProbeToggle = () => {
+    setIsBotFrameProbeEnabled((currentValue) => !currentValue);
+    restoreNotefieldFocus();
+  };
+
   const handleParityHintOverlayToggle = () => {
     setIsParityHintOverlayEnabled((currentValue) => !currentValue);
   };
@@ -1030,6 +1207,24 @@ function App() {
 
   const handleBehaviorSectionOpenChange = (isOpen: boolean) => {
     setIsBehaviorSectionOpen(isOpen);
+  };
+
+  const openControlsDialog = () => {
+    controlsDialogReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setIsControlsDialogOpen(true);
+  };
+
+  const closeControlsDialog = () => {
+    setIsControlsDialogOpen(false);
+    controlsDialogReturnFocusRef.current?.focus();
+    controlsDialogReturnFocusRef.current = null;
+  };
+
+  const handleDialogBackdropPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      closeControlsDialog();
+    }
   };
 
   const handleImportSongFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1051,7 +1246,7 @@ function App() {
     }
   };
 
-  const seekFromMinimapPointer = (clientY: number) => {
+  const seekFromMinimapPointer = (clientX: number, clientY: number) => {
     const minimap = minimapRef.current;
 
     if (!minimap) {
@@ -1059,14 +1254,16 @@ function App() {
     }
 
     const bounds = minimap.getBoundingClientRect();
-    const ratio = clamp((clientY - bounds.top) / bounds.height, 0, 1);
+    const ratio = isCompactViewport
+      ? clamp((clientX - bounds.left) / bounds.width, 0, 1)
+      : clamp((clientY - bounds.top) / bounds.height, 0, 1);
     seekToBeat(selectedTimedChart.lastBeat * ratio);
   };
 
   const handleMinimapPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    seekFromMinimapPointer(event.clientY);
+    seekFromMinimapPointer(event.clientX, event.clientY);
   };
 
   const handleMinimapPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -1074,11 +1271,11 @@ function App() {
       return;
     }
 
-    seekFromMinimapPointer(event.clientY);
+    seekFromMinimapPointer(event.clientX, event.clientY);
   };
 
   const handlePlayfieldPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) {
+    if (isCompactViewport || event.button !== 0) {
       return;
     }
 
@@ -1090,6 +1287,267 @@ function App() {
       startOffsetX: playfieldOffsetX,
     };
     setIsPlayfieldDragging(true);
+  };
+
+  const getPointerDistance = (points: Map<number, { x: number; y: number }>): number | null => {
+    const [firstPoint, secondPoint] = [...points.values()];
+
+    if (!firstPoint || !secondPoint) {
+      return null;
+    }
+
+    return Math.hypot(secondPoint.x - firstPoint.x, secondPoint.y - firstPoint.y);
+  };
+
+  const startMobileNotefieldInertia = (initialVelocity: number, startBeat: number) => {
+    let currentBeat = startBeat;
+    let velocity = initialVelocity;
+    let previousTime = performance.now();
+
+    const continueInertia = (time: number) => {
+      const elapsed = Math.min(time - previousTime, 48);
+      previousTime = time;
+      velocity *= Math.exp(-0.007 * elapsed);
+
+      if (Math.abs(velocity) < 0.001) {
+        mobileInertiaFrameRef.current = null;
+        return;
+      }
+
+      const nextBeat = clamp(currentBeat + velocity * elapsed, 0, selectedTimedChart.lastBeat);
+
+      if (nextBeat === currentBeat) {
+        mobileInertiaFrameRef.current = null;
+        return;
+      }
+
+      currentBeat = nextBeat;
+      seekToBeat(currentBeat);
+      mobileInertiaFrameRef.current = window.requestAnimationFrame(continueInertia);
+    };
+
+    mobileInertiaFrameRef.current = window.requestAnimationFrame(continueInertia);
+  };
+
+  const beginMobileNotefieldGesture = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isCompactViewport || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    if (mobileInertiaFrameRef.current !== null) {
+      window.cancelAnimationFrame(mobileInertiaFrameRef.current);
+      mobileInertiaFrameRef.current = null;
+    }
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {}
+
+    const currentGesture = mobileNotefieldGestureRef.current ?? {
+      points: new Map(),
+      startBeat: displayBeat,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffsetX: playfieldOffsetX,
+      startVisibleBeats: visibleBeats,
+      startDistance: null,
+      lastMoveY: event.clientY,
+      lastMoveTime: performance.now(),
+      velocityY: 0,
+      lastSeekBeat: displayBeat,
+      mode: 'pending' as const,
+    };
+    currentGesture.points.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (currentGesture.points.size === 1) {
+      currentGesture.startBeat = displayBeat;
+      currentGesture.startX = event.clientX;
+      currentGesture.startY = event.clientY;
+      currentGesture.startOffsetX = playfieldOffsetX;
+      currentGesture.startVisibleBeats = visibleBeats;
+      currentGesture.startDistance = null;
+      currentGesture.lastMoveY = event.clientY;
+      currentGesture.lastMoveTime = performance.now();
+      currentGesture.velocityY = 0;
+      currentGesture.lastSeekBeat = displayBeat;
+      currentGesture.mode = 'pending';
+    } else if (currentGesture.points.size === 2) {
+      currentGesture.startVisibleBeats = visibleBeats;
+      currentGesture.startDistance = getPointerDistance(currentGesture.points);
+    }
+
+    mobileNotefieldGestureRef.current = currentGesture;
+  };
+
+  const updateMobileNotefieldGesture = (event: React.PointerEvent<HTMLDivElement>) => {
+    const currentGesture = mobileNotefieldGestureRef.current;
+
+    if (!isCompactViewport || !currentGesture || !currentGesture.points.has(event.pointerId)) {
+      return;
+    }
+
+    event.preventDefault();
+    currentGesture.points.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (currentGesture.points.size >= 2 && currentGesture.startDistance) {
+      const distance = getPointerDistance(currentGesture.points);
+
+      if (distance) {
+        setVisibleBeats(
+          clamp(
+            currentGesture.startVisibleBeats * (currentGesture.startDistance / distance),
+            minVisibleBeats,
+            maxVisibleBeats,
+          ),
+        );
+      }
+      return;
+    }
+
+    const deltaX = event.clientX - currentGesture.startX;
+    const deltaY = event.clientY - currentGesture.startY;
+
+    if (currentGesture.mode === 'pending' && Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= 8) {
+      currentGesture.mode = Math.abs(deltaX) > Math.abs(deltaY) ? 'pan' : 'seek';
+    }
+
+    if (currentGesture.mode === 'pan') {
+      setPlayfieldOffsetX(
+        clamp(
+          currentGesture.startOffsetX + deltaX,
+          -maxPlayfieldOffsetX,
+          maxPlayfieldOffsetX,
+        ),
+      );
+      return;
+    }
+
+    const frameHeight = event.currentTarget.getBoundingClientRect().height;
+
+    if (currentGesture.mode === 'seek' && frameHeight > 0) {
+      const elapsed = Math.max(performance.now() - currentGesture.lastMoveTime, 1);
+      const nextVelocityY = (event.clientY - currentGesture.lastMoveY) / elapsed;
+      const nextBeat = clamp(
+        currentGesture.startBeat - ((event.clientY - currentGesture.startY) / frameHeight) * currentGesture.startVisibleBeats,
+        0,
+        selectedTimedChart.lastBeat,
+      );
+
+      currentGesture.velocityY = currentGesture.velocityY * 0.35 + nextVelocityY * 0.65;
+      currentGesture.lastMoveY = event.clientY;
+      currentGesture.lastMoveTime = performance.now();
+      currentGesture.lastSeekBeat = nextBeat;
+      seekToBeat(nextBeat);
+    }
+  };
+
+  const endMobileNotefieldGesture = (event: React.PointerEvent<HTMLDivElement>) => {
+    const currentGesture = mobileNotefieldGestureRef.current;
+
+    if (!currentGesture) {
+      return;
+    }
+
+    const shouldStartInertia =
+      currentGesture.points.size === 1 &&
+      currentGesture.mode === 'seek' &&
+      Math.abs(currentGesture.velocityY) > 0.08;
+    const inertiaVelocity = -((currentGesture.velocityY / event.currentTarget.getBoundingClientRect().height) * currentGesture.startVisibleBeats);
+    const inertiaStartBeat = currentGesture.lastSeekBeat;
+
+    currentGesture.points.delete(event.pointerId);
+
+    if (currentGesture.points.size === 0) {
+      mobileNotefieldGestureRef.current = null;
+      if (shouldStartInertia) {
+        startMobileNotefieldInertia(inertiaVelocity, inertiaStartBeat);
+      }
+      return;
+    }
+
+    const remainingPoint = [...currentGesture.points.values()][0];
+
+    if (remainingPoint) {
+      currentGesture.startBeat = displayBeat;
+      currentGesture.startX = remainingPoint.x;
+      currentGesture.startY = remainingPoint.y;
+      currentGesture.startOffsetX = playfieldOffsetX;
+      currentGesture.startVisibleBeats = visibleBeats;
+      currentGesture.startDistance = null;
+      currentGesture.lastMoveY = remainingPoint.y;
+      currentGesture.lastMoveTime = performance.now();
+      currentGesture.velocityY = 0;
+      currentGesture.lastSeekBeat = displayBeat;
+      currentGesture.mode = 'pending';
+    }
+  };
+
+  const handleMinimapKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const stepBeatsByKey: Record<string, number> = {
+      ArrowUp: -1,
+      ArrowDown: 1,
+      PageUp: -4,
+      PageDown: 4,
+    };
+
+    if (event.key in stepBeatsByKey) {
+      event.preventDefault();
+      seekToBeat(displayBeat + stepBeatsByKey[event.key]);
+      return;
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault();
+      seekToBeat(0);
+      return;
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault();
+      seekToBeat(selectedTimedChart.lastBeat);
+    }
+  };
+
+  const adjustBotWindowRectByKeyboard = (
+    adjustRect: (rect: BotWindowRect) => BotWindowRect,
+  ) => {
+    const frame = notefieldFrameRef.current;
+
+    if (!frame) {
+      return;
+    }
+
+    const bounds = frame.getBoundingClientRect();
+
+    setBotWindowRect((previousRect) => clampBotWindowRect(adjustRect(previousRect), bounds.width, bounds.height));
+  };
+
+  const moveBotWindowByKeyboard = (deltaX: number, deltaY: number) => {
+    adjustBotWindowRectByKeyboard((rect) => ({
+      ...rect,
+      x: rect.x + deltaX,
+      y: rect.y + deltaY,
+    }));
+  };
+
+  const resizeBotWindowByKeyboard = (deltaWidth: number, deltaHeight: number) => {
+    adjustBotWindowRectByKeyboard((rect) => ({
+      ...rect,
+      width: rect.width + deltaWidth,
+      height: rect.height + deltaHeight,
+    }));
+  };
+
+  const resetBotWindowPosition = () => {
+    const frame = notefieldFrameRef.current;
+
+    if (!frame) {
+      return;
+    }
+
+    const bounds = frame.getBoundingClientRect();
+
+    setBotWindowRect(getDockedBotWindowRect(bounds.width, bounds.height));
   };
 
   const beginBotWindowInteraction = (
@@ -1200,24 +1658,29 @@ function App() {
     );
   };
 
-  if (isMobileUnsupported) {
-    return (
-      <main className="mobile-warning-screen">
-        <div className="mobile-warning-card">
-          <p className="eyebrow">Desktop Only</p>
-          <h1>Dancing Bot is not supported on mobile yet.</h1>
-          <p className="mobile-warning-copy">
-            Dancing Bot needs a larger screen and a mouse and keyboard for controls. Open it on a laptop or desktop browser to use
-            the notefield and bot window properly.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className="app-shell">
-      <header className="toolbar">
+    <main className={`app-shell${isCompactViewport ? ` is-compact-viewport is-mobile-view-${mobileView}` : ''}`}>
+      <header className="mobile-topbar">
+        <div className="mobile-topbar-title">
+          <p className="eyebrow">Dancing Bot</p>
+          <h1>{displayTitle}</h1>
+        </div>
+        <nav className="mobile-view-tabs" aria-label="Mobile workspace views">
+          {(['chart', 'bot', 'settings'] as const).map((view) => (
+            <button
+              key={view}
+              type="button"
+              className={`mobile-view-tab${mobileView === view ? ' is-active' : ''}`}
+              aria-pressed={mobileView === view}
+              onClick={() => setMobileView(view)}
+            >
+              {view}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      <header className="toolbar desktop-toolbar">
         <div className="toolbar-title">
           <p className="eyebrow">Dancing Bot</p>
           <h1>{displayTitle}</h1>
@@ -1291,8 +1754,16 @@ function App() {
 
       {isToolbarHelpDismissed ? null : (
         <div className="toolbar-help" role="note" aria-label="Playback controls help">
-          <p className="toolbar-help-copy">
-            <strong>Controls:</strong> Toggle playback with <strong>SPACE</strong>. Navigate the notefield with <strong>SCROLL</strong> or the minimap. Adjust arrow spacing with <strong>CTRL + SCROLL</strong>. Drag the notefield left or right to recenter it.
+          <p className="toolbar-help-line">
+            <kbd>SPACE</kbd> play · <kbd>↑</kbd>/<kbd>↓</kbd> navigate · <kbd>−</kbd>/<kbd>+</kbd> zoom ·{' '}
+            <button
+              type="button"
+              className="toolbar-help-link"
+              onClick={openControlsDialog}
+              aria-haspopup="dialog"
+            >
+              ? all controls
+            </button>
           </p>
           <button
             type="button"
@@ -1305,7 +1776,7 @@ function App() {
         </div>
       )}
 
-      <section className="thin-toolbar" aria-label="Playback controls">
+      <section className="thin-toolbar desktop-controls" aria-label="Playback controls">
         <div className="thin-toolbar-group" aria-label="Tempo metrics">
           <span className="toolbar-metric-chip toolbar-metric-chip-bpm">BPM {currentBpm.toFixed(currentBpmPrecision)}</span>
           <span className="toolbar-metric-chip toolbar-metric-chip-highlight toolbar-metric-chip-effective">
@@ -1360,7 +1831,17 @@ function App() {
               <span className="thin-toolbar-rate-value">{Math.round(volume * 100)}%</span>
             </div>
           </label>
+
         </div>
+
+        <button
+          type="button"
+          className="toolbar-button thin-toolbar-button"
+          aria-haspopup="dialog"
+          onClick={openControlsDialog}
+        >
+          Controls
+        </button>
 
         <button
           type="button"
@@ -1372,6 +1853,15 @@ function App() {
             ? `Pattern hints on (${parityHintDiagnostics.length})`
             : 'Pattern hints off'}
         </button>
+
+        <button
+          type="button"
+          className={`toolbar-button thin-toolbar-button${assistTicksEnabled ? ' is-enabled' : ''}`}
+          aria-pressed={assistTicksEnabled}
+          onClick={handleAssistTicksToggle}
+        >
+          {assistTicksEnabled ? 'Assist tick on' : 'Assist tick off'}
+        </button>
       </section>
 
       <NotefieldPreview
@@ -1379,6 +1869,7 @@ function App() {
           <DancingBotWindow
             botTimeline={botTimeline}
             botWindowRect={botWindowRect}
+            isDocked={isCompactViewport}
             currentBeat={displayBeat}
             isPlaying={isPlaying}
             simfile={simfile}
@@ -1392,6 +1883,7 @@ function App() {
             isCrossoverEnabled={isBotCrossoverEnabled}
             isBracketEnabled={isBotBracketEnabled}
             isFootswitchEnabled={isBotFootswitchEnabled}
+            isFrameProbeEnabled={isBotFrameProbeEnabled}
             isAppearanceSectionOpen={isAppearanceSectionOpen}
             isBehaviorSectionOpen={isBehaviorSectionOpen}
             onFormStyleChange={handleBotFormStyleChange}
@@ -1402,9 +1894,13 @@ function App() {
             onCrossoverToggle={handleBotCrossoverToggle}
             onBracketToggle={handleBotBracketToggle}
             onFootswitchToggle={handleBotFootswitchToggle}
+            onFrameProbeToggle={handleBotFrameProbeToggle}
             onAppearanceSectionOpenChange={handleAppearanceSectionOpenChange}
             onBehaviorSectionOpenChange={handleBehaviorSectionOpenChange}
             beginBotWindowInteraction={beginBotWindowInteraction}
+            onKeyboardMove={moveBotWindowByKeyboard}
+            onKeyboardResize={resizeBotWindowByKeyboard}
+            onResetPosition={resetBotWindowPosition}
           />
         }
         chartVerticalOffset={chartVerticalOffset}
@@ -1420,7 +1916,11 @@ function App() {
         getReceptorStyle={getReceptorStyle}
         handleMinimapPointerDown={handleMinimapPointerDown}
         handleMinimapPointerMove={handleMinimapPointerMove}
+        handleMinimapKeyDown={handleMinimapKeyDown}
         handlePlayfieldPointerDown={handlePlayfieldPointerDown}
+        handleMobileNotefieldPointerDown={beginMobileNotefieldGesture}
+        handleMobileNotefieldPointerMove={updateMobileNotefieldGesture}
+        handleMobileNotefieldPointerUp={endMobileNotefieldGesture}
         measureGuideLayerRef={measureGuideLayerRef}
         minimapHoldBands={minimapHoldBands}
         minimapParityHints={parityHintDiagnostics}
@@ -1428,6 +1928,8 @@ function App() {
         minimapRef={minimapRef}
         notefieldFrameRef={notefieldFrameRef}
         isLoading={isLoading}
+        isCompactLayout={isCompactViewport}
+        compactView={mobileView}
         panelOrder={panelOrder}
         pixelsPerBeat={pixelsPerBeat}
         playfieldStyle={playfieldStyle}
@@ -1442,6 +1944,201 @@ function App() {
         visibleEvents={visibleEvents}
         visibleHolds={visibleHolds}
       />
+
+      <section className="mobile-settings" aria-label="Mobile settings">
+        <div className="mobile-settings-section">
+          <p className="mobile-settings-heading">Song</p>
+          <div className="mobile-settings-grid">
+            <label className="toolbar-field">
+              <span>Song</span>
+              <select value={selectedSong?.id ?? ''} onChange={handleSongChange} onBlur={handleDropdownBlur}>
+                {availableSongSources.map((songSource) => (
+                  <option key={songSource.id} value={songSource.id}>
+                    {songSource.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="toolbar-field">
+              <span>Chart</span>
+              <select value={selectedChartIndex} disabled={simfile.charts.length === 0} onChange={handleChartChange} onBlur={handleDropdownBlur}>
+                {simfile.charts.map((chart, chartIndex) => (
+                  <option key={`${chart.stepType}-${chart.difficulty}-${chartIndex}`} value={chartIndex}>
+                    {chart.difficulty} {chart.meter}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <button type="button" className="toolbar-button" onClick={() => songImportRef.current?.click()}>
+            Load song folder
+          </button>
+        </div>
+
+        <div className="mobile-settings-section">
+          <p className="mobile-settings-heading">Playback</p>
+          <div className="mobile-settings-range-grid">
+            <label className="thin-toolbar-rate" htmlFor="mobile-playback-rate-slider">
+              <span className="thin-toolbar-label">Rate</span>
+              <div className="thin-toolbar-rate-control">
+                <input
+                  id="mobile-playback-rate-slider"
+                  className="thin-toolbar-slider"
+                  type="range"
+                  min={minPlaybackRate}
+                  max={maxPlaybackRate}
+                  step={playbackRateStep}
+                  value={playbackRate}
+                  onChange={handlePlaybackRateChange}
+                />
+                <span className="thin-toolbar-rate-value">{playbackRate.toFixed(1)}x</span>
+              </div>
+            </label>
+            <label className="thin-toolbar-rate" htmlFor="mobile-volume-slider">
+              <span className="thin-toolbar-label">Volume</span>
+              <div className="thin-toolbar-rate-control">
+                <input
+                  id="mobile-volume-slider"
+                  className="thin-toolbar-slider"
+                  type="range"
+                  min={minVolume}
+                  max={maxVolume}
+                  step={volumeStep}
+                  value={volume}
+                  onChange={handleVolumeChange}
+                />
+                <span className="thin-toolbar-rate-value">{Math.round(volume * 100)}%</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div className="mobile-settings-actions">
+          <button type="button" className="toolbar-button" onClick={openControlsDialog} aria-haspopup="dialog">
+            Controls
+          </button>
+          <button
+            type="button"
+            className={`toolbar-button${isParityHintOverlayEnabled ? ' is-enabled' : ''}`}
+            aria-pressed={isParityHintOverlayEnabled}
+            onClick={handleParityHintOverlayToggle}
+          >
+            Pattern hints
+          </button>
+          <button
+            type="button"
+            className={`toolbar-button${assistTicksEnabled ? ' is-enabled' : ''}`}
+            aria-pressed={assistTicksEnabled}
+            onClick={handleAssistTicksToggle}
+          >
+            Assist tick
+          </button>
+        </div>
+        <div className="mobile-settings-footer">
+          <a
+            className="mobile-source-link"
+            href="https://github.com/dominickp/dancing-bot"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View source on GitHub
+          </a>
+        </div>
+      </section>
+
+      <section className="mobile-transport" aria-label="Touch playback controls">
+        <button
+          type="button"
+          className="toolbar-button mobile-transport-button mobile-transport-zoom"
+          aria-label="Zoom out chart"
+          title="Zoom out chart"
+          onClick={() => setVisibleBeats((currentValue) => clamp(currentValue * mobileZoomFactor, minVisibleBeats, maxVisibleBeats))}
+        >
+          -
+        </button>
+        <button
+          type="button"
+          className="toolbar-button mobile-transport-button mobile-transport-play"
+          aria-pressed={isPlaying}
+          onClick={() => setIsPlaying((currentValue) => !currentValue)}
+        >
+          {isPlaying ? 'Pause' : 'Play'}
+        </button>
+        <div className="mobile-transport-beat" aria-live="off">
+          <span>Beat</span>
+          <strong>{displayBeat.toFixed(2)}</strong>
+        </div>
+        <button
+          type="button"
+          className="toolbar-button mobile-transport-button mobile-transport-zoom"
+          aria-label="Zoom in chart"
+          title="Zoom in chart"
+          onClick={() => setVisibleBeats((currentValue) => clamp(currentValue / mobileZoomFactor, minVisibleBeats, maxVisibleBeats))}
+        >
+          +
+        </button>
+      </section>
+
+      {isControlsDialogOpen ? (
+        <div className="controls-dialog-overlay" onPointerDown={handleDialogBackdropPointerDown}>
+          <div
+            className="controls-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="controls-dialog-title"
+            tabIndex={-1}
+            data-keyboard-local="true"
+            ref={controlsDialogRef}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeControlsDialog();
+              }
+            }}
+          >
+            <header className="controls-dialog-header">
+              <h2 id="controls-dialog-title">Controls</h2>
+              <button
+                type="button"
+                className="toolbar-help-dismiss"
+                aria-label="Close controls dialog"
+                onClick={closeControlsDialog}
+              >
+                X
+              </button>
+            </header>
+            <div className="controls-dialog-body">
+              {controlsDialogSections.map((section) => (
+                <section key={section.heading} className="controls-dialog-section">
+                  <h3>{section.heading}</h3>
+                  <table className="controls-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Action</th>
+                        <th scope="col">Keyboard</th>
+                        <th scope="col">Mouse / Trackpad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {section.rows.map((row) => (
+                        <tr key={row.action}>
+                          <th scope="row">{row.action}</th>
+                          <td>{row.keyboard}</td>
+                          <td>{row.mouse}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </section>
+              ))}
+              <p className="controls-dialog-footnote">
+                Press <kbd>?</kbd> to open this dialog anytime · <kbd>ESC</kbd> closes it
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

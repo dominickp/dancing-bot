@@ -1,5 +1,11 @@
 import { useMemo } from 'react';
-import type { CSSProperties, MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  MutableRefObject,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+} from 'react';
 import type { MinimapHoldBand, MinimapRow } from '../lib/minimap';
 import type { ParityDiagnosticKind } from '../lib/parity';
 import type { Panel, TimedNoteEvent } from '../lib/simfile';
@@ -29,6 +35,9 @@ interface NotefieldPreviewProps {
   displayBeat: number;
   explosionRefs: MutableRefObject<Record<Panel, HTMLDivElement | null>>;
   handlePlayfieldPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  handleMobileNotefieldPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  handleMobileNotefieldPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  handleMobileNotefieldPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
   getNoteDetailStyle: (event: TimedNoteEvent) => CSSProperties | null;
   getHoldStyle: (segment: HoldSegmentView) => CSSProperties;
   getHoldCapStyle: (segment: HoldSegmentView) => CSSProperties;
@@ -38,6 +47,7 @@ interface NotefieldPreviewProps {
   getReceptorStyle: (panel: Panel) => CSSProperties;
   handleMinimapPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleMinimapPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  handleMinimapKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
   measureGuideLayerRef: MutableRefObject<HTMLDivElement | null>;
   minimapHoldBands: MinimapHoldBand[];
   minimapParityHints: ParityHintView[];
@@ -45,6 +55,8 @@ interface NotefieldPreviewProps {
   minimapRef: MutableRefObject<HTMLDivElement | null>;
   notefieldFrameRef: MutableRefObject<HTMLDivElement | null>;
   isLoading: boolean;
+  isCompactLayout: boolean;
+  compactView: 'chart' | 'bot' | 'settings';
   panelOrder: readonly Panel[];
   pixelsPerBeat: number;
   isPlayfieldDragging: boolean;
@@ -67,6 +79,9 @@ export function NotefieldPreview({
   displayBeat,
   explosionRefs,
   handlePlayfieldPointerDown,
+  handleMobileNotefieldPointerDown,
+  handleMobileNotefieldPointerMove,
+  handleMobileNotefieldPointerUp,
   getNoteDetailStyle,
   getHoldStyle,
   getHoldCapStyle,
@@ -76,6 +91,7 @@ export function NotefieldPreview({
   getReceptorStyle,
   handleMinimapPointerDown,
   handleMinimapPointerMove,
+  handleMinimapKeyDown,
   measureGuideLayerRef,
   minimapHoldBands,
   minimapParityHints,
@@ -83,6 +99,8 @@ export function NotefieldPreview({
   minimapRef,
   notefieldFrameRef,
   isLoading,
+  isCompactLayout,
+  compactView,
   panelOrder,
   pixelsPerBeat,
   isPlayfieldDragging,
@@ -116,14 +134,22 @@ export function NotefieldPreview({
         <div
           key={`${segment.kind}-${segment.startBeat}-${segment.endBeat}`}
           className={`minimap-hold minimap-hold-${segment.kind}`}
-          style={{
-            top: `${(segment.startBeat / totalChartBeats) * 100}%`,
-            height: `${Math.max(((segment.endBeat - segment.startBeat) / totalChartBeats) * 100, 0.32)}%`,
-            opacity: segment.intensity,
-          }}
+          style={
+            isCompactLayout
+              ? {
+                  left: `${(segment.startBeat / totalChartBeats) * 100}%`,
+                  width: `${Math.max(((segment.endBeat - segment.startBeat) / totalChartBeats) * 100, 0.32)}%`,
+                  opacity: segment.intensity,
+                }
+              : {
+                  top: `${(segment.startBeat / totalChartBeats) * 100}%`,
+                  height: `${Math.max(((segment.endBeat - segment.startBeat) / totalChartBeats) * 100, 0.32)}%`,
+                  opacity: segment.intensity,
+                }
+          }
         />
       )),
-    [minimapHoldBands, totalChartBeats],
+    [isCompactLayout, minimapHoldBands, totalChartBeats],
   );
 
   const minimapParityHintElements = useMemo(
@@ -135,14 +161,14 @@ export function NotefieldPreview({
           <div
             key={`minimap-hint-${hint.rowIndex}-${hint.beat}`}
             className={`minimap-pattern-marker minimap-pattern-marker-${tone}${hint.kinds.length > 1 ? ' is-multi' : ''}`}
-            style={{ top: `${(hint.beat / totalChartBeats) * 100}%` }}
+            style={isCompactLayout ? { left: `${(hint.beat / totalChartBeats) * 100}%` } : { top: `${(hint.beat / totalChartBeats) * 100}%` }}
             title={hint.labels.join(' / ')}
           >
             <span className="minimap-pattern-marker-core" />
           </div>
         );
       }),
-    [minimapParityHints, totalChartBeats],
+    [isCompactLayout, minimapParityHints, totalChartBeats],
   );
 
   const minimapRowElements = useMemo(
@@ -151,27 +177,46 @@ export function NotefieldPreview({
         <div
           key={row.beat}
           className="minimap-row"
-          style={{
-            top: `${(row.beat / totalChartBeats) * 100}%`,
-            height: `${Math.min(1 + row.noteCount, 4)}px`,
-            opacity: 0.2 + row.density * 0.8,
-            background: row.quantizationColor,
-            transform: `scaleX(${Math.max(row.density, 0.08)})`,
-          }}
+          style={
+            isCompactLayout
+              ? {
+                  left: `${(row.beat / totalChartBeats) * 100}%`,
+                  width: `${Math.min(1 + row.noteCount, 4)}px`,
+                  opacity: 0.2 + row.density * 0.8,
+                  background: row.quantizationColor,
+                  transform: `scaleY(${Math.max(row.density, 0.08)})`,
+                }
+              : {
+                  top: `${(row.beat / totalChartBeats) * 100}%`,
+                  height: `${Math.min(1 + row.noteCount, 4)}px`,
+                  opacity: 0.2 + row.density * 0.8,
+                  background: row.quantizationColor,
+                  transform: `scaleX(${Math.max(row.density, 0.08)})`,
+                }
+          }
           title={`${row.quantizationKind} @ beat ${row.beat.toFixed(3)}`}
         />
       )),
-    [minimapRows, totalChartBeats],
+    [isCompactLayout, minimapRows, totalChartBeats],
   );
 
   return (
-    <section className="notefield-panel" aria-label="Interactive notefield preview">
+    <section
+      className={`notefield-panel${isCompactLayout ? ` is-compact-view-${compactView}` : ''}`}
+      aria-label="Interactive notefield preview"
+    >
       <div className="notefield-layout">
         <div className="notefield-frame" ref={notefieldFrameRef} tabIndex={-1} aria-busy={isLoading}>
           <div
             className={`notefield-playfield${isPlayfieldDragging ? ' is-dragging' : ''}`}
             style={playfieldStyle}
-            onPointerDown={handlePlayfieldPointerDown}
+            onPointerDown={(event) => {
+              handlePlayfieldPointerDown(event);
+              handleMobileNotefieldPointerDown(event);
+            }}
+            onPointerMove={handleMobileNotefieldPointerMove}
+            onPointerUp={handleMobileNotefieldPointerUp}
+            onPointerCancel={handleMobileNotefieldPointerUp}
           >
             <div className="playfield-track">
               <div className="receptor-row" aria-hidden="true">
@@ -274,24 +319,39 @@ export function NotefieldPreview({
             </div>
           ) : null}
 
-          {botWindow}
+          {isCompactLayout ? null : botWindow}
         </div>
 
-        <aside className="minimap-panel" aria-label="Song minimap">
+        {isCompactLayout ? <div className="notefield-bot-dock">{botWindow}</div> : null}
+
+        <aside className={`minimap-panel${isCompactLayout ? ' is-horizontal' : ''}`} aria-label="Song minimap">
           <div className="minimap-header">
             <h3>Minimap</h3>
           </div>
 
           <div
-            className="minimap-track"
+            className={`minimap-track${isCompactLayout ? ' is-horizontal' : ''}`}
             ref={minimapRef}
+            role="slider"
+            tabIndex={0}
+            aria-label="Chart seek position"
+            aria-orientation={isCompactLayout ? 'horizontal' : 'vertical'}
+            aria-valuemin={0}
+            aria-valuemax={Math.round(totalChartBeats * 100) / 100}
+            aria-valuenow={Number(displayBeat.toFixed(2))}
+            aria-valuetext={`Beat ${displayBeat.toFixed(2)}`}
+            data-keyboard-local="true"
             onPointerDown={handleMinimapPointerDown}
             onPointerMove={handleMinimapPointerMove}
+            onKeyDown={handleMinimapKeyDown}
           >
             {minimapHoldElements}
             {minimapParityHintElements}
             {minimapRowElements}
-            <div className="minimap-playhead" style={{ top: `${(displayBeat / totalChartBeats) * 100}%` }} />
+            <div
+              className="minimap-playhead"
+              style={isCompactLayout ? { left: `${(displayBeat / totalChartBeats) * 100}%` } : { top: `${(displayBeat / totalChartBeats) * 100}%` }}
+            />
           </div>
         </aside>
       </div>

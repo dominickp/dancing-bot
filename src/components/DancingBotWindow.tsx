@@ -1,5 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react';
 import { getPanelRotation } from '../lib/noteskin';
 import type { ResolvedDanceNoteskin, ResolvedSpriteAsset } from '../lib/noteskin';
 import {
@@ -43,6 +47,7 @@ export interface BotStep {
   fromPanel: Panel;
   toPanel: Panel;
   isLifted: boolean;
+  isCentered?: boolean;
   heelPanel: Panel | null;
   toePanel: Panel | null;
   activePanels: Panel[];
@@ -70,6 +75,7 @@ interface BotFootPose {
   isHolding: boolean;
   isPressing: boolean;
   isLifted: boolean;
+  isCentered: boolean;
   lastStepBeat: number;
 }
 
@@ -214,6 +220,12 @@ const botHoldScale = 1.06;
 const botPressScale = 1.12;
 const botTravelLiftScale = 0.08;
 const botFootswitchLiftHeight = 9;
+const botMineLiftDurationSeconds = 0.1;
+const botMineClusterGapSeconds = 0.16;
+const botMineCenterRecoverySeconds = 0.02;
+const botMineCenterPanelCoverage = 3;
+const frameProbeReportIntervalMs = 1000;
+const frameProbeJankThresholdMs = 1000 / 30;
 const botPadArrowColorsByStyle: Record<BotPadStyleId, Record<Panel, string>> = {
   itg: {
     left: '#51a8ff',
@@ -686,11 +698,65 @@ const getBracketCenter = (heelTarget: BotPanelTarget, toeTarget: BotPanelTarget)
   y: heelTarget.y + (toeTarget.y - heelTarget.y) * 0.36,
 });
 
+const getMineCluster = (mineEvents: TimedNoteEvent[], mineIndex: number): {
+  endTimeSeconds: number;
+  blocksAllArrows: boolean;
+} => {
+  let firstMineIndex = mineIndex;
+  let lastMineIndex = mineIndex;
+
+  while (
+    firstMineIndex > 0 &&
+    mineEvents[firstMineIndex]!.timeSeconds - mineEvents[firstMineIndex - 1]!.timeSeconds <= botMineClusterGapSeconds
+  ) {
+    firstMineIndex -= 1;
+  }
+
+  while (
+    lastMineIndex < mineEvents.length - 1 &&
+    mineEvents[lastMineIndex + 1]!.timeSeconds - mineEvents[lastMineIndex]!.timeSeconds <= botMineClusterGapSeconds
+  ) {
+    lastMineIndex += 1;
+  }
+
+  const firstMine = mineEvents[firstMineIndex]!;
+  const lastMine = mineEvents[lastMineIndex]!;
+  const minedPanels = new Set(
+    mineEvents
+      .slice(firstMineIndex, lastMineIndex + 1)
+      .map((mineEvent) => mineEvent.panel),
+  );
+
+  return {
+    endTimeSeconds: lastMine.timeSeconds,
+    blocksAllArrows:
+      lastMine.timeSeconds - firstMine.timeSeconds >= botMineLiftDurationSeconds &&
+      minedPanels.size >= botMineCenterPanelCoverage,
+  };
+};
+
+const getOccupiedPanels = (step: BotStep): Panel[] => {
+  if (step.isLifted || step.isCentered) {
+    return [];
+  }
+
+  return step.activePanels.length > 0 ? step.activePanels : [step.toPanel];
+};
+
 const getStepPoseTarget = (
-  step: Pick<BotStep, 'foot' | 'fromPanel' | 'toPanel' | 'heelPanel' | 'toePanel'>,
+  step: Pick<BotStep, 'foot' | 'fromPanel' | 'toPanel' | 'heelPanel' | 'toePanel' | 'isCentered'>,
   footTargets: BotFootTargetMap,
   footAngles: BotFootAngleMap,
 ): { x: number; y: number; angle: number; panel: Panel } => {
+  if (step.isCentered) {
+    return {
+      x: 50,
+      y: 50,
+      angle: footAngles[step.foot][step.toPanel],
+      panel: step.toPanel,
+    };
+  }
+
   const heelTarget = step.heelPanel ? footTargets[step.foot][step.heelPanel] : null;
   const toeTarget = step.toePanel ? footTargets[step.foot][step.toePanel] : null;
   const heelAngle = step.heelPanel ? footAngles[step.foot][step.heelPanel] : null;
@@ -953,6 +1019,113 @@ const addFootswitchReleaseSteps = (stepsByFoot: Record<FootName, BotStep[]>): Re
   return stepsByFoot;
 };
 
+const addMineAvoidanceSteps = (
+  stepsByFoot: Record<FootName, BotStep[]>,
+  events: TimedNoteEvent[],
+  simfile: SimfileDocument,
+): Record<FootName, BotStep[]> => {
+  const mineEvents = events
+    .filter((event) => event.kind === 'mine')
+    .sort((left, right) => left.timeSeconds - right.timeSeconds);
+
+  for (const mineEvent of mineEvents) {
+    for (const footName of footNames) {
+      const occupiedStep = stepsByFoot[footName].reduce<BotStep | null>(
+        (latestStep, step) =>
+          step.hitTimeSeconds <= mineEvent.timeSeconds &&
+          step.hitTimeSeconds > (latestStep?.hitTimeSeconds ?? Number.NEGATIVE_INFINITY)
+            ? step
+            : latestStep,
+        null,
+      );
+
+      if (!occupiedStep || !getOccupiedPanels(occupiedStep).includes(mineEvent.panel)) {
+        continue;
+      }
+
+      const mineIndex = mineEvents.indexOf(mineEvent);
+      const mineCluster = getMineCluster(mineEvents, mineIndex);
+      const isCentered = mineCluster.blocksAllArrows;
+      const recoveryTimeSeconds = isCentered
+        ? mineCluster.endTimeSeconds + botMineCenterRecoverySeconds
+        : mineEvent.timeSeconds + botMineLiftDurationSeconds;
+      const upcomingPress = stepsByFoot[footName].find(
+        (step) =>
+          step.activePanels.length > 0 &&
+          step.hitTimeSeconds > mineEvent.timeSeconds &&
+          step.hitTimeSeconds <= recoveryTimeSeconds,
+      );
+      const hasUpcomingPress = upcomingPress !== undefined;
+      const avoidanceMoveStartTimeSeconds = Math.max(
+        occupiedStep.moveEndTimeSeconds,
+        mineEvent.timeSeconds - botMoveLeadSeconds,
+      );
+
+      if (isCentered && upcomingPress) {
+        const avoidanceEndTimeSeconds = Math.min(
+          mineCluster.endTimeSeconds,
+          upcomingPress.hitTimeSeconds,
+        );
+        upcomingPress.moveStartTimeSeconds = Math.max(
+          upcomingPress.moveStartTimeSeconds,
+          avoidanceEndTimeSeconds,
+        );
+        upcomingPress.moveEndTimeSeconds = Math.max(
+          upcomingPress.moveEndTimeSeconds,
+          upcomingPress.moveStartTimeSeconds,
+        );
+      }
+
+      stepsByFoot[footName].push({
+        foot: footName,
+        footPart: null,
+        fromPanel: occupiedStep.toPanel,
+        toPanel: occupiedStep.toPanel,
+        isLifted: !isCentered,
+        isCentered,
+        heelPanel: null,
+        toePanel: null,
+        activePanels: [],
+        hitBeat: mineEvent.beat,
+        hitTimeSeconds: mineEvent.timeSeconds,
+        moveStartTimeSeconds: avoidanceMoveStartTimeSeconds,
+        moveEndTimeSeconds: mineEvent.timeSeconds,
+        holdUntilTimeSeconds: null,
+      });
+
+      if (!hasUpcomingPress) {
+        stepsByFoot[footName].push({
+          foot: footName,
+          footPart: null,
+          fromPanel: occupiedStep.toPanel,
+          toPanel: occupiedStep.toPanel,
+          isLifted: false,
+          isCentered: false,
+          heelPanel: null,
+          toePanel: null,
+          activePanels: [],
+          hitBeat: secondsToBeat(
+            recoveryTimeSeconds,
+            simfile.bpms,
+            simfile.stops,
+            simfile.metadata.offset,
+          ),
+          hitTimeSeconds: recoveryTimeSeconds,
+          moveStartTimeSeconds: recoveryTimeSeconds,
+          moveEndTimeSeconds: recoveryTimeSeconds,
+          holdUntilTimeSeconds: null,
+        });
+      }
+    }
+  }
+
+  for (const footName of footNames) {
+    stepsByFoot[footName].sort((left, right) => left.hitTimeSeconds - right.hitTimeSeconds);
+  }
+
+  return stepsByFoot;
+};
+
 const sampleBotState = (
   stepsByFoot: Record<FootName, BotStep[]>,
   panelTimeline: BotPanelTimeline,
@@ -991,6 +1164,7 @@ const sampleBotState = (
     let panel = restingTarget.panel;
     let scale = 1;
     let isLifted = completedStep?.isLifted ?? false;
+    let isCentered = completedStep?.isCentered ?? false;
     let moveProgress = 0;
     const isHolding =
       completedStep !== null &&
@@ -1028,6 +1202,7 @@ const sampleBotState = (
       angle = lerp(fromTarget.angle, toTarget.angle, nextMoveProgress);
       panel = toTarget.panel;
       isLifted = upcomingStep.isLifted;
+      isCentered = upcomingStep.isCentered ?? false;
       moveProgress = nextMoveProgress;
       scale = Math.max(scale, 1 + Math.sin(nextMoveProgress * Math.PI) * botTravelLiftScale * liftStrength);
 
@@ -1062,6 +1237,7 @@ const sampleBotState = (
         isHolding,
         isPressing,
         isLifted,
+        isCentered,
         lastStepBeat: completedStep?.hitBeat ?? Number.NEGATIVE_INFINITY,
       },
       completedStep,
@@ -1305,7 +1481,7 @@ const buildGreedyBotTimeline = (
     }
   }
 
-  return stepsByFoot;
+  return addMineAvoidanceSteps(stepsByFoot, events, simfile);
 };
 
 interface PlannedBotHit {
@@ -1490,7 +1666,7 @@ const buildParityBotTimeline = (
     }
   }
 
-  return addFootswitchReleaseSteps(stepsByFoot);
+  return addMineAvoidanceSteps(addFootswitchReleaseSteps(stepsByFoot), events, simfile);
 };
 
 export const buildBotTimeline = (
@@ -1519,6 +1695,7 @@ export const sampleBotStateAtBeat = (
 interface DancingBotWindowProps {
   botTimeline: Record<FootName, BotStep[]>;
   botWindowRect: BotWindowRect;
+  isDocked: boolean;
   currentBeat: number;
   isPlaying: boolean;
   simfile: SimfileDocument;
@@ -1532,6 +1709,7 @@ interface DancingBotWindowProps {
   isCrossoverEnabled: boolean;
   isBracketEnabled: boolean;
   isFootswitchEnabled: boolean;
+  isFrameProbeEnabled: boolean;
   isAppearanceSectionOpen: boolean;
   isBehaviorSectionOpen: boolean;
   onFormStyleChange: (nextStyle: BotFormStyleId) => void;
@@ -1542,17 +1720,25 @@ interface DancingBotWindowProps {
   onCrossoverToggle: () => void;
   onBracketToggle: () => void;
   onFootswitchToggle: () => void;
+  onFrameProbeToggle: () => void;
   onAppearanceSectionOpenChange: (isOpen: boolean) => void;
   onBehaviorSectionOpenChange: (isOpen: boolean) => void;
   beginBotWindowInteraction: (
     event: ReactPointerEvent<HTMLElement>,
     mode: BotWindowInteraction['mode'],
   ) => void;
+  /** Arrow-key support so the window can be moved without a mouse/trackpad drag. */
+  onKeyboardMove: (deltaX: number, deltaY: number) => void;
+  /** Arrow-key support so the window can be resized without a mouse/trackpad drag. */
+  onKeyboardResize: (deltaWidth: number, deltaHeight: number) => void;
+  /** Restores the default docked position/size. */
+  onResetPosition: () => void;
 }
 
 export function DancingBotWindow({
   botTimeline,
   botWindowRect,
+  isDocked,
   currentBeat,
   isPlaying,
   simfile,
@@ -1566,6 +1752,7 @@ export function DancingBotWindow({
   isCrossoverEnabled,
   isBracketEnabled,
   isFootswitchEnabled,
+  isFrameProbeEnabled,
   isAppearanceSectionOpen,
   isBehaviorSectionOpen,
   onFormStyleChange,
@@ -1576,9 +1763,13 @@ export function DancingBotWindow({
   onCrossoverToggle,
   onBracketToggle,
   onFootswitchToggle,
+  onFrameProbeToggle,
   onAppearanceSectionOpenChange,
   onBehaviorSectionOpenChange,
   beginBotWindowInteraction,
+  onKeyboardMove,
+  onKeyboardResize,
+  onResetPosition,
 }: DancingBotWindowProps) {
   const [playbackSnapshot, setPlaybackSnapshot] = useState<BotPlaybackSnapshot>(() => ({
     beat: currentBeat,
@@ -1598,6 +1789,77 @@ export function DancingBotWindow({
     return undefined;
   }, [currentBeat, isPlaying, simfile]);
 
+  const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
+  const botFootAngles = useMemo(() => getBotFootAngles(selectedFormStyle), [selectedFormStyle]);
+  const botPanelTimeline = useMemo(() => buildBotPanelTimeline(botTimeline), [botTimeline]);
+
+  // Refs for imperative per-frame updates during playback. Driving the DOM
+  // directly avoids a full React re-render (and the resulting style recalc /
+  // repaint of the masked, drop-shadowed pad sprites) at 60fps on the main
+  // thread, which was the source of shudder on low-end systems.
+  const footElementRefs = useRef<Record<FootName, HTMLDivElement | null>>({
+    left: null,
+    right: null,
+  });
+  const panelElementRefs = useRef<Record<Panel, HTMLDivElement | null>>({
+    left: null,
+    down: null,
+    up: null,
+    right: null,
+  });
+  const beatReadoutRef = useRef<HTMLSpanElement | null>(null);
+  const frameProbeReadoutRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isFrameProbeEnabled) {
+      return undefined;
+    }
+
+    let animationFrameId: number | null = null;
+    let previousTimestamp: number | null = null;
+    let reportStartTimestamp: number | null = null;
+    let frameCount = 0;
+    let frameTimeTotal = 0;
+    let worstFrameTime = 0;
+    let jankCount = 0;
+
+    const tick = (timestamp: number) => {
+      if (previousTimestamp !== null) {
+        const frameTime = timestamp - previousTimestamp;
+
+        frameCount += 1;
+        frameTimeTotal += frameTime;
+        worstFrameTime = Math.max(worstFrameTime, frameTime);
+        jankCount += Number(frameTime > frameProbeJankThresholdMs);
+      }
+
+      previousTimestamp = timestamp;
+      reportStartTimestamp ??= timestamp;
+
+      const elapsed = timestamp - reportStartTimestamp;
+      if (elapsed >= frameProbeReportIntervalMs && frameCount > 0 && frameProbeReadoutRef.current) {
+        const fps = (frameCount * 1000) / elapsed;
+        const averageFrameTime = frameTimeTotal / frameCount;
+        frameProbeReadoutRef.current.textContent = `${fps.toFixed(0)} FPS | avg ${averageFrameTime.toFixed(1)} ms | worst ${worstFrameTime.toFixed(1)} ms | jank ${jankCount}`;
+        reportStartTimestamp = timestamp;
+        frameCount = 0;
+        frameTimeTotal = 0;
+        worstFrameTime = 0;
+        jankCount = 0;
+      }
+
+      animationFrameId = requestAnimationFrame(tick);
+    };
+
+    animationFrameId = requestAnimationFrame(tick);
+
+    return () => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isFrameProbeEnabled]);
+
   useEffect(() => {
     if (!isPlaying) {
       return undefined;
@@ -1612,7 +1874,44 @@ export function DancingBotWindow({
         : 0;
       const beat = secondsToBeat(timeSeconds, simfile.bpms, simfile.stops, simfile.metadata.offset);
 
-      setPlaybackSnapshot({ beat, timeSeconds });
+      const state = sampleBotState(
+        botTimeline,
+        botPanelTimeline,
+        botFootTargets,
+        botFootAngles,
+        timeSeconds,
+      );
+
+      // Imperatively update feet.
+      for (const footName of footNames) {
+        const element = footElementRefs.current[footName];
+        const foot = state.feet[footName];
+
+        if (!element) {
+          continue;
+        }
+
+        element.style.left = `${foot.x}%`;
+        element.style.top = `${foot.y}%`;
+        element.style.transform = getBotFootTransform(foot);
+        element.classList.toggle('is-holding', foot.isHolding);
+        element.classList.toggle('is-pressing', foot.isPressing);
+        element.classList.toggle('is-lifted', foot.isLifted);
+      }
+
+      // Imperatively update panel active state.
+      for (const panel of panelOrder) {
+        const element = panelElementRefs.current[panel];
+
+        if (element) {
+          element.classList.toggle('is-active', state.activePanels[panel]);
+        }
+      }
+
+      if (beatReadoutRef.current) {
+        beatReadoutRef.current.textContent = `Beat ${beat.toFixed(2)}`;
+      }
+
       animationFrameId = requestAnimationFrame(tick);
     };
 
@@ -1623,7 +1922,15 @@ export function DancingBotWindow({
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [isPlaying, playbackClockRef, simfile]);
+  }, [
+    isPlaying,
+    playbackClockRef,
+    simfile,
+    botTimeline,
+    botPanelTimeline,
+    botFootTargets,
+    botFootAngles,
+  ]);
 
   useEffect(() => {
     const preloadTargets = botFootStyleOptions
@@ -1649,21 +1956,54 @@ export function DancingBotWindow({
     };
   }, []);
 
-  const botFootTargets = useMemo(() => getBotFootTargets(selectedFormStyle), [selectedFormStyle]);
-  const botFootAngles = useMemo(() => getBotFootAngles(selectedFormStyle), [selectedFormStyle]);
-  const botPanelTimeline = useMemo(() => buildBotPanelTimeline(botTimeline), [botTimeline]);
   const selectedFootStyleOption = useMemo(
     () => botFootStyleOptions.find((option) => option.id === selectedFootStyle) ?? botFootStyleOptions[0],
     [selectedFootStyle],
   );
+  // During playback the rAF loop drives the DOM imperatively; this memoized
+  // state only reflects the paused/resting pose (updated when not playing).
   const botState = useMemo(
     () => sampleBotState(botTimeline, botPanelTimeline, botFootTargets, botFootAngles, playbackSnapshot.timeSeconds),
     [botFootAngles, botFootTargets, botPanelTimeline, botTimeline, playbackSnapshot.timeSeconds],
   );
 
+  const getArrowKeyDelta = (event: ReactKeyboardEvent): [number, number] | null => {
+    const step = event.shiftKey ? 2 : 12;
+    const deltaByKey: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    };
+
+    return deltaByKey[event.key] ?? null;
+  };
+
+  const handleHeaderKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const delta = getArrowKeyDelta(event);
+
+    if (!delta) {
+      return;
+    }
+
+    event.preventDefault();
+    onKeyboardMove(delta[0], delta[1]);
+  };
+
+  const handleResizeKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const delta = getArrowKeyDelta(event);
+
+    if (!delta) {
+      return;
+    }
+
+    event.preventDefault();
+    onKeyboardResize(delta[0], delta[1]);
+  };
+
   return (
     <aside
-      className="bot-window"
+      className={`bot-window${isDocked ? ' is-docked' : ''}`}
       style={{
         left: botWindowRect.x,
         top: botWindowRect.y,
@@ -1672,11 +2012,33 @@ export function DancingBotWindow({
       }}
       aria-label="Dancing bot preview"
     >
-      <header className="bot-window-header" onPointerDown={(event) => beginBotWindowInteraction(event, 'drag')}>
+      <header
+        className="bot-window-header"
+        tabIndex={isDocked ? -1 : 0}
+        data-keyboard-local={isDocked ? undefined : 'true'}
+        aria-label={isDocked ? 'Dancing bot preview' : 'Dancing bot window. Drag or press the arrow keys to move; hold SHIFT for fine steps.'}
+        onPointerDown={isDocked ? undefined : (event) => beginBotWindowInteraction(event, 'drag')}
+        onKeyDown={isDocked ? undefined : handleHeaderKeyDown}
+      >
         <div>
           <h3>Dancing Bot</h3>
         </div>
-        <span className="bot-window-beat">Beat {playbackSnapshot.beat.toFixed(2)}</span>
+        <div className="bot-window-header-actions">
+          {isDocked ? null : (
+            <button
+              type="button"
+              className="bot-window-reset"
+              onClick={onResetPosition}
+              onPointerDown={(event) => event.stopPropagation()}
+              aria-label="Reset dancing bot window position and size"
+            >
+              Reset
+            </button>
+          )}
+          <span className="bot-window-beat" ref={beatReadoutRef}>
+            Beat {playbackSnapshot.beat.toFixed(2)}
+          </span>
+        </div>
       </header>
 
       <div className="bot-window-body">
@@ -1797,12 +2159,27 @@ export function DancingBotWindow({
                   <span className="bot-future-control-label">{botParityToggleOptions[2].label}</span>
                   <span className="bot-future-control-value">{isFootswitchEnabled ? 'On' : 'Off'}</span>
                 </button>
+
+                <button
+                  type="button"
+                  className={`bot-future-control-slot bot-future-control-toggle${isFrameProbeEnabled ? ' is-enabled' : ''}`}
+                  aria-pressed={isFrameProbeEnabled}
+                  onClick={onFrameProbeToggle}
+                >
+                  <span className="bot-future-control-label">Frame probe</span>
+                  <span className="bot-future-control-value">{isFrameProbeEnabled ? 'On' : 'Off'}</span>
+                </button>
               </div>
             </div>
           </details>
         </section>
 
         <div className="bot-pad-stage">
+          {isFrameProbeEnabled ? (
+            <div className="bot-frame-probe" role="status" aria-label="Frame-time probe" ref={frameProbeReadoutRef}>
+              Measuring frame time...
+            </div>
+          ) : null}
           <div className="bot-pad-surface">
             {botStaticPadTiles.map((tile) => (
               <div key={tile} className={`bot-pad-static-tile bot-pad-static-tile-${tile}`} aria-hidden="true" />
@@ -1811,6 +2188,9 @@ export function DancingBotWindow({
             {panelOrder.map((panel) => (
               <div
                 key={panel}
+                ref={(element) => {
+                  panelElementRefs.current[panel] = element;
+                }}
                 className={`bot-pad-panel bot-pad-panel-${panel}${botState.activePanels[panel] ? ' is-active' : ''}${isPanelGlowEnabled ? ' is-glow-enabled' : ''}${isPanelLightsEnabled ? ' is-lights-enabled' : ''}`}
                 style={getBotPanelEffectStyle(panel, selectedPadStyle)}
               >
@@ -1845,13 +2225,16 @@ export function DancingBotWindow({
               return (
                 <div
                   key={footName}
+                  ref={(element) => {
+                    footElementRefs.current[footName] = element;
+                  }}
                   className={`bot-foot bot-foot-${footName}${foot.isHolding ? ' is-holding' : ''}${foot.isPressing ? ' is-pressing' : ''}${foot.isLifted ? ' is-lifted' : ''}${isImageFoot ? ' is-image-foot' : ''}`}
                   style={{
                     left: `${foot.x}%`,
                     top: `${foot.y}%`,
                     transform: getBotFootTransform(foot),
                   }}
-                  title={`${footName} foot on ${foot.panel}`}
+                  title={`${footName} foot on ${foot.isCentered ? 'center' : foot.panel}`}
                 >
                   {selectedFootStyleOption.image ? (
                     <img
@@ -1869,12 +2252,16 @@ export function DancingBotWindow({
         </div>
       </div>
 
-      <button
-        type="button"
-        className="bot-window-resize"
-        aria-label="Resize dancing bot window"
-        onPointerDown={(event) => beginBotWindowInteraction(event, 'resize')}
-      />
+      {isDocked ? null : (
+        <button
+          type="button"
+          className="bot-window-resize"
+          aria-label="Resize dancing bot window. Press the arrow keys to resize; hold SHIFT for fine steps."
+          data-keyboard-local="true"
+          onPointerDown={(event) => beginBotWindowInteraction(event, 'resize')}
+          onKeyDown={handleResizeKeyDown}
+        />
+      )}
     </aside>
   );
 }
