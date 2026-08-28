@@ -6,6 +6,7 @@ import {
   getTimedEventKey,
 } from "./parity";
 import { buildTimedChart, parseSimfile } from "./simfile";
+import { buildSteppingScenario } from "../test/steppingScenario";
 
 const createSimfile = (measureRows: string[]): string =>
   `#TITLE:Test;\n#OFFSET:0;\n#BPMS:0.000=120.000;\n#STOPS:;\n#NOTES:\n     dance-single:\n     test:\n     Challenge:\n     9:\n     0,0,0,0,0:\n${measureRows.join("\n")}\n;`;
@@ -16,6 +17,45 @@ const getAssignmentKey = (
   rowIndex: number,
   measureIndex = 0,
 ): string => `${panel}:${beat.toFixed(6)}:tap:${measureIndex}:${rowIndex}`;
+
+const parityConfig = {
+  allowBrackets: true,
+  allowCrossovers: true,
+  allowFootswitches: true,
+  favorJumpsOverBrackets: false,
+};
+
+describe.each([
+  {
+    name: "alternates a quarter-note left-right stream",
+    steps: [
+      { beat: 0, notes: "L" },
+      { beat: 1, notes: "R" },
+      { beat: 2, notes: "L" },
+      { beat: 3, notes: "R" },
+    ],
+    expectedSides: ["left", "right", "left", "right"],
+  },
+  {
+    name: "keeps a jump on separate feet",
+    steps: [{ beat: 0, notes: "LR" }],
+    expectedSides: ["left", "right"],
+  },
+])("stepping scenario: $name", ({ steps, expectedSides }) => {
+  it("assigns the expected feet", () => {
+    const { document, holdEndBeats, timedChart } = buildSteppingScenario({ steps });
+    const result = buildParityAssignmentMap(
+      timedChart.events,
+      holdEndBeats,
+      document,
+      parityConfig,
+    );
+
+    expect(timedChart.events.map((event) =>
+      getFootSideFromFootPart(result.assignments.get(getTimedEventKey(event))!),
+    )).toEqual(expectedSides);
+  });
+});
 
 describe("buildParityAssignmentMap", () => {
   it("keeps adjacent left-side pairs free of double-step regressions", () => {

@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { buildAssistHitEvents, HitFeedbackTracker } from "../lib/hitFeedback";
 import { beatToSeconds, secondsToBeat } from "../lib/simfile";
-import type { Panel, SimfileDocument, TimedNoteEvent } from "../lib/simfile";
+import type { SimfileDocument, TimedNoteEvent } from "../lib/simfile";
+
+export { buildAssistHitEvents } from "../lib/hitFeedback";
 
 const renderWindowStepBeats = 2;
 const displayRefreshMs = 80;
-const hitWindowBeats = 0.18;
 const loadingOverlayDelayMs = 180;
 const startPreviewBeats = 0.5;
 const audioClockForwardCorrectionSeconds = 0.05;
 const seekCompletionToleranceSeconds = 0.01;
-const rollRetriggerBeats = 0.5;
 
 export interface PlaybackClock {
   audioTime: number;
@@ -60,69 +61,6 @@ const clampDisplayBeat = (beat: number, lastBeat: number): number =>
 
 const clampViewportBeat = (beat: number, lastBeat: number): number =>
   clamp(beat, -startPreviewBeats, lastBeat);
-
-const getAssistTickKey = (event: TimedNoteEvent): string =>
-  event.beat.toFixed(6);
-
-export const buildAssistHitEvents = (
-  events: TimedNoteEvent[],
-): TimedNoteEvent[] => {
-  const rollHeads = new Map<Panel, TimedNoteEvent>();
-  const assistHits = events.filter((event) => event.kind !== "hold-tail");
-
-  for (const event of events) {
-    if (event.kind === "roll-head") {
-      rollHeads.set(event.panel, event);
-      continue;
-    }
-
-    if (event.kind !== "hold-tail") {
-      continue;
-    }
-
-    const rollHead = rollHeads.get(event.panel);
-
-    if (!rollHead) {
-      continue;
-    }
-
-    for (
-      let beat = rollHead.beat + rollRetriggerBeats;
-      beat < event.beat - 0.000001;
-      beat += rollRetriggerBeats
-    ) {
-      assistHits.push({ ...rollHead, beat });
-    }
-
-    if (event.beat > rollHead.beat) {
-      assistHits.push({ ...rollHead, beat: event.beat });
-    }
-
-    rollHeads.delete(event.panel);
-  }
-
-  return assistHits.sort((left, right) => left.beat - right.beat);
-};
-
-const findFirstEventAtOrAfter = (
-  events: TimedNoteEvent[],
-  beat: number,
-): number => {
-  let low = 0;
-  let high = events.length;
-
-  while (low < high) {
-    const middle = Math.floor((low + high) / 2);
-
-    if (events[middle].beat < beat) {
-      low = middle + 1;
-    } else {
-      high = middle;
-    }
-  }
-
-  return low;
-};
 
 export const reconcilePlaybackAudioTime = (
   estimatedAudioTime: number,
@@ -230,25 +168,16 @@ export function useChartPlayback({
   const loadingTimeoutRef = useRef<number | null>(null);
   const lastDisplayUpdateRef = useRef(0);
   const lastAnimatedBeatRef = useRef(0);
-  const triggeredHitKeysRef = useRef(new Map<string, number>());
   const triggeredAssistRowsRef = useRef(new Set<string>());
   const isPlayingRef = useRef(isPlaying);
   const playbackRequestedRef = useRef(playbackRequested);
   const panelFeedbackRef = useRef(onTriggerPanelFeedback);
   const assistTicksEnabledRef = useRef(assistTicksEnabled);
   const hitEvents = useMemo(() => buildAssistHitEvents(events), [events]);
-  const assistRowNoteCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-
-    for (const event of hitEvents) {
-      if (event.kind !== "mine") {
-        const tickKey = getAssistTickKey(event);
-        counts.set(tickKey, (counts.get(tickKey) ?? 0) + 1);
-      }
-    }
-
-    return counts;
-  }, [hitEvents]);
+  const hitFeedbackTracker = useMemo(
+    () => new HitFeedbackTracker(hitEvents),
+    [hitEvents],
+  );
 
   const getAssistTickAudioContext = (): AudioContext => {
     const audioContext =
@@ -388,12 +317,12 @@ export function useChartPlayback({
     (beat: number) => {
       const nextBeat = clampViewportBeat(beat, lastBeat);
       lastAnimatedBeatRef.current = nextBeat;
-      triggeredHitKeysRef.current.clear();
+      hitFeedbackTracker.reset();
       triggeredAssistRowsRef.current.clear();
       refreshRenderWindow(nextBeat);
       syncAudioToBeat(nextBeat);
     },
-    [lastBeat, refreshRenderWindow, syncAudioToBeat],
+    [hitFeedbackTracker, lastBeat, refreshRenderWindow, syncAudioToBeat],
   );
 
   const scrollByBeats = useCallback(
@@ -413,43 +342,23 @@ export function useChartPlayback({
       refreshRenderWindow(clampedBeat);
       syncAudioToBeat(clampedBeat);
       lastAnimatedBeatRef.current = clampedBeat;
-      triggeredHitKeysRef.current.clear();
+      hitFeedbackTracker.reset();
       triggeredAssistRowsRef.current.clear();
     },
-    [lastBeat, refreshRenderWindow, seekToBeat, syncAudioToBeat],
+    [hitFeedbackTracker, lastBeat, refreshRenderWindow, seekToBeat, syncAudioToBeat],
   );
 
   const updateHitFeedback = (previousBeat: number, nextBeat: number) => {
-    const minBeat = Math.min(previousBeat, nextBeat) - hitWindowBeats * 0.35;
-    const maxBeat = Math.max(previousBeat, nextBeat) + hitWindowBeats * 0.35;
-
-    for (
-      let eventIndex = findFirstEventAtOrAfter(hitEvents, minBeat);
-      eventIndex < hitEvents.length && hitEvents[eventIndex].beat <= maxBeat;
-      eventIndex += 1
-    ) {
-      const event = hitEvents[eventIndex];
-
-      const hitKey = `${event.panel}-${event.beat.toFixed(6)}-${event.kind}`;
-
-      if (triggeredHitKeysRef.current.has(hitKey)) {
-        continue;
-      }
-
-      triggeredHitKeysRef.current.set(hitKey, event.beat);
+    for (const { event, isJump } of hitFeedbackTracker.advance(
+      previousBeat,
+      nextBeat,
+    )) {
       panelFeedbackRef.current(event);
-      const assistTickKey = getAssistTickKey(event);
-      const isJump = (assistRowNoteCounts.get(assistTickKey) ?? 0) > 1;
+      const assistTickKey = event.beat.toFixed(6);
 
       if (!isJump || !triggeredAssistRowsRef.current.has(assistTickKey)) {
         triggeredAssistRowsRef.current.add(assistTickKey);
         playAssistTick(isJump);
-      }
-    }
-
-    for (const [hitKey, beat] of triggeredHitKeysRef.current) {
-      if (beat < nextBeat - hitWindowBeats * 2) {
-        triggeredHitKeysRef.current.delete(hitKey);
       }
     }
   };
@@ -576,7 +485,7 @@ export function useChartPlayback({
     setPlaybackRequested(false);
     currentBeatRef.current = -startPreviewBeats;
     lastAnimatedBeatRef.current = -startPreviewBeats;
-    triggeredHitKeysRef.current.clear();
+    hitFeedbackTracker.reset();
     triggeredAssistRowsRef.current.clear();
     pendingAudioSeekTimeRef.current = null;
     renderBeatAnchorRef.current = -startPreviewBeats;
@@ -818,8 +727,7 @@ export function useChartPlayback({
   }, [
     applyScrollPosition,
     assistTicksEnabled,
-    assistRowNoteCounts,
-    hitEvents,
+    hitFeedbackTracker,
     lastBeat,
     playbackRequested,
     playbackRate,

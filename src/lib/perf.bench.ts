@@ -1,7 +1,7 @@
 import { bench, describe } from "vitest";
 import { buildBotTimeline, sampleBotStateAtBeat } from "../components/DancingBotWindow";
+import { buildAssistHitEvents, HitFeedbackTracker } from "./hitFeedback";
 import { buildTimedChart, parseSimfile, beatToSeconds } from "./simfile";
-import type { TimedNoteEvent } from "./simfile";
 import { buildParityAssignmentMap } from "./parity";
 import bossySimfileText from "../../example-simfiles/BOSSY (Jorts Speedy Mix)/bossyremix.ssc?raw";
 import groovySimfileText from "../../example-simfiles/Groovy Rollercoaster Acid Trip/Groovy Rollercoaster Acid Trip.sm?raw";
@@ -16,8 +16,8 @@ import groovySimfileText from "../../example-simfiles/Groovy Rollercoaster Acid 
  *    and buildParityAssignmentMap. This is the blocking cost a user feels when
  *    selecting a song or toggling behavior options.
  *  - "per-frame": the work done every animation frame while playing. The bot
- *    samples its pose (sampleBotStateAtBeat) and the notefield scans all events
- *    for hit feedback (updateHitFeedback in useChartPlayback). On a complex
+ *    samples its pose (sampleBotStateAtBeat) and the production hit-feedback
+ *    tracker scans events. On a complex
  *    chart with thousands of notes this per-frame cost is what low-end systems
  *    feel as shudder during play.
  *  - "play burst": a realistic slice of consecutive frames right after pressing
@@ -42,94 +42,96 @@ const loadChart = (source: string) => {
 const bossy = loadChart(bossySimfileText);
 const groovy = loadChart(groovySimfileText);
 
-const holdEndBeatMap = new Map<string, number>();
+const buildHoldEndBeatMap = (
+  events: ReturnType<typeof buildTimedChart>["events"],
+): Map<string, number> => {
+  const activeHeads = new Map<string, number>();
+  const holdEndBeats = new Map<string, number>();
 
-// Pre-build timelines for the per-frame benchmarks.
-const bossyTimeline = buildBotTimeline(bossy.timedChart.events, holdEndBeatMap, bossy.simfile, parityConfig);
-const groovyTimeline = buildBotTimeline(groovy.timedChart.events, holdEndBeatMap, groovy.simfile, parityConfig);
+  for (const event of events) {
+    const key = `${event.panel}:${event.beat.toFixed(6)}`;
 
-/**
- * Faithfully replicates the per-frame hit-feedback scan from useChartPlayback
- * (updateHitFeedback). It loops over every event twice per frame, so its cost
- * grows linearly with the number of notes in the chart.
- */
-const makeHitFeedbackScanner = (events: TimedNoteEvent[]) => {
-  const hitWindowBeats = 0.18;
-  const triggered = new Set<string>();
-  const onTrigger = (_event: TimedNoteEvent) => {};
-  return (previousBeat: number, nextBeat: number) => {
-    const minBeat = Math.min(previousBeat, nextBeat) - hitWindowBeats * 0.35;
-    const maxBeat = Math.max(previousBeat, nextBeat) + hitWindowBeats * 0.35;
+    if (event.kind === "hold-head" || event.kind === "roll-head") {
+      activeHeads.set(event.panel, event.beat);
+    } else if (event.kind === "hold-tail") {
+      const startBeat = activeHeads.get(event.panel);
 
-    for (const event of events) {
-      if (event.kind === "hold-tail" || event.beat < minBeat || event.beat > maxBeat) {
-        continue;
-      }
-      const hitKey = `${event.panel}-${event.measureIndex}-${event.rowIndex}-${event.kind}`;
-      if (triggered.has(hitKey)) {
-        continue;
-      }
-      triggered.add(hitKey);
-      onTrigger(event);
-    }
-
-    for (const event of events) {
-      if (event.beat < nextBeat - 2 || event.beat > nextBeat + 2) {
-        continue;
-      }
-      const hitKey = `${event.panel}-${event.measureIndex}-${event.rowIndex}-${event.kind}`;
-      if (event.beat < nextBeat - hitWindowBeats * 2) {
-        triggered.delete(hitKey);
+      if (startBeat !== undefined) {
+        holdEndBeats.set(`${event.panel}:${startBeat.toFixed(6)}`, event.beat);
+        activeHeads.delete(event.panel);
       }
     }
-  };
+  }
+
+  return holdEndBeats;
 };
 
+// Pre-build timelines for the per-frame benchmarks.
+const bossyHoldEndBeatMap = buildHoldEndBeatMap(bossy.timedChart.events);
+const groovyHoldEndBeatMap = buildHoldEndBeatMap(groovy.timedChart.events);
+const bossyTimeline = buildBotTimeline(bossy.timedChart.events, bossyHoldEndBeatMap, bossy.simfile, parityConfig);
+const groovyTimeline = buildBotTimeline(groovy.timedChart.events, groovyHoldEndBeatMap, groovy.simfile, parityConfig);
+const bossyHitEvents = buildAssistHitEvents(bossy.timedChart.events);
+const groovyHitEvents = buildAssistHitEvents(groovy.timedChart.events);
+
 describe("startup (chart build)", () => {
-  bench("buildBotTimeline — complex (BOSSY)", () => {
-    buildBotTimeline(bossy.timedChart.events, holdEndBeatMap, bossy.simfile, parityConfig);
+  bench(`buildBotTimeline — BOSSY (${bossy.timedChart.events.length} events)`, () => {
+    buildBotTimeline(bossy.timedChart.events, bossyHoldEndBeatMap, bossy.simfile, parityConfig);
   });
 
-  bench("buildParityAssignmentMap — complex (BOSSY)", () => {
-    buildParityAssignmentMap(bossy.timedChart.events, holdEndBeatMap, bossy.simfile, parityConfig);
+  bench(`buildParityAssignmentMap — BOSSY (${bossy.timedChart.events.length} events)`, () => {
+    buildParityAssignmentMap(bossy.timedChart.events, bossyHoldEndBeatMap, bossy.simfile, parityConfig);
   });
 
-  bench("buildBotTimeline — simple (Groovy)", () => {
-    buildBotTimeline(groovy.timedChart.events, holdEndBeatMap, groovy.simfile, parityConfig);
+  bench(`buildBotTimeline — Groovy (${groovy.timedChart.events.length} events)`, () => {
+    buildBotTimeline(groovy.timedChart.events, groovyHoldEndBeatMap, groovy.simfile, parityConfig);
   });
 });
 
 describe("per-frame sampling (single frame)", () => {
-  bench("sampleBotStateAtBeat — complex (BOSSY)", () => {
+  bench("sampleBotStateAtBeat — BOSSY", () => {
     sampleBotStateAtBeat(bossyTimeline, bossy.simfile, 120);
   });
 
-  bench("sampleBotStateAtBeat — simple (Groovy)", () => {
+  bench("sampleBotStateAtBeat — Groovy", () => {
     sampleBotStateAtBeat(groovyTimeline, groovy.simfile, 120);
   });
 
-  bench("hit-feedback scan — complex (BOSSY)", () => {
-    const scan = makeHitFeedbackScanner(bossy.timedChart.events);
-    scan(119.9, 120);
+  bench("HitFeedbackTracker.advance — BOSSY", () => {
+    const tracker = new HitFeedbackTracker(bossyHitEvents);
+    tracker.advance(119.9, 120);
   });
 
-  bench("hit-feedback scan — simple (Groovy)", () => {
-    const scan = makeHitFeedbackScanner(groovy.timedChart.events);
-    scan(119.9, 120);
+  bench("HitFeedbackTracker.advance — Groovy", () => {
+    const tracker = new HitFeedbackTracker(groovyHitEvents);
+    tracker.advance(119.9, 120);
   });
 });
 
 describe("play burst (sustained frames after pressing play)", () => {
   // Simulate 5 seconds of 60fps playback (300 frames) on the complex chart,
   // combining bot sampling + hit-feedback scan like the real render loop does.
-  bench("300-frame play burst — complex (BOSSY)", () => {
-    const scan = makeHitFeedbackScanner(bossy.timedChart.events);
+  bench("300-frame play burst — BOSSY", () => {
+    const tracker = new HitFeedbackTracker(bossyHitEvents);
     const secondsPerBeat = 60 / 170; // approximate; only used to advance the clock
     let acc = 0;
     for (let frame = 0; frame < 300; frame++) {
       const beat = 100 + frame * (1 / 60) / secondsPerBeat;
       const state = sampleBotStateAtBeat(bossyTimeline, bossy.simfile, beat);
-      scan(beat - 0.05, beat);
+      tracker.advance(beat - 0.05, beat);
+      acc += state.feet.left.x;
+    }
+    if (Number.isNaN(acc)) throw new Error("unreachable");
+  });
+
+  bench("300-frame play burst — Groovy", () => {
+    const tracker = new HitFeedbackTracker(groovyHitEvents);
+    const secondsPerBeat = 60 / 170;
+    let acc = 0;
+    for (let frame = 0; frame < 300; frame++) {
+      const beat = 100 + frame * (1 / 60) / secondsPerBeat;
+      const state = sampleBotStateAtBeat(groovyTimeline, groovy.simfile, beat);
+      tracker.advance(beat - 0.05, beat);
       acc += state.feet.left.x;
     }
     if (Number.isNaN(acc)) throw new Error("unreachable");

@@ -38,3 +38,13 @@ Build for production:
 npm run build
 ```
 
+## Test
+
+```bash
+npm test
+npm run test:coverage
+npm run perf
+```
+
+Use `src/test/steppingScenario.ts` for compact, table-driven parity and bot-motion scenarios. The performance suite measures production hot paths against bundled charts and labels each chart with its event count.
+
