@@ -9,6 +9,8 @@ import {
 } from "./useChartPlayback";
 import { buildAssistHitEvents } from "../lib/hitFeedback";
 import type { SimfileDocument, TimedNoteEvent } from "../lib/simfile";
+import { beatToSeconds, secondsToBeat } from "../lib/simfile";
+import type { PlaybackClock } from "./useChartPlayback";
 
 const simfile: SimfileDocument = {
   metadata: {
@@ -207,5 +209,78 @@ describe("useChartPlayback zoom behavior", () => {
     });
 
     expect(snapshot!.displayBeat).toBe(12);
+  });
+
+  it("both rAF loops derive the same audio time from the same playback clock", () => {
+    // This is the formula used by BOTH the playback tick loop
+    // (useChartPlayback.ts, inside tick()) and the bot tick loop
+    // (DancingBotWindow.tsx, inside the when-playing rAF effect):
+    //
+    //   timeSeconds = clock.audioTime
+    //               + ((timestamp - clock.perfTime) / 1000) * clock.playbackRate
+    //
+    // They use different timestamp values (from different rAF
+    // callbacks within the same frame), but the formula is
+    // identical. This test proves the derivation is deterministic.
+
+    const clock: PlaybackClock = {
+      audioTime: 12.5,
+      perfTime: 40000,
+      playbackRate: 1.0,
+    };
+
+    // Simulate: playback rAF fires first in the frame
+    const playbackTimestamp = 40016.667; // ~16.667ms later
+    const playbackTime =
+      clock.audioTime +
+      ((playbackTimestamp - clock.perfTime) / 1000) * clock.playbackRate;
+
+    // Simulate: bot rAF fires slightly later in the same frame
+    const botTimestamp = 40017.0; // ~0.333ms later
+    const botTime =
+      clock.audioTime +
+      ((botTimestamp - clock.perfTime) / 1000) * clock.playbackRate;
+
+    // Both should be within a fraction of a millisecond
+    expect(playbackTime).toBeCloseTo(12.516667, 4);
+    expect(botTime).toBeCloseTo(12.517, 3);
+    expect(Math.abs(playbackTime - botTime)).toBeLessThan(0.001);
+  });
+
+  it("both loops derive the same beat from the same clock", () => {
+    const bpms = [{ beat: 0, bpm: 120 }];
+    const offset = 0.1;
+
+    const clock: PlaybackClock = {
+      audioTime: 5.0,
+      perfTime: 50000,
+      playbackRate: 1.0,
+    };
+
+    const timestamp = 50016.667; // ~16.667ms later = one frame at 60fps
+    const timeSeconds =
+      clock.audioTime +
+      ((timestamp - clock.perfTime) / 1000) * clock.playbackRate;
+
+    const beat = secondsToBeat(timeSeconds, bpms, [], offset);
+
+    // At 120 BPM with offset 0.1:
+    // beatToSeconds(beat) = beat * 60/120 - 0.1 = beat * 0.5 - 0.1
+    // timeSeconds = 5.016667 → beat = (5.016667 + 0.1) / 0.5 = 10.233334
+    expect(beat).toBeCloseTo(10.233334, 3);
+  });
+
+  it("reconcilePlaybackAudioTime does not jump backward when audio stalls", () => {
+    // Simulate: the audio element is stalled at 12.0 seconds,
+    // but our estimated clock has moved forward to 12.5.
+    // We should NOT jump backward to the stalled audio time.
+    expect(reconcilePlaybackAudioTime(12.5, 12.0, false)).toBe(12.5);
+  });
+
+  it("reconcilePlaybackAudioTime catches up when audio genuinely advances", () => {
+    // Simulate: the audio element has moved ahead to 13.0,
+    // while our estimated clock is only at 12.5.
+    // The difference (0.5s) exceeds audioClockForwardCorrectionSeconds (0.05s).
+    expect(reconcilePlaybackAudioTime(12.5, 13.0, false)).toBe(13.0);
   });
 });

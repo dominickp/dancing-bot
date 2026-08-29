@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import chiaroscuroSource from "../../example-simfiles/Chiaroscuro/Chiaroscuro.sm?raw";
 import ferrariSource from "../../example-simfiles/Ferrari/Ferrari.sm?raw";
 import {
+  beatToSeconds,
   buildTimedChart,
   parseSimfile,
   secondsToBeat,
@@ -404,5 +405,79 @@ describe("DancingBotWindow animation sampling", () => {
 
     expect(Math.max(...rightFootAngleDeltas)).toBeLessThan(65);
     expect(Math.max(...leftFootAngleDeltas)).toBeLessThan(65);
+  });
+});
+
+describe("bot timeline sync properties", () => {
+  it("bot step hitTimeSeconds equals beatToSeconds with the chart offset", () => {
+    const { document: simfile, timedChart } = buildSteppingScenario({
+      offset: 0.2,
+      steps: [
+        { beat: 0, taps: "L" },
+        { beat: 1, taps: "D" },
+        { beat: 2, taps: "U" },
+        { beat: 4, taps: "R" },
+      ],
+    });
+    const botTimeline = buildBotTimeline(timedChart.events, new Map(), simfile);
+
+    expect(simfile.metadata.offset).toBe(0.2);
+
+    for (const footName of ["left", "right"] as const) {
+      for (const step of botTimeline[footName]) {
+        const expectedTime = beatToSeconds(
+          step.hitBeat,
+          simfile.bpms,
+          simfile.stops,
+          simfile.metadata.offset,
+        );
+        expect(step.hitTimeSeconds).toBeCloseTo(expectedTime, 6);
+      }
+    }
+  });
+
+  it("sampleBotStateAtBeat uses the chart offset to convert beat→time", () => {
+    const { document: simfile, timedChart } = buildSteppingScenario({
+      offset: 0.15,
+      steps: [{ beat: 1, taps: "D" }],
+    });
+    const botTimeline = buildBotTimeline(timedChart.events, new Map(), simfile);
+
+    // At beat 1 the foot should be pressing (just hit the note)
+    const snapshot = sampleBotStateAtBeat(botTimeline, simfile, 1);
+    expect(snapshot.feet.left.panel).toBe("down");
+    expect(snapshot.activePanels.down).toBe(true);
+
+    // Just before beat 1, the foot should not yet be pressing
+    const preSnapshot = sampleBotStateAtBeat(botTimeline, simfile, 0.9);
+    expect(preSnapshot.activePanels.down).toBe(false);
+  });
+
+  it("bot presses the correct panel at the correct audio time with non-zero offset", () => {
+    const { document: simfile, timedChart } = buildSteppingScenario({
+      offset: 0.3,
+      steps: [
+        { beat: 0, taps: "L" },
+        { beat: 2, taps: "R" },
+      ],
+    });
+    const botTimeline = buildBotTimeline(timedChart.events, new Map(), simfile);
+
+    const leftStep = botTimeline.left.find((step) => step.toPanel === "left");
+    expect(leftStep).toBeTruthy();
+
+    // The step's hitTimeSeconds should account for offset
+    const expectedHitTimeL = beatToSeconds(
+      leftStep!.hitBeat,
+      simfile.bpms,
+      simfile.stops,
+      simfile.metadata.offset,
+    );
+    expect(leftStep!.hitTimeSeconds).toBeCloseTo(expectedHitTimeL, 6);
+
+    // At the hit time, sampleBotState should show the foot pressing
+    const snapshot = sampleBotStateAtBeat(botTimeline, simfile, leftStep!.hitBeat);
+    expect(snapshot.feet.left.panel).toBe("left");
+    expect(snapshot.activePanels.left).toBe(true);
   });
 });

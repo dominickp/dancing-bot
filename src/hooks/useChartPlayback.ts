@@ -740,13 +740,9 @@ export function useChartPlayback({
 
   useEffect(() => {
     const handleWheel = (event: WheelEvent) => {
-      if (isEditableOrLocalKeyboardTarget(event.target)) {
-        return;
-      }
-
-      event.preventDefault();
-
+      // Ctrl/⌘ + scroll always zooms — never let the browser scroll the page.
       if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
         setVisibleBeats((value) =>
           clamp(
             value * Math.exp(event.deltaY * 0.0025),
@@ -756,6 +752,12 @@ export function useChartPlayback({
         );
         return;
       }
+
+      if (isEditableOrLocalKeyboardTarget(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
 
       const scrollDirection = Math.sign(event.deltaY);
 
@@ -856,7 +858,7 @@ export function useChartPlayback({
 
       const target = event.target as HTMLElement | null;
       const isTypingTarget =
-        target instanceof HTMLInputElement ||
+        (target instanceof HTMLInputElement && target.type !== "range") ||
         target instanceof HTMLTextAreaElement ||
         target instanceof HTMLSelectElement ||
         target?.isContentEditable;
