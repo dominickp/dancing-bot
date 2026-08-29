@@ -260,7 +260,7 @@ const botFormStyleOptions = [
   { id: 'toes-out', label: 'Toes Out' },
   { id: 'slanted-right', label: 'Slanted Form (Right)' },
 ] as const;
-const baseAssetUrl = import.meta.env.BASE_URL;
+const baseAssetUrl = import.meta.env?.BASE_URL ?? "/";
 const botFormIconOptions: Array<{
   id: BotFormStyleId;
   tooltip: string;

@@ -48,6 +48,22 @@ npm run perf
 
 Use `src/test/steppingScenario.ts` for compact, table-driven parity and bot-motion scenarios. It supports taps, holds, rolls, mines, BPM changes, and stops. The performance suite measures production hot paths against bundled charts and labels each chart with its event count.
 
+## Debugging Tools
+
+Two CLI tools help extract and analyze chart excerpts:
+
+```bash
+# Extract a measure range as a SteppingScenario literal
+npm run extract -- --file example-simfiles/Ferrari/Ferrari.sm \
+  --difficulty Challenge --meter 9 --from 4 --to 10
+
+# Run the excerpt through the parity solver and print foot assignments
+npm run debug -- --file example-simfiles/Ferrari/Ferrari.sm \
+  --difficulty Challenge --meter 9 --from 7 --to 10
+```
+
+Add `--summary` to `extract` for a human-readable pattern breakdown. Add `--json` for machine output. The `debug` command supports `--no-crossover`, `--no-bracket`, `--no-footswitch`, and `--favor-jumps` to test config changes. See `AGENTS.md` for the full agent-oriented reference.
+
 To compare an optimization, record a local baseline and then compare against it:
 
 ```bash

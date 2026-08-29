@@ -241,21 +241,22 @@ const normalizePath = (value: string): string =>
   value.replace(/\\/g, "/").replace(/^\/+/, "").trim();
 
 const withBaseUrl = (path: string): string =>
-  `${import.meta.env.BASE_URL}${normalizePath(path)}`;
+  `${import.meta.env?.BASE_URL ?? "/"}${normalizePath(path)}`;
 
-export const bundledNoteskinOptions: NoteskinOption[] = Object.entries(
-  bundledNoteskinFiles,
-).map(([id, files]) => ({
-  id,
-  label: id.charAt(0).toUpperCase() + id.slice(1),
-  source: {
-    kind: "bundled",
+let _bundledNoteskinOptions: NoteskinOption[] | undefined;
+
+const computeBundledNoteskinOptions = (): NoteskinOption[] =>
+  Object.entries(bundledNoteskinFiles).map(([id, files]) => ({
     id,
     label: id.charAt(0).toUpperCase() + id.slice(1),
-    rootUrl: withBaseUrl(`noteskins/dance/${id}`),
-    files,
-  },
-}));
+    source: {
+      kind: "bundled",
+      id,
+      label: id.charAt(0).toUpperCase() + id.slice(1),
+      rootUrl: withBaseUrl(`noteskins/dance/${id}`),
+      files,
+    },
+  }));
 
 const encodePath = (value: string): string =>
   normalizePath(value).split("/").map(encodeURIComponent).join("/");
@@ -843,7 +844,7 @@ export const getPanelRotation = (
   defaultRotations[panelToButton[panel]];
 
 export const getBundledNoteskinOptions = (): NoteskinOption[] =>
-  bundledNoteskinOptions.slice();
+  (_bundledNoteskinOptions ??= computeBundledNoteskinOptions()).slice();
 
 export const buildImportedNoteskinOption = (
   files: FileList | File[],

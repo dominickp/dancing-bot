@@ -11,7 +11,9 @@
     "perf": "vitest bench",
     "perf:record": "vitest bench --outputJson coverage/benchmarks.json",
     "perf:compare": "vitest bench --compare coverage/benchmarks.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "extract": "tsx scripts/extract-chart.ts",
+    "debug": "tsx scripts/debug-scenario.ts"
   },
   "dependencies": {
     "react": "^19.1.0",
@@ -23,6 +25,7 @@
     "@vitejs/plugin-react": "^4.5.0",
     "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^26.1.0",
+    "tsx": "^4.23.12",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^4.1.7"

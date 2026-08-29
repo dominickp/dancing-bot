@@ -1,5 +1,5 @@
 import { buildTimedChart, parseSimfile } from "../lib/simfile";
-import type { BpmSegment, Panel, SimfileDocument, StopSegment, TimedChart } from "../lib/simfile";
+import type { BpmSegment, Panel, SimfileChart, SimfileDocument, StopSegment, TimedChart } from "../lib/simfile";
 
 const panels: Record<string, Panel> = {
   L: "left",
@@ -147,3 +147,157 @@ export const buildSteppingScenario = ({
     holdEndBeats: buildHoldEndBeats(timedChart.events),
   };
 };
+
+// ---- Chart excerpt extraction ----
+
+const PANEL_SYMBOLS = ["L", "D", "U", "R"] as const;
+
+/**
+ * Extract a measure range from a parsed simfile chart as a `SteppingScenario`.
+ *
+ * Each non-empty row in the measure range becomes a `StepAtBeat` entry,
+ * preserving taps, holds, rolls, and mines. BPM changes and stops that
+ * affect the excerpt are included automatically.
+ *
+ * @example
+ * const source = fs.readFileSync("Ferrari.sm", "utf-8");
+ * const scenario = extractScenarioFromSimfile(source, {
+ *   difficulty: "Challenge",
+ *   meter: 9,
+ *   fromMeasure: 4,
+ *   toMeasure: 10,
+ * });
+ * const { document, timedChart } = buildSteppingScenario(scenario);
+ */
+export function extractScenarioFromSimfile(
+  simfileSource: string,
+  options: {
+    /** 0-based chart index (alternative to difficulty/meter) */
+    chartIndex?: number;
+    /** Chart difficulty tag to match */
+    difficulty?: string;
+    /** Chart meter to disambiguate multiple charts with the same difficulty */
+    meter?: number;
+    /** Starting measure index (inclusive, 0-based) */
+    fromMeasure: number;
+    /** Ending measure index (exclusive) */
+    toMeasure: number;
+  },
+): SteppingScenario {
+  const simfile = parseSimfile(simfileSource);
+  let chart: SimfileChart;
+
+  if (options.chartIndex !== undefined) {
+    const c = simfile.charts[options.chartIndex];
+
+    if (!c) {
+      throw new Error(
+        `Chart index ${options.chartIndex} not found (${simfile.charts.length} charts available)`,
+      );
+    }
+
+    chart = c;
+  } else if (options.difficulty) {
+    const candidates = simfile.charts.filter(
+      (c) => c.difficulty.toLowerCase() === options.difficulty!.toLowerCase(),
+    );
+
+    if (candidates.length === 0) {
+      throw new Error(
+        `No chart found with difficulty "${options.difficulty}". ` +
+          `Available: ${simfile.charts.map((c) => `${c.difficulty} ${c.meter}`).join(", ")}`,
+      );
+    }
+
+    if (options.meter !== undefined) {
+      const byMeter = candidates.find((c) => c.meter === options.meter);
+
+      if (!byMeter) {
+        throw new Error(
+          `No ${options.difficulty} chart with meter ${options.meter}. ` +
+            `Available: ${candidates.map((c) => c.meter).join(", ")}`,
+        );
+      }
+
+      chart = byMeter;
+    } else if (candidates.length === 1) {
+      chart = candidates[0]!;
+    } else {
+      throw new Error(
+        `Multiple ${options.difficulty} charts found. Specify meter: ` +
+          candidates.map((c) => c.meter).join(", "),
+      );
+    }
+  } else {
+    throw new Error("Either chartIndex or difficulty must be provided");
+  }
+
+  const steps: StepAtBeat[] = [];
+  const { fromMeasure, toMeasure } = options;
+
+  for (const measure of chart.measures) {
+    if (measure.index < fromMeasure || measure.index >= toMeasure) continue;
+
+    const rowCount = measure.rows.length;
+
+    measure.rows.forEach((row, rowIndex) => {
+      // Check if the row has any notes
+      if (!/[1234M]/i.test(row)) return;
+
+      const beat = measure.index * 4 + (rowIndex * 4) / rowCount;
+      const step: StepAtBeat = { beat };
+
+      const taps: string[] = [];
+      const holdHeads: string[] = [];
+      const rollHeads: string[] = [];
+      const holdTails: string[] = [];
+      const mines: string[] = [];
+
+      for (let i = 0; i < Math.min(row.length, 4); i++) {
+        const ch = row[i]!;
+        const symbol = PANEL_SYMBOLS[i]!;
+
+        switch (ch) {
+          case "1": taps.push(symbol); break;
+          case "2": holdHeads.push(symbol); break;
+          case "3": holdTails.push(symbol); break;
+          case "4": rollHeads.push(symbol); break;
+          case "M":
+          case "m": mines.push(symbol); break;
+        }
+      }
+
+      if (taps.length > 0) step.notes = taps.join("");
+      if (holdHeads.length > 0) step.holdHeads = holdHeads.join("");
+      if (rollHeads.length > 0) step.rollHeads = rollHeads.join("");
+      if (holdTails.length > 0) step.holdTails = holdTails.join("");
+      if (mines.length > 0) step.mines = mines.join("");
+
+      steps.push(step);
+    });
+  }
+
+  // Filter BPM changes and stops to those relevant to the excerpt
+  const endBeat = toMeasure * 4;
+  const relevantBpms = simfile.bpms.filter((b) => b.beat < endBeat);
+
+  // Ensure we have at least one BPM entry at beat 0
+  if (relevantBpms.length === 0 || relevantBpms[0]!.beat > 0) {
+    const lastBefore = simfile.bpms
+      .filter((b) => b.beat <= fromMeasure * 4)
+      .at(-1);
+
+    relevantBpms.unshift({ beat: 0, bpm: lastBefore?.bpm ?? 120 });
+  }
+
+  const relevantStops = simfile.stops.filter(
+    (s) => s.beat >= fromMeasure * 4 && s.beat < endBeat,
+  );
+
+  return {
+    bpms: relevantBpms,
+    offset: simfile.metadata.offset,
+    stops: relevantStops,
+    steps,
+  };
+}
